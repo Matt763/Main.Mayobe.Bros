@@ -1,0 +1,9 @@
+[
+  {
+    "id": "1",
+    "email": "mclean@mayobebros.com",
+    "password": "mambo dagas",
+    "role": "admin",
+    "createdAt": "2026-02-11T00:00:00.000Z"
+  }
+]

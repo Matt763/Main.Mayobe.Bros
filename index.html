@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Favicon -->
+    <link rel="icon" href="/mayobebrosfavicon.png" type="image/png" />
+    <link rel="shortcut icon" href="/mayobebrosfavicon.png" type="image/png" />
+
+    <!-- PWA and mobile -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Mayobe Bros" />
+    <link rel="apple-touch-icon" href="/mayobebrosfavicon.png" />
+
+    <!-- Feed discovery -->
+    <link rel="alternate" type="application/rss+xml" title="Mayobe Bros RSS Feed" href="https://mayobebros.com/feed.xml" />
+
+    <!-- Base SEO (overridden per-page by React) -->
+    <title>Mayobe Bros — Knowledge, Insights &amp; Ideas That Inspire</title>
+    <meta name="description" content="Your trusted source for quality content across education, business, technology, gaming, history, and career opportunities. Explore articles, guides, and insights that inspire and inform." />
+    <meta name="keywords" content="education, business ideas, technology, gaming, world history, jobs, internships, learning, knowledge, insights" />
+    <meta name="author" content="Mayobe Bros" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <link rel="canonical" href="https://mayobebros.com/" />
+
+    <!-- Language and locale -->
+    <meta name="language" content="English" />
+    <meta http-equiv="content-language" content="en-US" />
+
+    <!-- Google Discover optimization -->
+    <meta name="news_keywords" content="education, technology, business, gaming, history, career" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://mayobebros.com/" />
+    <meta property="og:title" content="Mayobe Bros — Knowledge, Insights &amp; Ideas That Inspire" />
+    <meta property="og:description" content="Your trusted source for quality content across education, business, technology, gaming, history, and career opportunities. Explore articles, guides, and insights that inspire and inform." />
+    <meta property="og:image" content="https://images.pexels.com/photos/1591062/pexels-photo-1591062.jpeg?auto=compress&cs=tinysrgb&w=1200" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Mayobe Bros — Knowledge, Insights and Ideas" />
+    <meta property="og:site_name" content="Mayobe Bros" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@mayobebros" />
+    <meta name="twitter:url" content="https://mayobebros.com/" />
+    <meta name="twitter:title" content="Mayobe Bros — Knowledge, Insights &amp; Ideas That Inspire" />
+    <meta name="twitter:description" content="Your trusted source for quality content across education, business, technology, gaming, history, and career opportunities." />
+    <meta name="twitter:image" content="https://images.pexels.com/photos/1591062/pexels-photo-1591062.jpeg?auto=compress&cs=tinysrgb&w=1200" />
+    <meta name="twitter:image:alt" content="Mayobe Bros" />
+
+    <!-- WebSite structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "@id": "https://mayobebros.com/#website",
+      "name": "Mayobe Bros",
+      "url": "https://mayobebros.com",
+      "description": "Your trusted source for quality content across education, business, technology, gaming, history, and career opportunities.",
+      "inLanguage": "en-US",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://mayobebros.com/?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
+    <!-- Organization structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "@id": "https://mayobebros.com/#organization",
+      "name": "Mayobe Bros",
+      "url": "https://mayobebros.com",
+      "description": "Your trusted source for quality content across education, business, technology, gaming, history, and career opportunities.",
+      "logo": {
+        "@type": "ImageObject",
+        "@id": "https://mayobebros.com/#logo",
+        "url": "https://mayobebros.com/mayobebroslogo.png",
+        "contentUrl": "https://mayobebros.com/mayobebroslogo.png",
+        "width": 240,
+        "height": 60,
+        "caption": "Mayobe Bros"
+      },
+      "image": { "@id": "https://mayobebros.com/#logo" },
+      "sameAs": [],
+      "foundingDate": "2024",
+      "knowsAbout": ["Education", "Business", "Technology", "Gaming", "World History", "Career Opportunities"]
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>

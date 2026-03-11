@@ -1,0 +1,27 @@
+{
+  "siteName": "Mayobe Bros",
+  "siteTagline": "Empowering minds with knowledge, insights, and stories that inspire",
+  "siteDescription": "Your trusted source for quality content across education, business, technology, gaming, history, and career opportunities",
+  "siteUrl": "https://www.mayobebros.com",
+  "contactEmail": "info@mayobebros.com",
+  "siteLogo": "/mayobebroslogo copy copy.png",
+  "siteFavicon": "",
+  "themeMode": "auto",
+  "primaryColor": "#3B82F6",
+  "fontFamily": "Inter",
+  "seo": {
+    "defaultMetaTitle": "Mayobe Bros - Empowering Minds with Knowledge and Insights",
+    "defaultMetaDescription": "Your trusted source for quality content across education, business, technology, gaming, history, and career opportunities",
+    "googleAnalyticsId": "",
+    "googleSearchConsole": ""
+  },
+  "socialMedia": {
+    "facebook": "",
+    "twitter": "",
+    "instagram": "",
+    "linkedin": ""
+  },
+  "customCss": "",
+  "customJs": "",
+  "footerCopyright": "© 2024 Mayobe Bros. All rights reserved."
+}

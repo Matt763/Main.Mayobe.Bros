@@ -1,0 +1,27 @@
+{
+  "name": "Mayobe Bros",
+  "short_name": "MayobeBros",
+  "description": "Empowering minds with knowledge, insights, and stories that inspire",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/mayobebrosfavicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/mayobebroslogo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["news", "education", "lifestyle"],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
