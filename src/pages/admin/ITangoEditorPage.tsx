@@ -316,8 +316,8 @@ export default function ITangoEditorPage() {
     const raw = sessionStorage.getItem(ITANGO_AUTH_KEY);
     if (!raw) { navigate('/itango-login', { replace: true }); return; }
     try {
-      const { exp } = JSON.parse(raw);
-      if (Date.now() >= exp) {
+      const { exp, token } = JSON.parse(raw);
+      if (Date.now() >= exp || !token) {
         sessionStorage.removeItem(ITANGO_AUTH_KEY);
         navigate('/itango-login', { replace: true });
       }
@@ -445,18 +445,16 @@ export default function ITangoEditorPage() {
     setInput('');
     setStreaming(true);
 
-    const assistantMsg: Message = { role: 'assistant', content: '', ts: Date.now() };
-    setMessages(prev => [...prev, assistantMsg]);
+    // Show typing placeholder
+    setMessages(prev => [...prev, { role: 'assistant', content: '', ts: Date.now() }]);
 
     try {
       const context = selectedFile
-        ? `Currently viewing file: ${selectedFile.path}\n\nFile content (first 3000 chars):\n${fileContent.slice(0, 3000)}`
+        ? `File: ${selectedFile.path}\nContent (first 3000 chars):\n${fileContent.slice(0, 3000)}`
         : '';
 
       const res = await itangoFetch('/api/itango/chat', {
         method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
           model: selectedModel.id,
@@ -464,45 +462,41 @@ export default function ITangoEditorPage() {
         }),
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setMessages(prev => prev.slice(0, -1).concat({ role: 'assistant', content: `❌ Error: ${(err as any).error || 'Request failed'}`, ts: Date.now() }));
+      // Server returns plain JSON: { reply: "..." } or { error: "..." }
+      const data = await res.json().catch(() => ({ error: `HTTP ${res.status} — non-JSON response` }));
+
+      if (!res.ok || data.error) {
+        // 401/403 = stale token, redirect to login
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem(ITANGO_AUTH_KEY);
+          setMessages(prev => prev.slice(0, -1).concat({
+            role: 'assistant',
+            content: '🔒 Session expired. Redirecting to login…',
+            ts: Date.now(),
+          }));
+          setTimeout(() => { window.location.href = '/itango-login'; }, 1800);
+          return;
+        }
+        setMessages(prev => prev.slice(0, -1).concat({
+          role: 'assistant',
+          content: `❌ ${data.error || `Server error (${res.status})`}`,
+          ts: Date.now(),
+        }));
         return;
       }
 
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let fullText = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-
-        // Parse SSE for Claude
-        const lines = chunk.split('\n');
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(data);
-              // Claude format
-              const delta = parsed?.delta?.text || parsed?.choices?.[0]?.delta?.content || '';
-              if (delta) {
-                fullText += delta;
-                setMessages(prev => {
-                  const copy = [...prev];
-                  copy[copy.length - 1] = { ...copy[copy.length - 1], content: fullText };
-                  return copy;
-                });
-              }
-            } catch {}
-          }
-        }
-      }
+      const reply: string = data.reply || '(empty response)';
+      setMessages(prev => {
+        const copy = [...prev];
+        copy[copy.length - 1] = { ...copy[copy.length - 1], content: reply };
+        return copy;
+      });
     } catch (err: any) {
-      setMessages(prev => prev.slice(0, -1).concat({ role: 'assistant', content: `❌ ${err.message}`, ts: Date.now() }));
+      setMessages(prev => prev.slice(0, -1).concat({
+        role: 'assistant',
+        content: `❌ Network error: ${err.message}`,
+        ts: Date.now(),
+      }));
     } finally {
       setStreaming(false);
     }

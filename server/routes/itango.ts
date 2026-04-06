@@ -118,117 +118,111 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
 
   logActivity(user, 'AI_CHAT', `model=${resolvedModel} provider=${provider}`, 'low');
 
-  const systemPrompt = `You are iTango AI — an expert full-stack engineer and website architect embedded inside the Mayobe Bros Admin CMS.
+  const systemPrompt = `You are iTango AI — an expert full-stack engineer and website architect for the Mayobe Bros website (mayobebros.com).
 
-You have deep knowledge of this project:
-- React 18 + TypeScript + Vite frontend
+Project stack:
+- React 18 + TypeScript + Vite (frontend)
 - Express.js backend (server/routes/, server/utils/)
-- Supabase for auth and database
-- Tailwind CSS for styling
-- React Router v7 for routing
-- The site is mayobebros.com — a news/blog CMS
+- Supabase (auth + database)
+- Tailwind CSS, React Router v7
+- Deployed on Vercel
 
-Your capabilities:
-- Read and analyze any file in the project
-- Suggest and write code changes
-- Identify bugs and performance issues
-- Optimize SEO and content structure
-- Generate new components, routes, and features
-
-Safety rules you MUST follow:
-- Never suggest deleting critical auth files, routing files, or database configs
-- Always warn before destructive changes
-- Provide complete, working code in your suggestions
-- Explain what each change does and why
-
-${systemContext ? `\nExtra context:\n${systemContext}` : ''}`;
+Your capabilities: read/analyze files, suggest & write code, fix bugs, optimize SEO and performance, generate new features.
+Safety: never suggest deleting auth/routing/database configs. Always explain changes. Provide complete working code.
+${systemContext ? `\nCurrent file context:\n${systemContext}` : ''}`;
 
   try {
-    // ─── Claude ──────────────────────────────────────────────────────────────
+    // ─── Claude (standard JSON — works on Vercel serverless) ─────────────────
     if (provider === 'claude') {
-      const body = {
-        model: resolvedModel,
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: messages.map((m: any) => ({
-          role: m.role === 'user' ? 'user' : 'assistant',
-          content: m.content,
-        })),
-      };
-
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
-      const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
           'x-api-key': apiKey,
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ ...body, stream: true }),
+        body: JSON.stringify({
+          model: resolvedModel,
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: messages.map((m: any) => ({
+            role: m.role === 'user' ? 'user' : 'assistant',
+            content: String(m.content),
+          })),
+        }),
       });
 
-      if (!upstream.ok) {
-        const err = await upstream.json().catch(() => ({}));
-        return res.status(upstream.status).json({ error: (err as any).error?.message || 'Anthropic API error' });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        return res.status(response.status).json({
+          error: (err as any).error?.message || `Anthropic API error (${response.status})`,
+        });
       }
 
-      const reader = upstream.body!.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        res.write(chunk);
-      }
-      res.end();
-      return;
+      const data = await response.json() as any;
+      const reply = data?.content?.[0]?.text || '';
+      return res.json({ reply });
     }
 
     // ─── OpenAI ───────────────────────────────────────────────────────────────
     if (provider === 'openai') {
-      const body = {
-        model: resolvedModel,
-        stream: true,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages.map((m: any) => ({ role: m.role, content: m.content })),
-        ],
-      };
-
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-
-      const upstream = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          model: resolvedModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages.map((m: any) => ({ role: m.role, content: String(m.content) })),
+          ],
+        }),
       });
 
-      if (!upstream.ok) {
-        const err = await upstream.json().catch(() => ({}));
-        return res.status(upstream.status).json({ error: (err as any).error?.message || 'OpenAI API error' });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        return res.status(response.status).json({
+          error: (err as any).error?.message || `OpenAI API error (${response.status})`,
+        });
       }
 
-      const reader = upstream.body!.getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(decoder.decode(value));
-      }
-      res.end();
-      return;
+      const data = await response.json() as any;
+      const reply = data?.choices?.[0]?.message?.content || '';
+      return res.json({ reply });
     }
 
-    return res.status(400).json({ error: `Provider ${provider} not yet supported for streaming` });
+    // ─── Gemini ───────────────────────────────────────────────────────────────
+    if (provider === 'gemini') {
+      const geminiMessages = messages.map((m: any) => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        parts: [{ text: String(m.content) }],
+      }));
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: geminiMessages,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        return res.status(response.status).json({ error: 'Gemini API error' });
+      }
+
+      const data = await response.json() as any;
+      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return res.json({ reply });
+    }
+
+    return res.status(400).json({ error: `Provider "${provider}" is not supported` });
   } catch (err: any) {
     console.error('[iTango chat]', err);
     return res.status(500).json({ error: err.message || 'AI request failed' });
