@@ -15,6 +15,12 @@ import imagesRoutes from './server/routes/images.js';
 import settingsRoutes from './server/routes/settings.js';
 import commentsRoutes from './server/routes/comments.js';
 import reviewsRoutes from './server/routes/reviews.js';
+import itangoRoutes from './server/routes/itango.js';
+import contactRoutes from './server/routes/contact.js';
+import newsletterRoutes from './server/routes/newsletter.js';
+import premiumRoutes from './server/routes/premium.js';
+import socialAutomationRoutes from './server/routes/socialAutomation.js';
+import trendingRoutes from './server/routes/trending.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -171,6 +177,12 @@ app.use('/api/images', imagesRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/comments', commentsRoutes);
 app.use('/api/reviews', reviewsRoutes);
+app.use('/api/itango', itangoRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/premium', premiumRoutes);
+app.use('/api/social', socialAutomationRoutes);
+app.use('/api/trending', trendingRoutes);
 
 app.use(express.static(path.join(__dirname, 'dist')));
 

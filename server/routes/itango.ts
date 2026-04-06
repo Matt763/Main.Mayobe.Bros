@@ -1,7 +1,40 @@
-import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { Router, Request, Response, NextFunction } from 'express';
+import { getSupabaseClient } from '../utils/supabase.js';
 
 const router = Router();
+
+const CEO_EMAILS = ['mclean@mayobebros.com', 'mcleanit@mayobebros.com'];
+
+// ─── iTango auth: accepts Supabase Bearer JWT (from iTango login)
+//     OR falls back to Express session (from CMS login) ─────────────────────
+async function requireITangoAuth(req: Request, res: Response, next: NextFunction) {
+  // 1. Try Bearer token (iTango standalone login)
+  const auth = req.headers.authorization;
+  if (auth?.startsWith('Bearer ')) {
+    const token = auth.slice(7);
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.auth.getUser(token);
+      if (!error && data.user) {
+        const email = (data.user.email || '').toLowerCase();
+        if (!CEO_EMAILS.includes(email)) {
+          return res.status(403).json({ error: 'iTango requires CEO credentials' });
+        }
+        (req as any).itangoUser = email;
+        return next();
+      }
+    } catch {}
+    return res.status(401).json({ error: 'Invalid or expired token. Please log in again at /itango-login' });
+  }
+
+  // 2. Fall back to Express session (CMS admin access)
+  if ((req.session as any).userId) {
+    (req as any).itangoUser = (req.session as any).email || 'admin';
+    return next();
+  }
+
+  return res.status(401).json({ error: 'Not authenticated. Please log in at /itango-login' });
+}
 
 // ─── In-memory activity log (production: store in Supabase) ──────────────────
 const activityLog: Array<{
@@ -64,9 +97,9 @@ async function ghFetch(path: string, options: RequestInit = {}) {
 }
 
 // ─── POST /api/itango/chat ────────────────────────────────────────────────────
-router.post('/chat', requireAuth, async (req: Request, res: Response) => {
+router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
   const { messages, model = 'claude-sonnet-4-6', systemContext = '' } = req.body;
-  const user = (req.session as any).email || 'unknown';
+  const user = (req as any).itangoUser || 'unknown';
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'messages array is required' });
@@ -203,9 +236,9 @@ ${systemContext ? `\nExtra context:\n${systemContext}` : ''}`;
 });
 
 // ─── GET /api/itango/files ────────────────────────────────────────────────────
-router.get('/files', requireAuth, async (req: Request, res: Response) => {
+router.get('/files', requireITangoAuth, async (req: Request, res: Response) => {
   const { path = '' } = req.query as { path?: string };
-  const user = (req.session as any).email || 'unknown';
+  const user = (req as any).itangoUser || 'unknown';
 
   try {
     const data = await ghFetch(
@@ -235,9 +268,9 @@ router.get('/files', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/itango/file ─────────────────────────────────────────────────────
-router.get('/file', requireAuth, async (req: Request, res: Response) => {
+router.get('/file', requireITangoAuth, async (req: Request, res: Response) => {
   const { path } = req.query as { path?: string };
-  const user = (req.session as any).email || 'unknown';
+  const user = (req as any).itangoUser || 'unknown';
 
   if (!path) return res.status(400).json({ error: 'path is required' });
 
@@ -261,9 +294,9 @@ router.get('/file', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/itango/commit ──────────────────────────────────────────────────
-router.post('/commit', requireAuth, async (req: Request, res: Response) => {
+router.post('/commit', requireITangoAuth, async (req: Request, res: Response) => {
   const { path, content, message = 'iTango AI: update file', sha } = req.body;
-  const user = (req.session as any).email || 'unknown';
+  const user = (req as any).itangoUser || 'unknown';
 
   if (!path || content === undefined) {
     return res.status(400).json({ error: 'path and content are required' });
@@ -305,9 +338,9 @@ router.post('/commit', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/itango/deploy ──────────────────────────────────────────────────
-router.post('/deploy', requireAuth, async (req: Request, res: Response) => {
+router.post('/deploy', requireITangoAuth, async (req: Request, res: Response) => {
   const { target = 'preview' } = req.body;
-  const user = (req.session as any).email || 'unknown';
+  const user = (req as any).itangoUser || 'unknown';
   const vercelToken = process.env.VERCEL_TOKEN;
   const vercelProjectId = process.env.VERCEL_PROJECT_ID;
 
@@ -357,12 +390,12 @@ router.post('/deploy', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/itango/activity ─────────────────────────────────────────────────
-router.get('/activity', requireAuth, (_req: Request, res: Response) => {
+router.get('/activity', requireITangoAuth, (_req: Request, res: Response) => {
   res.json({ log: activityLog.slice(0, 100) });
 });
 
 // ─── GET/POST /api/itango/settings ───────────────────────────────────────────
-router.get('/settings', requireAuth, (_req: Request, res: Response) => {
+router.get('/settings', requireITangoAuth, (_req: Request, res: Response) => {
   res.json({
     activeProvider,
     providers: {
@@ -381,9 +414,9 @@ router.get('/settings', requireAuth, (_req: Request, res: Response) => {
   });
 });
 
-router.post('/settings', requireAuth, (req: Request, res: Response) => {
+router.post('/settings', requireITangoAuth, (req: Request, res: Response) => {
   const { provider, apiKey, setActive } = req.body;
-  const user = (req.session as any).email || 'unknown';
+  const user = (req as any).itangoUser || 'unknown';
 
   if (provider && apiKey !== undefined) {
     if (!['claude', 'openai', 'gemini'].includes(provider)) {
@@ -404,9 +437,9 @@ router.post('/settings', requireAuth, (req: Request, res: Response) => {
 
 // ─── POST /api/itango/analyze ─────────────────────────────────────────────────
 // Quick AI analysis of a file without full conversation context
-router.post('/analyze', requireAuth, async (req: Request, res: Response) => {
+router.post('/analyze', requireITangoAuth, async (req: Request, res: Response) => {
   const { filePath, fileContent, analysisType = 'general' } = req.body;
-  const user = (req.session as any).email || 'unknown';
+  const user = (req as any).itangoUser || 'unknown';
 
   if (!fileContent) return res.status(400).json({ error: 'fileContent is required' });
 

@@ -195,8 +195,13 @@ export default function ITangoLoginPage() {
         setLoading(false); return;
       }
 
-      // Grant iTango session (8 hours)
-      const session = { email: userEmail, exp: Date.now() + 8 * 60 * 60 * 1000, uid: data.user.id };
+      // Grant iTango session (8 hours) — store access_token so API calls can auth
+      const session = {
+        email: userEmail,
+        exp: Date.now() + 8 * 60 * 60 * 1000,
+        uid: data.user.id,
+        token: data.session?.access_token || '',
+      };
       sessionStorage.setItem(ITANGO_AUTH_KEY, JSON.stringify(session));
       navigate('/itango', { replace: true });
     } catch (err: any) {

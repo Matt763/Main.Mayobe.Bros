@@ -2,6 +2,24 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const ITANGO_AUTH_KEY = 'itango-session-v1';
+
+// Helper: fetch with the iTango Bearer token automatically attached
+function itangoFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  let token = '';
+  try {
+    const raw = sessionStorage.getItem(ITANGO_AUTH_KEY);
+    if (raw) token = JSON.parse(raw).token || '';
+  } catch {}
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers as Record<string, string> || {}),
+    },
+  });
+}
 import {
   Bot, Send, FileText, Folder, FolderOpen, ChevronRight, ChevronDown,
   Play, Eye, GitCommit, Settings, RefreshCw, AlertTriangle, CheckCircle2,
@@ -171,13 +189,13 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [saved, setSaved] = useState('');
 
   useEffect(() => {
-    fetch('/api/itango/settings', { credentials: 'include' })
+    itangoFetch('/api/itango/settings', { credentials: 'include' })
       .then(r => r.json()).then(setSettings).catch(() => {});
   }, []);
 
   const saveKey = async (provider: string) => {
     setSaving(true);
-    await fetch('/api/itango/settings', {
+    await itangoFetch('/api/itango/settings', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider, apiKey: keys[provider] }),
@@ -187,7 +205,7 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
   };
 
   const setActive = async (provider: string) => {
-    await fetch('/api/itango/settings', {
+    await itangoFetch('/api/itango/settings', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ setActive: provider }),
@@ -352,7 +370,7 @@ export default function ITangoEditorPage() {
 
   // Load root file tree
   useEffect(() => {
-    fetch('/api/itango/files', { credentials: 'include' })
+    itangoFetch('/api/itango/files', { credentials: 'include' })
       .then(r => r.json())
       .then(d => setTreeRoot(d.items || []))
       .catch(() => {});
@@ -361,7 +379,7 @@ export default function ITangoEditorPage() {
   // Load activity log
   useEffect(() => {
     if (rightTab === 'activity') {
-      fetch('/api/itango/activity', { credentials: 'include' })
+      itangoFetch('/api/itango/activity', { credentials: 'include' })
         .then(r => r.json()).then(d => setActivityLog(d.log || [])).catch(() => {});
     }
   }, [rightTab]);
@@ -382,7 +400,7 @@ export default function ITangoEditorPage() {
     }
     setLoadingDirs(prev => new Set(prev).add(path));
     try {
-      const res = await fetch(`/api/itango/files?path=${encodeURIComponent(path)}`, { credentials: 'include' });
+      const res = await itangoFetch(`/api/itango/files?path=${encodeURIComponent(path)}`, { credentials: 'include' });
       const d = await res.json();
       setTreeChildren(prev => ({ ...prev, [path]: d.items || [] }));
       setExpandedDirs(prev => new Set(prev).add(path));
@@ -395,7 +413,7 @@ export default function ITangoEditorPage() {
     setSelectedFile(node);
     setFileLoading(true);
     try {
-      const res = await fetch(`/api/itango/file?path=${encodeURIComponent(node.path)}`, { credentials: 'include' });
+      const res = await itangoFetch(`/api/itango/file?path=${encodeURIComponent(node.path)}`, { credentials: 'include' });
       const d = await res.json();
       if (d.error) { showToast(d.error, 'error'); return; }
       setFileContent(d.content);
@@ -435,7 +453,7 @@ export default function ITangoEditorPage() {
         ? `Currently viewing file: ${selectedFile.path}\n\nFile content (first 3000 chars):\n${fileContent.slice(0, 3000)}`
         : '';
 
-      const res = await fetch('/api/itango/chat', {
+      const res = await itangoFetch('/api/itango/chat', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -494,7 +512,7 @@ export default function ITangoEditorPage() {
     if (!selectedFile) return;
     setCommitLoading(true);
     try {
-      const res = await fetch('/api/itango/commit', {
+      const res = await itangoFetch('/api/itango/commit', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -518,7 +536,7 @@ export default function ITangoEditorPage() {
   const handleDeploy = async (target: 'preview' | 'production') => {
     setDeployLoading(true);
     try {
-      const res = await fetch('/api/itango/deploy', {
+      const res = await itangoFetch('/api/itango/deploy', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target }),
@@ -832,7 +850,7 @@ export default function ITangoEditorPage() {
                     <Shield size={14} className="text-green-400" /> Security Activity Log
                   </h3>
                   <button
-                    onClick={() => fetch('/api/itango/activity', { credentials: 'include' }).then(r => r.json()).then(d => setActivityLog(d.log || []))}
+                    onClick={() => itangoFetch('/api/itango/activity', { credentials: 'include' }).then(r => r.json()).then(d => setActivityLog(d.log || []))}
                     className="text-xs flex items-center gap-1 px-2 py-1 rounded"
                     style={{ background: '#1e293b', color: '#8b949e' }}
                   >
