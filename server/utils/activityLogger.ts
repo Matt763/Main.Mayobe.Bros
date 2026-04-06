@@ -1,4 +1,4 @@
-import { getSupabaseClient } from './supabase';
+import { getSupabaseClient } from './supabase.js';
 
 export type ActivityType =
   | 'post'
