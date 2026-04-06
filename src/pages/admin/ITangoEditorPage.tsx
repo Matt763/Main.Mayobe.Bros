@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import AdminLayout from '../../components/admin/AdminLayout';
+import { useNavigate } from 'react-router-dom';
+
+const ITANGO_AUTH_KEY = 'itango-session-v1';
 import {
   Bot, Send, FileText, Folder, FolderOpen, ChevronRight, ChevronDown,
   Play, Eye, GitCommit, Settings, RefreshCw, AlertTriangle, CheckCircle2,
@@ -289,6 +291,24 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function ITangoEditorPage() {
+  const navigate = useNavigate();
+
+  // ── iTango session guard ──────────────────────────────────────────────────
+  useEffect(() => {
+    const raw = sessionStorage.getItem(ITANGO_AUTH_KEY);
+    if (!raw) { navigate('/itango-login', { replace: true }); return; }
+    try {
+      const { exp } = JSON.parse(raw);
+      if (Date.now() >= exp) {
+        sessionStorage.removeItem(ITANGO_AUTH_KEY);
+        navigate('/itango-login', { replace: true });
+      }
+    } catch {
+      sessionStorage.removeItem(ITANGO_AUTH_KEY);
+      navigate('/itango-login', { replace: true });
+    }
+  }, [navigate]);
+
   // Chat state
   const [messages, setMessages] = useState<Message[]>([{
     role: 'assistant',
@@ -538,8 +558,8 @@ export default function ITangoEditorPage() {
   ];
 
   return (
-    <AdminLayout>
-      <div className="flex flex-col h-[calc(100vh-56px-2rem)]" style={{ minHeight: '600px' }}>
+    <div style={{ background: '#000000', minHeight: '100vh' }}>
+      <div className="flex flex-col" style={{ height: '100vh' }}>
 
         {/* Header */}
         <div
@@ -930,6 +950,6 @@ export default function ITangoEditorPage() {
           {toast.msg}
         </div>
       )}
-    </AdminLayout>
+    </div>
   );
 }

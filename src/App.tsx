@@ -67,6 +67,7 @@ const TrafficGrowthPage = lazy(() => import('./pages/admin/TrafficGrowthPage'));
 const ContentQualityPage = lazy(() => import('./pages/admin/ContentQualityPage'));
 const AdSenseReadinessPage = lazy(() => import('./pages/admin/AdSenseReadinessPage'));
 const AIHumanizerPage = lazy(() => import('./pages/admin/AIHumanizerPage'));
+const ITangoLoginPage = lazy(() => import('./pages/ITangoLoginPage'));
 const ITangoEditorPage = lazy(() => import('./pages/admin/ITangoEditorPage'));
 const EditorialPolicyPage = lazy(() => import('./pages/EditorialPolicyPage'));
 const FactCheckingPolicyPage = lazy(() => import('./pages/FactCheckingPolicyPage'));
@@ -125,6 +126,22 @@ function App() {
             <GlobalSeoInit />
             <HeadAdInjector />
             <Routes>
+              {/* ── Standalone iTango routes (independent, no header/footer) ── */}
+              <Route
+                path="/itango-login"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ITangoLoginPage />
+                  </Suspense>}
+              />
+              <Route
+                path="/itango"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ITangoEditorPage />
+                  </Suspense>}
+              />
+
               <Route
                 path="/admin/login"
                 element={
@@ -243,11 +260,6 @@ function App() {
                         <Route path="ai-humanizer" element={
                           <ProtectedRoute allowedRoles={['ceo', 'admin']}>
                             <AIHumanizerPage />
-                          </ProtectedRoute>
-                        } />
-                        <Route path="itango" element={
-                          <ProtectedRoute allowedRoles={['ceo']}>
-                            <ITangoEditorPage />
                           </ProtectedRoute>
                         } />
                       </Routes>

@@ -219,7 +219,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             ...(isCEO || isAdmin ? [{ name: 'Content Quality', path: '/admin/content-quality', icon: BarChart2 }] : []),
             ...(isCEO || isAdmin ? [{ name: 'AdSense Readiness', path: '/admin/adsense-readiness', icon: ShieldCheck }] : []),
             ...(isCEO ? [{ name: 'Messages', path: '/admin/messages', icon: Mail, badge: counts.messages > 0 ? counts.messages : undefined }] : []),
-            ...(isCEO ? [{ name: 'iTango AI Editor', path: '/admin/itango', icon: Bot }] : []),
+            ...(isCEO ? [{ name: 'iTango AI Editor', path: '/itango-login', icon: Bot }] : []),
           ],
         }]
       : []),
@@ -365,7 +365,57 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                       '/admin/ai-assistant': 'ai',
                       '/admin/ai-control-center': 'ai',
                     };
-                    return (
+                    // iTango opens as a standalone page in a new tab
+                    const isITango = item.path === '/itango-login';
+                    const sharedStyle = {
+                      background: active ? t.navActiveBg : 'transparent',
+                      color: active ? t.navActive : t.navColor,
+                      display: 'flex', alignItems: 'center', gap: '12px',
+                      padding: '8px 12px', borderRadius: '12px',
+                      transition: 'all 0.15s', textDecoration: 'none',
+                    };
+                    const hoverHandlers = {
+                      onMouseEnter: (e: React.MouseEvent) => {
+                        if (!active) {
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.background = t.navHoverBg;
+                          el.style.color = t.navHoverColor;
+                        }
+                      },
+                      onMouseLeave: (e: React.MouseEvent) => {
+                        if (!active) {
+                          const el = e.currentTarget as HTMLElement;
+                          el.style.background = 'transparent';
+                          el.style.color = t.navColor;
+                        }
+                      },
+                    };
+
+                    const navContent = (
+                      <>
+                        <Icon size={16} />
+                        <span className="font-medium text-sm">{item.name}</span>
+                        {isITango && (
+                          <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.25)' }}>
+                            NEW TAB
+                          </span>
+                        )}
+                      </>
+                    );
+
+                    return isITango ? (
+                      <a
+                        key={item.path}
+                        href={item.path}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setSidebarOpen(false)}
+                        style={sharedStyle}
+                        {...hoverHandlers}
+                      >
+                        {navContent}
+                      </a>
+                    ) : (
                       <Link
                         key={item.path}
                         to={item.path}
@@ -382,31 +432,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             '/admin/dashboard': 'comments',
                             '/admin/messages': 'messages',
                           };
-                          const t = typeMap[item.path];
-                          if (t && counts[t] > 0) markSeen(t);
+                          const mapped = typeMap[item.path];
+                          if (mapped && counts[mapped] > 0) markSeen(mapped);
                         }}
-                        className="flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-150"
-                        style={{
-                          background: active ? t.navActiveBg : 'transparent',
-                          color: active ? t.navActive : t.navColor,
-                        }}
-                        onMouseEnter={e => {
-                          if (!active) {
-                            const el = e.currentTarget as HTMLElement;
-                            el.style.background = t.navHoverBg;
-                            el.style.color = t.navHoverColor;
-                          }
-                        }}
-                        onMouseLeave={e => {
-                          if (!active) {
-                            const el = e.currentTarget as HTMLElement;
-                            el.style.background = 'transparent';
-                            el.style.color = t.navColor;
-                          }
-                        }}
+                        style={sharedStyle}
+                        {...hoverHandlers}
                       >
-                        <Icon size={16} />
-                        <span className="font-medium text-sm">{item.name}</span>
+                        {navContent}
                         {item.badge && (
                           <span className="ml-auto bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                             {item.badge}
