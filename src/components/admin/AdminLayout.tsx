@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useRole } from '../../hooks/useRole';
 import { useNotifications } from '../../contexts/NotificationContext';
-import { LayoutDashboard, FileText, File as FileEdit, MessageSquare, Folder, Tag, Image as ImageIcon, Settings, BarChart3, Menu, X, LogOut, Moon, Sun, Monitor, ChevronDown, Home, Mail, Users, Shield, Crown, KeyRound, CircleUser as UserCircle, Star, Radar, Activity, Sparkles, Compass, ClipboardCheck, Share2, Cpu, Search, Globe, CreditCard, TrendingUp, BarChart2, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, FileText, File as FileEdit, MessageSquare, Folder, Tag, Image as ImageIcon, Settings, BarChart3, Menu, X, LogOut, Moon, Sun, Monitor, ChevronDown, Home, Mail, Users, Shield, Crown, KeyRound, CircleUser as UserCircle, Star, Radar, Activity, Sparkles, Compass, ClipboardCheck, Share2, Cpu, Search, Globe, CreditCard, TrendingUp, BarChart2, ShieldCheck, Bot } from 'lucide-react';
 import OnboardingTour from './OnboardingTour';
 
 interface AdminLayoutProps { children: ReactNode; }
@@ -219,6 +219,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             ...(isCEO || isAdmin ? [{ name: 'Content Quality', path: '/admin/content-quality', icon: BarChart2 }] : []),
             ...(isCEO || isAdmin ? [{ name: 'AdSense Readiness', path: '/admin/adsense-readiness', icon: ShieldCheck }] : []),
             ...(isCEO ? [{ name: 'Messages', path: '/admin/messages', icon: Mail, badge: counts.messages > 0 ? counts.messages : undefined }] : []),
+            ...(isCEO ? [{ name: 'iTango AI Editor', path: '/admin/itango', icon: Bot }] : []),
           ],
         }]
       : []),

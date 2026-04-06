@@ -67,6 +67,7 @@ const TrafficGrowthPage = lazy(() => import('./pages/admin/TrafficGrowthPage'));
 const ContentQualityPage = lazy(() => import('./pages/admin/ContentQualityPage'));
 const AdSenseReadinessPage = lazy(() => import('./pages/admin/AdSenseReadinessPage'));
 const AIHumanizerPage = lazy(() => import('./pages/admin/AIHumanizerPage'));
+const ITangoEditorPage = lazy(() => import('./pages/admin/ITangoEditorPage'));
 const EditorialPolicyPage = lazy(() => import('./pages/EditorialPolicyPage'));
 const FactCheckingPolicyPage = lazy(() => import('./pages/FactCheckingPolicyPage'));
 
@@ -242,6 +243,11 @@ function App() {
                         <Route path="ai-humanizer" element={
                           <ProtectedRoute allowedRoles={['ceo', 'admin']}>
                             <AIHumanizerPage />
+                          </ProtectedRoute>
+                        } />
+                        <Route path="itango" element={
+                          <ProtectedRoute allowedRoles={['ceo']}>
+                            <ITangoEditorPage />
                           </ProtectedRoute>
                         } />
                       </Routes>

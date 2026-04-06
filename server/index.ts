@@ -24,6 +24,8 @@ import trendingRoutes from './routes/trending.js';
 import secretCodeRoutes from './routes/secretCodes.js';
 import premiumRoutes from './routes/premium.js';
 import socialAutomationRoutes from './routes/socialAutomation.js';
+import itangoRoutes from './routes/itango.js';
+import { securityMonitor, getSecurityLog, unblockIP, getBlockedIPs } from './middleware/securityMonitor.js';
 import { serveWithMeta } from './utils/metaInjector.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,6 +68,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(securityMonitor);
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
@@ -128,9 +131,23 @@ app.use('/api/trending', trendingRoutes);
 app.use('/api/secret-codes', secretCodeRoutes);
 app.use('/api/premium', premiumRoutes);
 app.use('/api/social', socialAutomationRoutes);
+app.use('/api/itango', itangoRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Mayobe Bros API Server Running' });
+});
+
+// Security dashboard endpoints (CEO only — auth checked via session in itango route)
+app.get('/api/itango/security/log', (req, res) => {
+  res.json({ events: getSecurityLog(200) });
+});
+app.get('/api/itango/security/blocked', (req, res) => {
+  res.json({ blocked: getBlockedIPs() });
+});
+app.post('/api/itango/security/unblock', (req, res) => {
+  const { ip } = req.body;
+  if (ip) unblockIP(ip);
+  res.json({ success: true });
 });
 
 const distPath = join(__dirname, '../../dist');
