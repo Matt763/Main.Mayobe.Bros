@@ -626,7 +626,9 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
   try {
     // ── CLAUDE (full agentic loop with tool use) ──────────────────────────────
     if (provider === 'claude') {
-      let loopMessages = messages.map((m: any) => ({
+      // Keep only the last 6 messages from conversation history to stay under token limits
+      const recentMessages = messages.slice(-6);
+      let loopMessages = recentMessages.map((m: any) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: String(m.content),
       }));
@@ -644,7 +646,7 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
           },
           body: JSON.stringify({
             model: resolvedModel,
-            max_tokens: 8192,
+            max_tokens: 4096,
             system: systemPrompt,
             tools: ITANGO_TOOLS,
             messages: loopMessages,
@@ -688,10 +690,15 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
             ts: Date.now(),
           });
 
+          // Cap tool result size to avoid blowing up token count on subsequent iterations
+          const cappedResult = result.length > 3500
+            ? result.slice(0, 3500) + `\n\n[...truncated ${result.length - 3500} chars to stay within token limits]`
+            : result;
+
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolUse.id,
-            content: result,
+            content: cappedResult,
           });
         }
 
@@ -706,7 +713,7 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
     if (provider === 'openai') {
       let loopMessages: any[] = [
         { role: 'system', content: systemPrompt },
-        ...messages.map((m: any) => ({ role: m.role, content: String(m.content) })),
+        ...messages.slice(-6).map((m: any) => ({ role: m.role, content: String(m.content) })),
       ];
 
       let finalText = '';
@@ -748,7 +755,10 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
 
           const result = await executeTool(tc.function.name, toolInput);
           toolCallLog.push({ tool: tc.function.name, input: toolInput, result: result.slice(0, 500), error: result.startsWith('Error'), ts: Date.now() });
-          loopMessages.push({ role: 'tool', tool_call_id: tc.id, content: result });
+          const cappedResult = result.length > 3500
+            ? result.slice(0, 3500) + `\n\n[...truncated ${result.length - 3500} chars]`
+            : result;
+          loopMessages.push({ role: 'tool', tool_call_id: tc.id, content: cappedResult });
         }
       }
 

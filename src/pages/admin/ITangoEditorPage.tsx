@@ -842,7 +842,7 @@ export default function ITangoEditorPage() {
     setMessages(prev => [...prev, { role: 'assistant', content: '', ts: Date.now() }]);
     try {
       const context = selectedFile
-        ? `File: ${selectedFile.path}\nContent (first 3000 chars):\n${fileContent.slice(0, 3000)}`
+        ? `File: ${selectedFile.path}\nContent (first 1500 chars):\n${fileContent.slice(0, 1500)}`
         : '';
       const res = await itangoFetch('/api/itango/chat', {
         method: 'POST',
