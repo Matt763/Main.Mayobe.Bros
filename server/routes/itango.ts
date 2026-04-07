@@ -397,7 +397,207 @@ function extractJSON<T>(text: string, fallback: T): T {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/itango/chat
+// TOOL DEFINITIONS — what iTango can do autonomously
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ITANGO_TOOLS = [
+  {
+    name: 'list_files',
+    description: `List files and directories in the GitHub repository. Use this to explore the codebase structure before reading or editing files. Call with an empty path "" to list the root.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'Directory path relative to repo root. Empty string "" for root.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'read_file',
+    description: `Read the full contents of a file from the GitHub repository. Use this before making any edits so you understand the existing code.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'File path relative to repo root (e.g. "src/components/Header.tsx")' },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'write_file',
+    description: `Write/update a file in the GitHub repository and commit the change. ALWAYS read the file first. ALWAYS return the COMPLETE file content — never partial. Show a brief summary of what changed.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: { type: 'string', description: 'File path relative to repo root' },
+        content: { type: 'string', description: 'COMPLETE new file content (not a diff, not partial — the full file)' },
+        commit_message: { type: 'string', description: 'Concise git commit message describing the change' },
+      },
+      required: ['path', 'content', 'commit_message'],
+    },
+  },
+  {
+    name: 'search_code',
+    description: `Search for text patterns across all files in the repository. Use to find where a function, component, class, or string is defined or used.`,
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Search query (supports exact strings and simple patterns)' },
+        path: { type: 'string', description: 'Optional: narrow search to a specific directory (e.g. "src/components")' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_repo_info',
+    description: `Get repository metadata: name, default branch, last commit, open issues count.`,
+    input_schema: { type: 'object' as const, properties: {}, required: [] },
+  },
+];
+
+// OpenAI function format (different schema shape)
+const OPENAI_TOOLS = ITANGO_TOOLS.map(t => ({
+  type: 'function' as const,
+  function: {
+    name: t.name,
+    description: t.description,
+    parameters: t.input_schema,
+  },
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOOL EXECUTOR — runs a tool call and returns a string result
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ToolCallRecord {
+  tool: string;
+  input: Record<string, unknown>;
+  result: string;
+  error?: boolean;
+  ts: number;
+}
+
+// In-memory SHA cache so write_file doesn't need a separate round-trip
+const shaCache: Record<string, string> = {};
+
+async function executeTool(name: string, input: Record<string, unknown>): Promise<string> {
+  try {
+    switch (name) {
+
+      case 'list_files': {
+        const path = (input.path as string) || '';
+        const data = await ghFetch(
+          `/repos/${GH_OWNER}/${GH_REPO}/contents/${path}?ref=${GH_BRANCH}`
+        ) as any[];
+        if (!Array.isArray(data)) return 'Error: path is a file, not a directory.';
+        const sorted = [...data].sort((a, b) => {
+          if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+        const lines = sorted.map((f: any) =>
+          `${f.type === 'dir' ? '📁' : '📄'} ${f.path}${f.type === 'file' ? ` (${f.size} bytes)` : ''}`
+        );
+        return `Repository: ${GH_OWNER}/${GH_REPO} | Branch: ${GH_BRANCH}\nPath: /${path || '(root)'}\n\n${lines.join('\n')}`;
+      }
+
+      case 'read_file': {
+        const path = input.path as string;
+        if (!path) return 'Error: path is required';
+        const blocked = ['.env', 'credentials', 'secrets'];
+        if (blocked.some(b => path.toLowerCase().includes(b))) {
+          return 'Error: access to sensitive files is restricted.';
+        }
+        const data = await ghFetch(
+          `/repos/${GH_OWNER}/${GH_REPO}/contents/${path}?ref=${GH_BRANCH}`
+        ) as any;
+        if (data.type === 'dir') return 'Error: path is a directory — use list_files instead.';
+        const content = Buffer.from(data.content, 'base64').toString('utf-8');
+        shaCache[path] = data.sha;
+        return `File: ${path} (${data.size} bytes, sha: ${data.sha})\n\`\`\`\n${content}\n\`\`\``;
+      }
+
+      case 'write_file': {
+        const path = input.path as string;
+        const content = input.content as string;
+        const commitMsg = (input.commit_message as string) || 'iTango AI: update file';
+        if (!path || content === undefined) return 'Error: path and content are required';
+
+        const critical = ['server/middleware/auth', 'contexts/AuthContext', '.env'];
+        if (critical.some(c => path.includes(c))) {
+          return `Error: ${path} is a protected file. Explicit forceOverride is required for auth/security files.`;
+        }
+
+        if (!process.env.GITHUB_TOKEN) return 'Error: GITHUB_TOKEN not configured.';
+
+        // Get current SHA (needed by GitHub API to update a file)
+        let sha = shaCache[path];
+        if (!sha) {
+          try {
+            const existing = await ghFetch(
+              `/repos/${GH_OWNER}/${GH_REPO}/contents/${path}?ref=${GH_BRANCH}`
+            ) as any;
+            sha = existing.sha;
+            shaCache[path] = sha;
+          } catch {
+            // File doesn't exist yet — creating new file is fine (no sha needed)
+          }
+        }
+
+        const body: any = {
+          message: `${commitMsg}\n\nCo-authored by iTango AI`,
+          content: Buffer.from(content, 'utf-8').toString('base64'),
+          branch: GH_BRANCH,
+        };
+        if (sha) body.sha = sha;
+
+        const result = await ghFetch(
+          `/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`,
+          { method: 'PUT', body: JSON.stringify(body) }
+        ) as any;
+
+        const newSha = result?.content?.sha || '';
+        if (newSha) shaCache[path] = newSha;
+
+        return `✅ Successfully committed "${commitMsg}" to ${GH_BRANCH}\nFile: ${path}\nNew SHA: ${newSha || '(unknown)'}`;
+      }
+
+      case 'search_code': {
+        const query = input.query as string;
+        const pathScope = input.path ? ` path:${input.path}` : '';
+        if (!query) return 'Error: query is required';
+
+        const searchUrl = `/search/code?q=${encodeURIComponent(query + ` repo:${GH_OWNER}/${GH_REPO}${pathScope}`)}&per_page=10`;
+        const data = await ghFetch(searchUrl) as any;
+        if (!data.items?.length) return `No results found for: "${query}"`;
+
+        const results = data.items.map((item: any) =>
+          `📄 ${item.path} (${item.repository?.full_name})\n   Match: ${item.text_matches?.[0]?.fragment?.replace(/\n/g, ' ').slice(0, 120) || '(see file)'}`
+        );
+        return `Found ${data.total_count} result(s) for "${query}":\n\n${results.join('\n\n')}`;
+      }
+
+      case 'get_repo_info': {
+        const data = await ghFetch(`/repos/${GH_OWNER}/${GH_REPO}`) as any;
+        return `Repository: ${data.full_name}
+Description: ${data.description || 'none'}
+Default branch: ${data.default_branch}
+Language: ${data.language}
+Stars: ${data.stargazers_count} | Forks: ${data.forks_count}
+Open issues: ${data.open_issues_count}
+Last push: ${data.pushed_at}
+URL: ${data.html_url}`;
+      }
+
+      default:
+        return `Error: unknown tool "${name}"`;
+    }
+  } catch (err: any) {
+    return `Error executing ${name}: ${err.message}`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/itango/chat  (agentic loop with tool use)
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
   const { messages, model = 'claude-sonnet-4-6', systemContext = '' } = req.body;
@@ -421,65 +621,153 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
   logActivity(user, 'AI_CHAT', `model=${resolvedModel}`, 'low');
 
   const systemPrompt = buildMasterSystemPrompt(systemContext ? `Current file context:\n${systemContext}` : '');
+  const toolCallLog: ToolCallRecord[] = [];
 
   try {
-    // ── Claude ──────────────────────────────────────────────────────────────
+    // ── CLAUDE (full agentic loop with tool use) ──────────────────────────────
     if (provider === 'claude') {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: resolvedModel,
-          max_tokens: 4096,
-          system: systemPrompt,
-          messages: messages.map((m: any) => ({
-            role: m.role === 'user' ? 'user' : 'assistant',
-            content: String(m.content),
-          })),
-        }),
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        return res.status(response.status).json({ error: (err as any).error?.message || `Anthropic error (${response.status})` });
+      let loopMessages = messages.map((m: any) => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: String(m.content),
+      }));
+
+      let finalText = '';
+      const MAX_ITERATIONS = 8;
+
+      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: resolvedModel,
+            max_tokens: 8192,
+            system: systemPrompt,
+            tools: ITANGO_TOOLS,
+            messages: loopMessages,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          return res.status(response.status).json({ error: (err as any).error?.message || `Anthropic error (${response.status})` });
+        }
+
+        const data = await response.json() as any;
+        const stopReason: string = data.stop_reason;
+        const contentBlocks: any[] = data.content || [];
+
+        // Extract any text from this turn
+        const textBlock = contentBlocks.find((b: any) => b.type === 'text');
+        if (textBlock?.text) finalText = textBlock.text;
+
+        // If no tool calls, we're done
+        if (stopReason !== 'tool_use') break;
+
+        // Process all tool calls in this turn
+        const toolUseBlocks = contentBlocks.filter((b: any) => b.type === 'tool_use');
+        if (toolUseBlocks.length === 0) break;
+
+        // Add assistant message with tool use blocks
+        loopMessages.push({ role: 'assistant', content: contentBlocks });
+
+        // Execute each tool and collect results
+        const toolResults: any[] = [];
+        for (const toolUse of toolUseBlocks) {
+          logActivity(user, `TOOL:${toolUse.name}`, JSON.stringify(toolUse.input).slice(0, 120), 'low');
+
+          const result = await executeTool(toolUse.name, toolUse.input || {});
+          toolCallLog.push({
+            tool: toolUse.name,
+            input: toolUse.input || {},
+            result: result.slice(0, 500),
+            error: result.startsWith('Error'),
+            ts: Date.now(),
+          });
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: result,
+          });
+        }
+
+        // Add tool results as user message and continue the loop
+        loopMessages.push({ role: 'user', content: toolResults });
       }
-      const data = await response.json() as any;
-      return res.json({ reply: data?.content?.[0]?.text || '' });
+
+      return res.json({ reply: finalText, toolCalls: toolCallLog });
     }
 
-    // ── OpenAI ───────────────────────────────────────────────────────────────
+    // ── OPENAI (function calling) ─────────────────────────────────────────────
     if (provider === 'openai') {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: resolvedModel,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...messages.map((m: any) => ({ role: m.role, content: String(m.content) })),
-          ],
-        }),
-      });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        return res.status(response.status).json({ error: (err as any).error?.message || `OpenAI error (${response.status})` });
+      let loopMessages: any[] = [
+        { role: 'system', content: systemPrompt },
+        ...messages.map((m: any) => ({ role: m.role, content: String(m.content) })),
+      ];
+
+      let finalText = '';
+      const MAX_ITERATIONS = 8;
+
+      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: resolvedModel,
+            tools: OPENAI_TOOLS,
+            tool_choice: 'auto',
+            messages: loopMessages,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          return res.status(response.status).json({ error: (err as any).error?.message || `OpenAI error (${response.status})` });
+        }
+
+        const data = await response.json() as any;
+        const choice = data.choices?.[0];
+        const assistantMsg = choice?.message;
+        if (!assistantMsg) break;
+
+        loopMessages.push(assistantMsg);
+
+        if (!assistantMsg.tool_calls?.length) {
+          finalText = assistantMsg.content || '';
+          break;
+        }
+
+        // Execute tool calls
+        for (const tc of assistantMsg.tool_calls) {
+          const toolInput = JSON.parse(tc.function.arguments || '{}');
+          logActivity(user, `TOOL:${tc.function.name}`, JSON.stringify(toolInput).slice(0, 120), 'low');
+
+          const result = await executeTool(tc.function.name, toolInput);
+          toolCallLog.push({ tool: tc.function.name, input: toolInput, result: result.slice(0, 500), error: result.startsWith('Error'), ts: Date.now() });
+          loopMessages.push({ role: 'tool', tool_call_id: tc.id, content: result });
+        }
       }
-      const data = await response.json() as any;
-      return res.json({ reply: data?.choices?.[0]?.message?.content || '' });
+
+      return res.json({ reply: finalText, toolCalls: toolCallLog });
     }
 
-    // ── Gemini ───────────────────────────────────────────────────────────────
+    // ── GEMINI (basic, no tool use — falls back to text with context injection) ─
     if (provider === 'gemini') {
+      // Inject repo info into the system prompt since Gemini tool use is complex
+      const repoInfo = await executeTool('get_repo_info', {}).catch(() => '');
+      const geminiSystem = systemPrompt + `\n\nRepo info:\n${repoInfo}\n\nNote: You cannot directly browse the repo in this mode. Ask the user to select a file in the editor sidebar, and I will include its content in context.`;
+
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
+            system_instruction: { parts: [{ text: geminiSystem }] },
             contents: messages.map((m: any) => ({
               role: m.role === 'user' ? 'user' : 'model',
               parts: [{ text: String(m.content) }],
@@ -489,7 +777,7 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
       );
       if (!response.ok) return res.status(response.status).json({ error: 'Gemini API error' });
       const data = await response.json() as any;
-      return res.json({ reply: data?.candidates?.[0]?.content?.parts?.[0]?.text || '' });
+      return res.json({ reply: data?.candidates?.[0]?.content?.parts?.[0]?.text || '', toolCalls: [] });
     }
 
     return res.status(400).json({ error: `Provider "${provider}" not supported` });

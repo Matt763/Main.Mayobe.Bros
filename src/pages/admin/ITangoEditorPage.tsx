@@ -31,7 +31,8 @@ import {
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Provider = 'claude' | 'openai' | 'gemini';
 type Model = { id: string; label: string; provider: Provider; description: string };
-type Message = { role: 'user' | 'assistant'; content: string; ts: number };
+type ToolCallRecord = { tool: string; input: Record<string, unknown>; result: string; error?: boolean; ts: number };
+type Message = { role: 'user' | 'assistant'; content: string; ts: number; toolCalls?: ToolCallRecord[] };
 type FileNode = { name: string; path: string; type: 'file' | 'dir'; size?: number; sha?: string };
 type AnalysisType = 'general' | 'seo' | 'security' | 'performance';
 
@@ -218,6 +219,120 @@ function MessageContent({ content }: { content: string }) {
           </p>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Tool activity strip ──────────────────────────────────────────────────────
+function ToolActivityStrip({ toolCalls }: { toolCalls: ToolCallRecord[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!toolCalls.length) return null;
+
+  const toolIcon = (name: string) => {
+    switch (name) {
+      case 'list_files':   return '📁';
+      case 'read_file':    return '📄';
+      case 'write_file':   return '✏️';
+      case 'search_code':  return '🔍';
+      case 'get_repo_info': return 'ℹ️';
+      default:             return '⚙️';
+    }
+  };
+
+  const toolLabel = (tc: ToolCallRecord) => {
+    if (tc.error) {
+      switch (tc.tool) {
+        case 'list_files':  return `Failed: list ${(tc.input.path as string) || 'root'}`;
+        case 'read_file':   return `Failed: read ${tc.input.path}`;
+        case 'write_file':  return `Failed: write ${tc.input.path}`;
+        case 'search_code': return `Failed: search "${tc.input.query}"`;
+        default:            return `Failed: ${tc.tool}`;
+      }
+    }
+    switch (tc.tool) {
+      case 'list_files':   return `Listed ${(tc.input.path as string) || 'repo root'}`;
+      case 'read_file':    return `Read ${tc.input.path}`;
+      case 'write_file':   return `Committed ${tc.input.path}`;
+      case 'search_code':  return `Searched "${tc.input.query}"`;
+      case 'get_repo_info': return 'Got repo info';
+      default:             return tc.tool;
+    }
+  };
+
+  return (
+    <div style={{
+      marginBottom: '10px',
+      borderRadius: '8px',
+      border: '1px solid rgba(79,195,247,0.12)',
+      background: 'rgba(79,195,247,0.04)',
+      overflow: 'hidden',
+    }}>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '7px 10px', background: 'transparent', border: 'none',
+          cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <Zap size={11} style={{ color: '#4fc3f7', flexShrink: 0 }} />
+        <span style={{ fontSize: '10px', color: '#4fc3f7', fontWeight: 600, letterSpacing: '0.06em', flex: 1 }}>
+          {toolCalls.length} TOOL CALL{toolCalls.length > 1 ? 'S' : ''}
+          {' · '}
+          {toolCalls.filter(t => !t.error).length} succeeded
+          {toolCalls.some(t => t.error) ? `, ${toolCalls.filter(t => t.error).length} failed` : ''}
+        </span>
+        <span style={{ fontSize: '10px', color: '#4fc3f7', opacity: 0.6 }}>{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      {/* Compact pill row — always visible */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', padding: '0 10px 8px' }}>
+        {toolCalls.map((tc, i) => (
+          <span key={i} style={{
+            display: 'inline-flex', alignItems: 'center', gap: '4px',
+            padding: '3px 8px', borderRadius: '20px', fontSize: '10px',
+            background: tc.error ? 'rgba(239,68,68,0.1)' : 'rgba(16,217,160,0.08)',
+            border: `1px solid ${tc.error ? 'rgba(239,68,68,0.2)' : 'rgba(16,217,160,0.18)'}`,
+            color: tc.error ? '#f87171' : '#34d399',
+          }}>
+            <span>{toolIcon(tc.tool)}</span>
+            <span>{toolLabel(tc)}</span>
+          </span>
+        ))}
+      </div>
+
+      {/* Expanded detail view */}
+      {expanded && (
+        <div style={{
+          borderTop: '1px solid rgba(79,195,247,0.1)',
+          padding: '8px 10px',
+          display: 'flex', flexDirection: 'column', gap: '8px',
+        }}>
+          {toolCalls.map((tc, i) => (
+            <div key={i} style={{ fontSize: '11px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                <span>{toolIcon(tc.tool)}</span>
+                <span style={{ color: '#4fc3f7', fontWeight: 600 }}>{tc.tool}</span>
+                <span style={{ color: textSecondary, fontSize: '10px' }}>
+                  {JSON.stringify(tc.input).slice(0, 80)}
+                </span>
+              </div>
+              <pre style={{
+                margin: 0, padding: '6px 8px', borderRadius: '6px',
+                background: 'rgba(0,0,0,0.4)',
+                color: tc.error ? '#f87171' : '#94a3b8',
+                fontSize: '10px', fontFamily: 'monospace',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                maxHeight: '80px', overflowY: 'auto',
+                border: `1px solid ${tc.error ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.05)'}`,
+              }}>
+                {tc.result}
+              </pre>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -749,9 +864,10 @@ export default function ITangoEditorPage() {
         return;
       }
       const reply: string = data.reply || '(empty response)';
+      const toolCalls: ToolCallRecord[] = data.toolCalls || [];
       setMessages(prev => {
         const copy = [...prev];
-        copy[copy.length - 1] = { ...copy[copy.length - 1], content: reply };
+        copy[copy.length - 1] = { ...copy[copy.length - 1], content: reply, toolCalls };
         return copy;
       });
     } catch (err: any) {
@@ -1214,7 +1330,12 @@ export default function ITangoEditorPage() {
                       ))}
                     </div>
                   ) : (
-                    <MessageContent content={m.content} />
+                    <>
+                      {m.toolCalls && m.toolCalls.length > 0 && (
+                        <ToolActivityStrip toolCalls={m.toolCalls} />
+                      )}
+                      <MessageContent content={m.content} />
+                    </>
                   )}
                 </div>
               </div>
