@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Editor from '@monaco-editor/react';
 
 const ITANGO_AUTH_KEY = 'itango-session-v1';
 
@@ -21,10 +22,10 @@ function itangoFetch(url: string, options: RequestInit = {}): Promise<Response> 
 }
 
 import {
-  Bot, Send, FileText, Folder, FolderOpen, ChevronRight, ChevronDown,
-  Play, Eye, GitCommit, Settings, RefreshCw, AlertTriangle, CheckCircle2,
-  Shield, Activity, Zap, X, Loader2, Terminal, Globe, Lock,
-  Cpu, Code2, BarChart3, Search, RotateCcw
+  Bot, Send, Folder, ChevronRight, ChevronDown,
+  Play, GitCommit, Settings, RefreshCw, CheckCircle2, AlertTriangle,
+  Shield, Activity, Zap, X, Loader2, Globe, Lock,
+  Cpu, Code2, BarChart3, RotateCcw
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -50,7 +51,6 @@ const PROVIDER_COLORS: Record<Provider, string> = {
 
 // ─── CSS-in-JS style helpers ──────────────────────────────────────────────────
 const gold = '#c9a84c';
-const goldLight = '#e8c97a';
 const emerald = '#10d9a0';
 const bgBase = '#04040b';
 const bgPanel = '#060810';
@@ -61,6 +61,19 @@ const borderGold = `rgba(201,168,76,0.22)`;
 const textPrimary = '#f0f4ff';
 const textSecondary = '#6b7490';
 const textMuted = '#2e3650';
+
+// ─── Monaco language detector ─────────────────────────────────────────────────
+function getMonacoLanguage(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+    json: 'json', css: 'css', scss: 'scss', html: 'html', md: 'markdown',
+    mdx: 'markdown', yaml: 'yaml', yml: 'yaml', py: 'python', sh: 'shell',
+    sql: 'sql', prisma: 'prisma', env: 'plaintext', txt: 'plaintext',
+    xml: 'xml', svg: 'xml', toml: 'toml',
+  };
+  return map[ext] ?? 'plaintext';
+}
 
 // ─── File tree node ───────────────────────────────────────────────────────────
 function FileTreeNode({
@@ -141,7 +154,7 @@ function FileTreeNode({
         {isDir ? (
           <Folder size={11} style={{ flexShrink: 0, color: isOpen ? gold : '#5a6880' }} />
         ) : null}
-        <span style={{ truncate: 'true', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, letterSpacing: '0.01em' }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, letterSpacing: '0.01em' }}>
           {node.name}
         </span>
         {isSelected && (
@@ -595,6 +608,19 @@ export default function ITangoEditorPage() {
   const [activityLog, setActivityLog] = useState<any[]>([]);
   const [deployLoading, setDeployLoading] = useState(false);
 
+  // Preview state
+  const [previewUrl, setPreviewUrl] = useState('https://www.mayobebros.com');
+  const [previewInput, setPreviewInput] = useState('https://www.mayobebros.com');
+  const [deployments, setDeployments] = useState<any[]>([]);
+  const [deploymentsLoading, setDeploymentsLoading] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Repo/branch state
+  const [repos, setRepos] = useState<any[]>([]);
+  const [branches, setBranches] = useState<any[]>([]);
+  const [showRepoPanel, setShowRepoPanel] = useState(false);
+  const [reposLoading, setReposLoading] = useState(false);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -615,7 +641,30 @@ export default function ITangoEditorPage() {
       itangoFetch('/api/itango/activity', { credentials: 'include' })
         .then(r => r.json()).then(d => setActivityLog(d.log || [])).catch(() => {});
     }
+    if (rightTab === 'preview') {
+      setDeploymentsLoading(true);
+      itangoFetch('/api/itango/deployments', { credentials: 'include' })
+        .then(r => r.json()).then(d => setDeployments(d.deployments || [])).catch(() => {})
+        .finally(() => setDeploymentsLoading(false));
+    }
   }, [rightTab]);
+
+  const loadRepos = async () => {
+    setReposLoading(true);
+    try {
+      const res = await itangoFetch('/api/itango/repos', { credentials: 'include' });
+      const d = await res.json();
+      setRepos(d.repos || []);
+    } finally {
+      setReposLoading(false);
+    }
+  };
+
+  const loadBranches = async (repo: string) => {
+    const res = await itangoFetch(`/api/itango/branches?repo=${encodeURIComponent(repo)}`, { credentials: 'include' });
+    const d = await res.json();
+    setBranches(d.branches || []);
+  };
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -743,6 +792,11 @@ export default function ITangoEditorPage() {
       const d = await res.json();
       if (d.error) { showToast(d.error, 'error'); return; }
       showToast(`Deployment triggered${d.url ? ` → ${d.url}` : ''}`);
+      if (d.url) {
+        setPreviewUrl(d.url);
+        setPreviewInput(d.url);
+        setRightTab('preview');
+      }
     } finally {
       setDeployLoading(false);
     }
@@ -952,35 +1006,114 @@ export default function ITangoEditorPage() {
         }}>
           {/* Tree header */}
           <div style={{
-            padding: '12px 14px 10px',
+            padding: '10px 12px 8px',
             borderBottom: `1px solid ${borderDim}`,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
+            flexDirection: 'column',
+            gap: '6px',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-              <Folder size={12} style={{ color: gold }} />
-              <span style={{ fontSize: '10px', fontWeight: 700, color: textSecondary, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                Repository
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                <Folder size={12} style={{ color: gold }} />
+                <span style={{ fontSize: '10px', fontWeight: 700, color: textSecondary, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  Repository
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  onClick={() => {
+                    setShowRepoPanel(v => !v);
+                    if (!repos.length) loadRepos();
+                  }}
+                  title="Switch repository / branch"
+                  style={{
+                    width: '22px', height: '22px', borderRadius: '5px',
+                    background: showRepoPanel ? 'rgba(201,168,76,0.1)' : 'transparent',
+                    border: showRepoPanel ? `1px solid ${borderGold}` : 'none',
+                    color: showRepoPanel ? gold : textMuted, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = gold; }}
+                  onMouseLeave={e => { if (!showRepoPanel) (e.currentTarget as HTMLElement).style.color = textMuted; }}
+                >
+                  <BarChart3 size={11} />
+                </button>
+                <button
+                  onClick={() => {
+                    itangoFetch('/api/itango/files', { credentials: 'include' })
+                      .then(r => r.json()).then(d => setTreeRoot(d.items || [])).catch(() => {});
+                  }}
+                  style={{
+                    width: '22px', height: '22px', borderRadius: '5px',
+                    background: 'transparent', border: 'none',
+                    color: textMuted, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  title="Refresh file tree"
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = textSecondary; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = textMuted; }}
+                >
+                  <RefreshCw size={11} />
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => {
-                itangoFetch('/api/itango/files', { credentials: 'include' })
-                  .then(r => r.json()).then(d => setTreeRoot(d.items || [])).catch(() => {});
-              }}
-              style={{
-                width: '22px', height: '22px', borderRadius: '5px',
-                background: 'transparent', border: 'none',
-                color: textMuted, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              title="Refresh file tree"
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = textSecondary; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = textMuted; }}
-            >
-              <RefreshCw size={11} />
-            </button>
+
+            {/* Repo/Branch panel */}
+            {showRepoPanel && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {reposLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 0' }}>
+                    <Loader2 size={11} className="animate-spin" style={{ color: textMuted }} />
+                    <span style={{ fontSize: '10px', color: textMuted }}>Loading repos…</span>
+                  </div>
+                ) : repos.length === 0 ? (
+                  <button
+                    onClick={loadRepos}
+                    style={{
+                      fontSize: '10px', padding: '4px 8px', borderRadius: '5px',
+                      background: 'rgba(201,168,76,0.08)', border: `1px solid ${borderGold}`,
+                      color: gold, cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    Load GitHub repos
+                  </button>
+                ) : (
+                  <select
+                    onChange={async e => {
+                      const repo = e.target.value;
+                      if (!repo) return;
+                      await loadBranches(repo);
+                      setTreeChildren({});
+                      setExpandedDirs(new Set());
+                      setSelectedFile(null);
+                    }}
+                    style={{
+                      width: '100%', padding: '5px 8px', borderRadius: '6px',
+                      fontSize: '10px', background: '#030509',
+                      border: `1px solid ${borderDim}`, color: textPrimary, outline: 'none',
+                    }}
+                  >
+                    <option value="">Select repo…</option>
+                    {repos.map((r: any) => (
+                      <option key={r.id} value={r.name}>{r.name}</option>
+                    ))}
+                  </select>
+                )}
+                {branches.length > 0 && (
+                  <select
+                    style={{
+                      width: '100%', padding: '5px 8px', borderRadius: '6px',
+                      fontSize: '10px', background: '#030509',
+                      border: `1px solid ${borderDim}`, color: textPrimary, outline: 'none',
+                    }}
+                  >
+                    {branches.map((b: any) => (
+                      <option key={b.sha} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Tree content */}
@@ -1341,25 +1474,40 @@ export default function ITangoEditorPage() {
                     </button>
                   </div>
 
-                  {/* Code editor */}
-                  <textarea
-                    value={editedContent}
-                    onChange={e => { setEditedContent(e.target.value); setIsDirty(e.target.value !== fileContent); }}
-                    spellCheck={false}
-                    style={{
-                      flex: 1,
-                      padding: '16px 18px',
-                      background: '#020408',
-                      border: 'none',
-                      outline: 'none',
-                      resize: 'none',
-                      color: '#d4dbe8',
-                      fontSize: '12px',
-                      fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', 'Monaco', monospace",
-                      lineHeight: '1.65',
-                      tabSize: 2,
-                    }}
-                  />
+                  {/* Monaco Code Editor */}
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <Editor
+                      height="100%"
+                      language={getMonacoLanguage(selectedFile?.name ?? '')}
+                      value={editedContent}
+                      onChange={val => {
+                        const v = val ?? '';
+                        setEditedContent(v);
+                        setIsDirty(v !== fileContent);
+                      }}
+                      theme="vs-dark"
+                      options={{
+                        fontSize: 13,
+                        fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', monospace",
+                        fontLigatures: true,
+                        lineHeight: 1.65,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        wordWrap: 'on',
+                        tabSize: 2,
+                        insertSpaces: true,
+                        automaticLayout: true,
+                        padding: { top: 14, bottom: 14 },
+                        scrollbar: { verticalScrollbarSize: 6, horizontalScrollbarSize: 6 },
+                        renderLineHighlight: 'gutter',
+                        bracketPairColorization: { enabled: true },
+                        guides: { bracketPairs: true },
+                        smoothScrolling: true,
+                        cursorBlinking: 'smooth',
+                        cursorSmoothCaretAnimation: 'on',
+                      }}
+                    />
+                  </div>
                 </>
               )}
             </div>
@@ -1368,36 +1516,100 @@ export default function ITangoEditorPage() {
           {/* ── PREVIEW ── */}
           {rightTab === 'preview' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* URL bar */}
               <div style={{
-                padding: '8px 14px',
+                padding: '8px 10px',
                 borderBottom: `1px solid ${borderDim}`,
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
+                gap: '8px',
                 background: bgCard,
                 flexShrink: 0,
               }}>
-                <Globe size={12} style={{ color: '#4fc3f7' }} />
-                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: textSecondary, flex: 1 }}>
-                  https://www.mayobebros.com
-                </span>
+                <Globe size={12} style={{ color: '#4fc3f7', flexShrink: 0 }} />
+                <input
+                  value={previewInput}
+                  onChange={e => setPreviewInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') setPreviewUrl(previewInput); }}
+                  style={{
+                    flex: 1, background: 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${borderDim}`, borderRadius: '6px',
+                    padding: '4px 10px', fontSize: '11px', fontFamily: 'monospace',
+                    color: textSecondary, outline: 'none',
+                  }}
+                  onFocus={e => (e.target.style.borderColor = 'rgba(79,195,247,0.4)')}
+                  onBlur={e => (e.target.style.borderColor = borderDim)}
+                  placeholder="https://..."
+                />
                 <button
-                  onClick={() => { const f = document.getElementById('site-preview') as HTMLIFrameElement; if (f) f.src = f.src; }}
+                  onClick={() => setPreviewUrl(previewInput)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '4px 10px', borderRadius: '6px',
+                    fontSize: '11px', fontWeight: 600,
+                    background: 'rgba(79,195,247,0.08)',
+                    border: '1px solid rgba(79,195,247,0.2)',
+                    color: '#4fc3f7', cursor: 'pointer', flexShrink: 0,
+                  }}
+                >
+                  <Play size={9} /> Go
+                </button>
+                <button
+                  onClick={() => { if (iframeRef.current) iframeRef.current.src = previewUrl; }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '5px',
                     padding: '4px 10px', borderRadius: '6px',
                     fontSize: '11px', fontWeight: 600,
                     background: 'rgba(255,255,255,0.03)',
                     border: `1px solid ${borderDim}`,
-                    color: textSecondary, cursor: 'pointer',
+                    color: textSecondary, cursor: 'pointer', flexShrink: 0,
                   }}
                 >
-                  <RefreshCw size={10} /> Refresh
+                  <RefreshCw size={10} />
                 </button>
               </div>
+
+              {/* Recent Vercel deployments */}
+              {deployments.length > 0 && (
+                <div style={{
+                  padding: '6px 10px',
+                  borderBottom: `1px solid ${borderDim}`,
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  background: 'rgba(255,255,255,0.01)',
+                  flexShrink: 0, overflowX: 'auto',
+                }}>
+                  <span style={{ fontSize: '10px', color: textMuted, flexShrink: 0, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    Deployments:
+                  </span>
+                  {deployments.slice(0, 5).map((d: any) => (
+                    <button
+                      key={d.id}
+                      onClick={() => { if (d.url) { setPreviewInput(d.url); setPreviewUrl(d.url); } }}
+                      title={d.url || 'No URL'}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
+                        fontSize: '10px', fontWeight: 600, fontFamily: 'monospace',
+                        background: d.state === 'READY' ? 'rgba(16,217,160,0.07)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${d.state === 'READY' ? 'rgba(16,217,160,0.25)' : borderDim}`,
+                        color: d.state === 'READY' ? emerald : d.state === 'ERROR' ? '#ef4444' : textSecondary,
+                        cursor: d.url ? 'pointer' : 'default',
+                      }}
+                    >
+                      <div style={{
+                        width: '5px', height: '5px', borderRadius: '50%', flexShrink: 0,
+                        background: d.state === 'READY' ? emerald : d.state === 'ERROR' ? '#ef4444' : '#fb923c',
+                      }} />
+                      {d.target === 'production' ? 'prod' : 'preview'} · {new Date(d.createdAt).toLocaleDateString()}
+                    </button>
+                  ))}
+                  {deploymentsLoading && <Loader2 size={11} style={{ color: textMuted }} className="animate-spin" />}
+                </div>
+              )}
+
               <iframe
-                id="site-preview"
-                src="https://www.mayobebros.com"
+                ref={iframeRef}
+                src={previewUrl}
                 style={{ flex: 1, width: '100%', border: 'none' }}
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                 title="Site Preview"
