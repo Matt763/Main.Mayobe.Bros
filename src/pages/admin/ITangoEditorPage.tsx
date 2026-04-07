@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 
 const ITANGO_AUTH_KEY = 'itango-session-v1';
 
-// Helper: fetch with the iTango Bearer token automatically attached
 function itangoFetch(url: string, options: RequestInit = {}): Promise<Response> {
   let token = '';
   try {
@@ -20,6 +19,7 @@ function itangoFetch(url: string, options: RequestInit = {}): Promise<Response> 
     },
   });
 }
+
 import {
   Bot, Send, FileText, Folder, FolderOpen, ChevronRight, ChevronDown,
   Play, Eye, GitCommit, Settings, RefreshCw, AlertTriangle, CheckCircle2,
@@ -29,12 +29,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Provider = 'claude' | 'openai' | 'gemini';
-type Model = {
-  id: string;
-  label: string;
-  provider: Provider;
-  description: string;
-};
+type Model = { id: string; label: string; provider: Provider; description: string };
 type Message = { role: 'user' | 'assistant'; content: string; ts: number };
 type FileNode = { name: string; path: string; type: 'file' | 'dir'; size?: number; sha?: string };
 type AnalysisType = 'general' | 'seo' | 'security' | 'performance';
@@ -48,10 +43,24 @@ const MODELS: Model[] = [
 ];
 
 const PROVIDER_COLORS: Record<Provider, string> = {
-  claude: '#d97706',
-  openai: '#10b981',
-  gemini: '#3b82f6',
+  claude: '#c9a84c',
+  openai: '#10d9a0',
+  gemini: '#4fc3f7',
 };
+
+// ─── CSS-in-JS style helpers ──────────────────────────────────────────────────
+const gold = '#c9a84c';
+const goldLight = '#e8c97a';
+const emerald = '#10d9a0';
+const bgBase = '#04040b';
+const bgPanel = '#060810';
+const bgCard = '#080c14';
+const bgHover = 'rgba(255,255,255,0.03)';
+const borderDim = 'rgba(255,255,255,0.06)';
+const borderGold = `rgba(201,168,76,0.22)`;
+const textPrimary = '#f0f4ff';
+const textSecondary = '#6b7490';
+const textMuted = '#2e3650';
 
 // ─── File tree node ───────────────────────────────────────────────────────────
 function FileTreeNode({
@@ -65,63 +74,133 @@ function FileTreeNode({
   const isLoading = loading.has(node.path);
   const isSelected = selected === node.path;
 
+  const getFileColor = (name: string) => {
+    if (name.endsWith('.tsx') || name.endsWith('.ts')) return '#4fc3f7';
+    if (name.endsWith('.css')) return '#c084fc';
+    if (name.endsWith('.json')) return '#fb923c';
+    if (name.endsWith('.md')) return '#94a3b8';
+    if (name.endsWith('.js')) return '#fbbf24';
+    if (name.endsWith('.html')) return '#f87171';
+    return '#6b7490';
+  };
+
   const getFileIcon = (name: string) => {
-    if (name.endsWith('.tsx') || name.endsWith('.ts')) return '🔷';
-    if (name.endsWith('.css')) return '🎨';
-    if (name.endsWith('.json')) return '📋';
-    if (name.endsWith('.md')) return '📝';
-    if (name.endsWith('.js')) return '🟡';
-    if (name.endsWith('.html')) return '🌐';
-    return '📄';
+    if (name.endsWith('.tsx') || name.endsWith('.ts')) return '◆';
+    if (name.endsWith('.css')) return '◉';
+    if (name.endsWith('.json')) return '{}';
+    if (name.endsWith('.md')) return '≡';
+    if (name.endsWith('.js')) return '◈';
+    if (name.endsWith('.html')) return '◇';
+    return '·';
   };
 
   return (
     <div>
       <button
-        onClick={() => { isDir ? onExpand(node.path) : onSelect(node); }}
-        className="w-full flex items-center gap-1.5 px-2 py-1 text-left text-xs rounded transition-colors"
+        onClick={() => isDir ? onExpand(node.path) : onSelect(node)}
         style={{
-          paddingLeft: `${8 + depth * 14}px`,
-          background: isSelected ? 'rgba(52,124,37,0.18)' : 'transparent',
-          color: isSelected ? '#4ade80' : '#94a3b8',
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          paddingLeft: `${10 + depth * 14}px`,
+          paddingRight: '10px',
+          paddingTop: '5px',
+          paddingBottom: '5px',
+          textAlign: 'left',
+          fontSize: '11px',
+          border: 'none',
+          cursor: 'pointer',
+          borderRadius: '4px',
+          margin: '1px 4px',
+          background: isSelected
+            ? 'rgba(201,168,76,0.1)'
+            : 'transparent',
+          color: isSelected ? gold : isDir ? '#8fa0bc' : getFileColor(node.name),
+          transition: 'background 0.15s, color 0.15s',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
         }}
-        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.05)'; }}
-        onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+        onMouseEnter={e => {
+          if (!isSelected) (e.currentTarget as HTMLElement).style.background = bgHover;
+        }}
+        onMouseLeave={e => {
+          if (!isSelected) (e.currentTarget as HTMLElement).style.background = 'transparent';
+        }}
       >
         {isDir ? (
-          isLoading ? <Loader2 size={12} className="animate-spin flex-shrink-0" /> :
-          isOpen ? <ChevronDown size={12} className="flex-shrink-0" /> :
-          <ChevronRight size={12} className="flex-shrink-0" />
-        ) : <span className="text-[10px] flex-shrink-0">{getFileIcon(node.name)}</span>}
-        <span className="truncate">{node.name}</span>
+          isLoading
+            ? <Loader2 size={11} style={{ color: gold, flexShrink: 0 }} className="animate-spin" />
+            : isOpen
+              ? <ChevronDown size={11} style={{ color: '#4a5568', flexShrink: 0 }} />
+              : <ChevronRight size={11} style={{ color: '#4a5568', flexShrink: 0 }} />
+        ) : (
+          <span style={{ fontSize: '9px', flexShrink: 0, minWidth: '12px', textAlign: 'center', fontWeight: 700, color: getFileColor(node.name) }}>
+            {getFileIcon(node.name)}
+          </span>
+        )}
+        {isDir ? (
+          <Folder size={11} style={{ flexShrink: 0, color: isOpen ? gold : '#5a6880' }} />
+        ) : null}
+        <span style={{ truncate: 'true', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, letterSpacing: '0.01em' }}>
+          {node.name}
+        </span>
+        {isSelected && (
+          <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: gold, flexShrink: 0 }} />
+        )}
       </button>
     </div>
   );
 }
 
-// ─── Markdown-ish message renderer ───────────────────────────────────────────
+// ─── Markdown message renderer ────────────────────────────────────────────────
 function MessageContent({ content }: { content: string }) {
   const parts = content.split(/(```[\s\S]*?```)/g);
   return (
-    <div className="space-y-2">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {parts.map((part, i) => {
         if (part.startsWith('```')) {
           const lines = part.slice(3, -3).split('\n');
           const lang = lines[0].trim();
           const code = lines.slice(1).join('\n');
           return (
-            <pre
-              key={i}
-              className="rounded-lg p-3 text-xs overflow-x-auto"
-              style={{ background: '#0d1117', color: '#e6edf3', fontFamily: 'monospace' }}
-            >
-              {lang && <div className="text-[10px] text-gray-500 mb-2">{lang}</div>}
-              <code>{code}</code>
-            </pre>
+            <div key={i} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(79,195,247,0.15)' }}>
+              {lang && (
+                <div style={{
+                  padding: '5px 12px',
+                  background: 'rgba(79,195,247,0.08)',
+                  fontSize: '10px',
+                  color: '#4fc3f7',
+                  letterSpacing: '0.08em',
+                  fontWeight: 600,
+                  fontFamily: 'monospace',
+                  textTransform: 'uppercase',
+                }}>
+                  {lang}
+                </div>
+              )}
+              <pre style={{
+                margin: 0,
+                padding: '12px 14px',
+                background: '#020408',
+                color: '#e6edf3',
+                fontSize: '11px',
+                fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', monospace",
+                overflowX: 'auto',
+                lineHeight: '1.65',
+              }}>
+                <code>{code}</code>
+              </pre>
+            </div>
           );
         }
         return (
-          <p key={i} className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#e2e8f0' }}>
+          <p key={i} style={{
+            fontSize: '13px',
+            lineHeight: '1.7',
+            color: '#c8d0e0',
+            whiteSpace: 'pre-wrap',
+            margin: 0,
+          }}>
             {part}
           </p>
         );
@@ -130,47 +209,126 @@ function MessageContent({ content }: { content: string }) {
   );
 }
 
-// ─── Commit confirmation modal ────────────────────────────────────────────────
-function CommitModal({
-  filePath, onConfirm, onCancel, loading,
-}: {
+// ─── Commit modal ─────────────────────────────────────────────────────────────
+function CommitModal({ filePath, onConfirm, onCancel, loading }: {
   filePath: string; onConfirm: (msg: string) => void; onCancel: () => void; loading: boolean;
 }) {
   const [msg, setMsg] = useState('iTango AI: update file');
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.8)' }}>
-      <div className="rounded-2xl p-6 max-w-md w-full mx-4 space-y-4" style={{ background: '#0f172a', border: '1px solid #334155' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'rgba(251,146,60,0.15)' }}>
-            <AlertTriangle size={20} style={{ color: '#fb923c' }} />
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(2,3,10,0.85)',
+      backdropFilter: 'blur(8px)',
+    }}>
+      <div style={{
+        borderRadius: '16px',
+        padding: '28px',
+        maxWidth: '440px',
+        width: 'calc(100% - 32px)',
+        background: 'linear-gradient(135deg, #09101e 0%, #060c18 100%)',
+        border: `1px solid ${borderGold}`,
+        boxShadow: `0 0 60px rgba(201,168,76,0.08), 0 24px 48px rgba(0,0,0,0.6)`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            width: '42px', height: '42px', borderRadius: '12px', flexShrink: 0,
+            background: 'rgba(201,168,76,0.1)',
+            border: `1px solid rgba(201,168,76,0.3)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <GitCommit size={20} style={{ color: gold }} />
           </div>
           <div>
-            <h3 className="font-bold text-white">Deploy to Live Website?</h3>
-            <p className="text-xs text-slate-400">This will push changes to production</p>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: textPrimary, letterSpacing: '0.01em' }}>
+              Commit Changes
+            </div>
+            <div style={{ fontSize: '11px', color: textSecondary, marginTop: '2px' }}>
+              Push to GitHub and deploy
+            </div>
           </div>
         </div>
-        <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.2)', color: '#fdba74' }}>
-          ⚠️ These changes will affect <strong>mayobebros.com</strong> once deployed. Review carefully before proceeding.
+
+        <div style={{
+          padding: '12px 14px',
+          borderRadius: '8px',
+          background: 'rgba(201,168,76,0.05)',
+          border: '1px solid rgba(201,168,76,0.15)',
+        }}>
+          <div style={{ fontSize: '10px', color: '#6b7490', marginBottom: '4px', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+            Target file
+          </div>
+          <div style={{ fontSize: '12px', fontFamily: 'monospace', color: gold }}>
+            {filePath}
+          </div>
         </div>
-        <div>
-          <p className="text-xs text-slate-400 mb-1">File: <span className="text-green-400">{filePath}</span></p>
+
+        <div style={{
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: 'rgba(251,146,60,0.05)',
+          border: '1px solid rgba(251,146,60,0.15)',
+          fontSize: '11px',
+          color: '#c9a84c',
+          lineHeight: '1.5',
+        }}>
+          ⚠ Changes will affect <strong>mayobebros.com</strong> once deployed. Review carefully.
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '11px', color: textSecondary, letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600 }}>
+            Commit message
+          </label>
           <input
             value={msg}
             onChange={e => setMsg(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg text-sm"
-            style={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0' }}
-            placeholder="Commit message..."
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              fontSize: '13px',
+              background: '#030509',
+              border: `1px solid ${borderDim}`,
+              color: textPrimary,
+              outline: 'none',
+              boxSizing: 'border-box',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+            }}
+            placeholder="Describe your changes..."
+            onFocus={e => (e.target.style.border = `1px solid ${borderGold}`)}
+            onBlur={e => (e.target.style.border = `1px solid ${borderDim}`)}
           />
         </div>
-        <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 py-2 rounded-lg text-sm font-medium" style={{ background: '#1e293b', color: '#94a3b8' }}>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1, padding: '11px', borderRadius: '10px',
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: textSecondary, fontSize: '13px', fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
             Cancel
           </button>
           <button
             onClick={() => onConfirm(msg)}
             disabled={loading || !msg.trim()}
-            className="flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"
-            style={{ background: loading ? '#166534' : '#16a34a', color: 'white' }}
+            style={{
+              flex: 1, padding: '11px', borderRadius: '10px',
+              background: loading ? 'rgba(201,168,76,0.15)' : 'rgba(201,168,76,0.18)',
+              border: `1px solid ${loading ? 'rgba(201,168,76,0.2)' : 'rgba(201,168,76,0.4)'}`,
+              color: gold, fontSize: '13px', fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              letterSpacing: '0.02em',
+            }}
           >
             {loading ? <Loader2 size={14} className="animate-spin" /> : <GitCommit size={14} />}
             {loading ? 'Committing…' : 'Commit & Push'}
@@ -214,68 +372,140 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
   };
 
   const providers = [
-    { id: 'claude', label: 'Anthropic Claude', placeholder: 'sk-ant-api03-...', color: '#d97706' },
-    { id: 'openai', label: 'OpenAI GPT', placeholder: 'sk-proj-...', color: '#10b981' },
-    { id: 'gemini', label: 'Google Gemini', placeholder: 'AIzaSy...', color: '#3b82f6' },
+    { id: 'claude', label: 'Anthropic Claude', placeholder: 'sk-ant-api03-...', color: '#c9a84c' },
+    { id: 'openai', label: 'OpenAI GPT', placeholder: 'sk-proj-...', color: '#10d9a0' },
+    { id: 'gemini', label: 'Google Gemini', placeholder: 'AIzaSy...', color: '#4fc3f7' },
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.8)' }}>
-      <div className="rounded-2xl p-6 max-w-lg w-full mx-4 space-y-5" style={{ background: '#0f172a', border: '1px solid #334155' }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Settings size={18} className="text-green-400" />
-            <h3 className="font-bold text-white">AI Engine Settings</h3>
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(2,3,10,0.88)',
+      backdropFilter: 'blur(12px)',
+    }}>
+      <div style={{
+        borderRadius: '18px',
+        padding: '28px',
+        maxWidth: '500px',
+        width: 'calc(100% - 32px)',
+        background: 'linear-gradient(135deg, #09101e 0%, #060c18 100%)',
+        border: `1px solid ${borderGold}`,
+        boxShadow: `0 0 80px rgba(201,168,76,0.06), 0 32px 64px rgba(0,0,0,0.7)`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '38px', height: '38px', borderRadius: '10px',
+              background: 'rgba(201,168,76,0.1)',
+              border: `1px solid rgba(201,168,76,0.25)`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Settings size={17} style={{ color: gold }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: textPrimary }}>AI Engine Settings</div>
+              <div style={{ fontSize: '11px', color: textSecondary }}>Configure providers & integrations</div>
+            </div>
           </div>
-          <button onClick={onClose}><X size={18} className="text-slate-400" /></button>
+          <button
+            onClick={onClose}
+            style={{
+              width: '32px', height: '32px', borderRadius: '8px',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: textSecondary, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={15} />
+          </button>
         </div>
 
-        <p className="text-xs text-slate-400">API keys are stored in server memory and .env file. They are never exposed to the browser.</p>
+        <div style={{ fontSize: '11px', color: '#404a60', lineHeight: '1.5' }}>
+          API keys are stored securely in server memory and .env file. They are never exposed to the browser.
+        </div>
 
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {providers.map(p => (
-            <div key={p.id} className="rounded-xl p-4 space-y-3" style={{ background: '#1e293b', border: `1px solid ${settings?.activeProvider === p.id ? p.color + '44' : '#334155'}` }}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-                  <span className="text-sm font-semibold text-white">{p.label}</span>
+            <div key={p.id} style={{
+              padding: '14px',
+              borderRadius: '12px',
+              background: 'rgba(255,255,255,0.02)',
+              border: `1px solid ${settings?.activeProvider === p.id ? p.color + '33' : borderDim}`,
+              transition: 'border-color 0.2s',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: p.color, boxShadow: `0 0 8px ${p.color}44` }} />
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: textPrimary }}>{p.label}</span>
                   {settings?.providers?.[p.id]?.configured && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80' }}>
-                      CONFIGURED
-                    </span>
+                    <span style={{
+                      fontSize: '9px', padding: '2px 7px', borderRadius: '20px',
+                      background: 'rgba(16,217,160,0.1)',
+                      border: '1px solid rgba(16,217,160,0.25)',
+                      color: emerald, fontWeight: 700, letterSpacing: '0.08em',
+                    }}>CONFIGURED</span>
                   )}
                 </div>
                 {settings?.activeProvider !== p.id ? (
                   <button
                     onClick={() => setActive(p.id)}
-                    className="text-xs px-3 py-1 rounded-lg font-medium"
-                    style={{ background: 'rgba(255,255,255,0.05)', color: '#94a3b8' }}
-                  >
-                    Set Active
-                  </button>
+                    style={{
+                      fontSize: '11px', padding: '4px 12px', borderRadius: '6px',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: textSecondary, cursor: 'pointer', fontWeight: 500,
+                    }}
+                  >Set Active</button>
                 ) : (
-                  <span className="text-xs px-2 py-1 rounded-full font-bold" style={{ background: p.color + '22', color: p.color }}>
-                    ACTIVE
-                  </span>
+                  <span style={{
+                    fontSize: '10px', padding: '3px 10px', borderRadius: '20px',
+                    background: p.color + '18',
+                    border: `1px solid ${p.color}33`,
+                    color: p.color, fontWeight: 700, letterSpacing: '0.08em',
+                  }}>ACTIVE</span>
                 )}
               </div>
               {settings?.providers?.[p.id]?.keyHint && (
-                <p className="text-xs text-slate-500">Current: <span className="font-mono">{settings.providers[p.id].keyHint}</span></p>
+                <div style={{ fontSize: '11px', color: textMuted, fontFamily: 'monospace' }}>
+                  Current: {settings.providers[p.id].keyHint}
+                </div>
               )}
-              <div className="flex gap-2">
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <input
                   type="password"
                   placeholder={p.placeholder}
                   value={keys[p.id]}
                   onChange={e => setKeys(k => ({ ...k, [p.id]: e.target.value }))}
-                  className="flex-1 px-3 py-2 rounded-lg text-xs font-mono"
-                  style={{ background: '#0f172a', border: '1px solid #334155', color: '#e2e8f0' }}
+                  style={{
+                    flex: 1, padding: '8px 12px', borderRadius: '7px',
+                    fontSize: '11px', fontFamily: 'monospace',
+                    background: '#030509',
+                    border: `1px solid ${borderDim}`,
+                    color: textPrimary, outline: 'none',
+                  }}
+                  onFocus={e => (e.target.style.border = `1px solid ${p.color}44`)}
+                  onBlur={e => (e.target.style.border = `1px solid ${borderDim}`)}
                 />
                 <button
                   onClick={() => saveKey(p.id)}
                   disabled={saving || !keys[p.id]}
-                  className="px-3 py-2 rounded-lg text-xs font-bold"
-                  style={{ background: saved === p.id ? '#166534' : p.color + '22', color: saved === p.id ? '#4ade80' : p.color }}
+                  style={{
+                    padding: '8px 14px', borderRadius: '7px',
+                    fontSize: '12px', fontWeight: 700,
+                    background: saved === p.id ? 'rgba(16,217,160,0.12)' : `${p.color}18`,
+                    border: `1px solid ${saved === p.id ? 'rgba(16,217,160,0.3)' : p.color + '33'}`,
+                    color: saved === p.id ? emerald : p.color,
+                    cursor: saving || !keys[p.id] ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
                 >
                   {saved === p.id ? '✓ Saved' : 'Save'}
                 </button>
@@ -284,23 +514,30 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
           ))}
         </div>
 
-        <div className="rounded-xl p-4 space-y-2" style={{ background: '#1e293b', border: '1px solid #334155' }}>
-          <h4 className="text-xs font-bold text-slate-300 flex items-center gap-2">
-            <Globe size={12} /> Integrations
-          </h4>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ background: settings?.github?.configured ? '#4ade80' : '#ef4444' }} />
-              <span className="text-slate-400">GitHub: {settings?.github?.repo || 'not set'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ background: settings?.vercel?.configured ? '#4ade80' : '#ef4444' }} />
-              <span className="text-slate-400">Vercel: {settings?.vercel?.configured ? 'connected' : 'not set'}</span>
-            </div>
+        <div style={{
+          padding: '14px',
+          borderRadius: '12px',
+          background: 'rgba(255,255,255,0.02)',
+          border: `1px solid ${borderDim}`,
+        }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, color: textSecondary, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Globe size={11} /> Integrations
           </div>
-          <p className="text-[10px] text-slate-600 mt-2">
-            Add GITHUB_TOKEN, VERCEL_TOKEN, VERCEL_PROJECT_ID to your .env file
-          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {[
+              { label: 'GitHub', value: settings?.github?.repo || 'not set', ok: settings?.github?.configured },
+              { label: 'Vercel', value: settings?.vercel?.configured ? 'connected' : 'not set', ok: settings?.vercel?.configured },
+            ].map(item => (
+              <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '11px' }}>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.ok ? emerald : '#ef4444', flexShrink: 0 }} />
+                <span style={{ color: textSecondary }}>{item.label}:</span>
+                <span style={{ color: item.ok ? '#8fa0bc' : '#4a3535', fontFamily: 'monospace', fontSize: '10px' }}>{item.value}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: '10px', color: textMuted, marginTop: '8px' }}>
+            Set GITHUB_TOKEN, VERCEL_TOKEN, VERCEL_PROJECT_ID in your .env file
+          </div>
         </div>
       </div>
     </div>
@@ -311,7 +548,6 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
 export default function ITangoEditorPage() {
   const navigate = useNavigate();
 
-  // ── iTango session guard ──────────────────────────────────────────────────
   useEffect(() => {
     const raw = sessionStorage.getItem(ITANGO_AUTH_KEY);
     if (!raw) { navigate('/itango-login', { replace: true }); return; }
@@ -330,7 +566,7 @@ export default function ITangoEditorPage() {
   // Chat state
   const [messages, setMessages] = useState<Message[]>([{
     role: 'assistant',
-    content: `👋 **iTango AI Website Editor** is online.\n\nI have full access to your Mayobe Bros codebase. I can:\n• Read and analyze any file\n• Suggest and write code improvements\n• Fix bugs and optimize performance\n• Improve SEO and content structure\n\nSelect a file from the tree, or ask me anything about your website.`,
+    content: `iTango AI Website Editor is online.\n\nI have full access to your Mayobe Bros codebase. I can:\n• Read and analyze any file\n• Suggest and write code improvements\n• Fix bugs and optimize performance\n• Improve SEO and content structure\n\nSelect a file from the tree on the left, or ask me anything about your website.`,
     ts: Date.now(),
   }]);
   const [input, setInput] = useState('');
@@ -350,7 +586,6 @@ export default function ITangoEditorPage() {
   const [isDirty, setIsDirty] = useState(false);
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'chat' | 'tree'>('chat');
   const [rightTab, setRightTab] = useState<'editor' | 'preview' | 'activity'>('editor');
   const [showCommitModal, setShowCommitModal] = useState(false);
   const [commitLoading, setCommitLoading] = useState(false);
@@ -368,7 +603,6 @@ export default function ITangoEditorPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Load root file tree
   useEffect(() => {
     itangoFetch('/api/itango/files', { credentials: 'include' })
       .then(r => r.json())
@@ -376,7 +610,6 @@ export default function ITangoEditorPage() {
       .catch(() => {});
   }, []);
 
-  // Load activity log
   useEffect(() => {
     if (rightTab === 'activity') {
       itangoFetch('/api/itango/activity', { credentials: 'include' })
@@ -384,7 +617,6 @@ export default function ITangoEditorPage() {
     }
   }, [rightTab]);
 
-  // Scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -437,22 +669,17 @@ export default function ITangoEditorPage() {
   const sendMessage = useCallback(async (overrideInput?: string, skipAppend?: boolean) => {
     const text = (overrideInput ?? input).trim();
     if (!text || streaming) return;
-
     const userMsg: Message = { role: 'user', content: text, ts: Date.now() };
     const newMessages = [...messages, userMsg];
     if (!skipAppend) setMessages(newMessages);
     else setMessages(prev => [...prev, userMsg]);
     setInput('');
     setStreaming(true);
-
-    // Show typing placeholder
     setMessages(prev => [...prev, { role: 'assistant', content: '', ts: Date.now() }]);
-
     try {
       const context = selectedFile
         ? `File: ${selectedFile.path}\nContent (first 3000 chars):\n${fileContent.slice(0, 3000)}`
         : '';
-
       const res = await itangoFetch('/api/itango/chat', {
         method: 'POST',
         body: JSON.stringify({
@@ -461,30 +688,17 @@ export default function ITangoEditorPage() {
           systemContext: context,
         }),
       });
-
-      // Server returns plain JSON: { reply: "..." } or { error: "..." }
       const data = await res.json().catch(() => ({ error: `HTTP ${res.status} — non-JSON response` }));
-
       if (!res.ok || data.error) {
-        // 401/403 = stale token, redirect to login
         if (res.status === 401 || res.status === 403) {
           sessionStorage.removeItem(ITANGO_AUTH_KEY);
-          setMessages(prev => prev.slice(0, -1).concat({
-            role: 'assistant',
-            content: '🔒 Session expired. Redirecting to login…',
-            ts: Date.now(),
-          }));
+          setMessages(prev => prev.slice(0, -1).concat({ role: 'assistant', content: 'Session expired. Redirecting to login…', ts: Date.now() }));
           setTimeout(() => { window.location.href = '/itango-login'; }, 1800);
           return;
         }
-        setMessages(prev => prev.slice(0, -1).concat({
-          role: 'assistant',
-          content: `❌ ${data.error || `Server error (${res.status})`}`,
-          ts: Date.now(),
-        }));
+        setMessages(prev => prev.slice(0, -1).concat({ role: 'assistant', content: `Error: ${data.error || `Server error (${res.status})`}`, ts: Date.now() }));
         return;
       }
-
       const reply: string = data.reply || '(empty response)';
       setMessages(prev => {
         const copy = [...prev];
@@ -492,11 +706,7 @@ export default function ITangoEditorPage() {
         return copy;
       });
     } catch (err: any) {
-      setMessages(prev => prev.slice(0, -1).concat({
-        role: 'assistant',
-        content: `❌ Network error: ${err.message}`,
-        ts: Date.now(),
-      }));
+      setMessages(prev => prev.slice(0, -1).concat({ role: 'assistant', content: `Network error: ${err.message}`, ts: Date.now() }));
     } finally {
       setStreaming(false);
     }
@@ -509,19 +719,14 @@ export default function ITangoEditorPage() {
       const res = await itangoFetch('/api/itango/commit', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          path: selectedFile.path,
-          content: editedContent,
-          message: commitMessage,
-          sha: fileSha,
-        }),
+        body: JSON.stringify({ path: selectedFile.path, content: editedContent, message: commitMessage, sha: fileSha }),
       });
       const d = await res.json();
       if (d.error) { showToast(d.error, 'error'); return; }
       setFileContent(editedContent);
       setIsDirty(false);
       setShowCommitModal(false);
-      showToast('✓ Changes committed to GitHub');
+      showToast('Changes committed to GitHub');
     } finally {
       setCommitLoading(false);
     }
@@ -537,13 +742,12 @@ export default function ITangoEditorPage() {
       });
       const d = await res.json();
       if (d.error) { showToast(d.error, 'error'); return; }
-      showToast(`✓ Deployment triggered${d.url ? ` → ${d.url}` : ''}`);
+      showToast(`Deployment triggered${d.url ? ` → ${d.url}` : ''}`);
     } finally {
       setDeployLoading(false);
     }
   };
 
-  // Render file tree recursively
   const renderTree = (nodes: FileNode[], depth = 0): JSX.Element[] =>
     nodes.flatMap(node => [
       <FileTreeNode
@@ -570,374 +774,715 @@ export default function ITangoEditorPage() {
   ];
 
   return (
-    <div style={{ background: '#000000', minHeight: '100vh' }}>
-      <div className="flex flex-col" style={{ height: '100vh' }}>
+    <div style={{
+      background: bgBase,
+      minHeight: '100vh',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
+      overflow: 'hidden',
+    }}>
 
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-4 py-3 rounded-t-2xl flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, #0d1b0f 0%, #0a1628 100%)', border: '1px solid rgba(52,124,37,0.3)', borderBottom: '1px solid rgba(52,124,37,0.15)' }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(52,124,37,0.2)', border: '1px solid rgba(52,124,37,0.4)' }}>
-              <Cpu size={16} style={{ color: '#4ade80' }} />
+      {/* ── LUXURY HEADER ─────────────────────────────────────────────────────── */}
+      <header style={{
+        height: '56px',
+        flexShrink: 0,
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 20px',
+        gap: '12px',
+        background: 'linear-gradient(90deg, #05060f 0%, #080c1a 50%, #05060f 100%)',
+        borderBottom: `1px solid ${borderGold}`,
+        boxShadow: `0 1px 30px rgba(201,168,76,0.05)`,
+      }}>
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+          <div style={{
+            width: '36px', height: '36px', borderRadius: '10px',
+            background: 'linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.04) 100%)',
+            border: `1px solid rgba(201,168,76,0.35)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 0 24px rgba(201,168,76,0.12), inset 0 1px 0 rgba(201,168,76,0.15)`,
+          }}>
+            <Cpu size={17} style={{ color: gold }} />
+          </div>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: textPrimary, letterSpacing: '0.02em', lineHeight: 1.2 }}>
+              iTango <span style={{ color: gold, fontWeight: 700 }}>AI</span>
             </div>
-            <div>
-              <h1 className="font-bold text-white text-sm">iTango AI Website Editor</h1>
-              <p className="text-[10px]" style={{ color: '#4ade80' }}>Full access to mayobebros.com codebase</p>
-            </div>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full" style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
-              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#4ade80' }} />
-              <span className="text-[10px] font-bold" style={{ color: '#4ade80' }}>LIVE</span>
+            <div style={{ fontSize: '9px', color: textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
+              Website Editor
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Model selector */}
-            <select
-              value={selectedModel.id}
-              onChange={e => setSelectedModel(MODELS.find(m => m.id === e.target.value) || MODELS[0])}
-              className="text-xs rounded-lg px-3 py-1.5 font-medium"
-              style={{ background: '#1e293b', border: `1px solid ${PROVIDER_COLORS[selectedModel.provider]}44`, color: PROVIDER_COLORS[selectedModel.provider] }}
-            >
-              {MODELS.map(m => (
-                <option key={m.id} value={m.id}>{m.label}</option>
-              ))}
-            </select>
-            <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg" style={{ background: '#1e293b', color: '#94a3b8' }}>
-              <Settings size={15} />
-            </button>
+          {/* Live badge */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '5px',
+            padding: '3px 10px', borderRadius: '20px',
+            background: 'rgba(16,217,160,0.06)',
+            border: '1px solid rgba(16,217,160,0.2)',
+          }}>
+            <div style={{
+              width: '5px', height: '5px', borderRadius: '50%',
+              background: emerald,
+              boxShadow: `0 0 6px ${emerald}`,
+              animation: 'pulse 2s infinite',
+            }} />
+            <span style={{ fontSize: '9px', fontWeight: 800, color: emerald, letterSpacing: '0.12em' }}>LIVE</span>
           </div>
         </div>
 
-        {/* 3-column layout */}
-        <div className="flex flex-1 overflow-hidden rounded-b-2xl" style={{ border: '1px solid rgba(52,124,37,0.15)', borderTop: 'none' }}>
+        {/* Divider */}
+        <div style={{ width: '1px', height: '24px', background: borderDim, margin: '0 4px' }} />
 
-          {/* ── LEFT PANEL: File tree + Chat ── */}
-          <div className="w-64 flex-shrink-0 flex flex-col" style={{ background: '#0b1220', borderRight: '1px solid #1e2d3d' }}>
-            {/* Tab switcher */}
-            <div className="flex" style={{ borderBottom: '1px solid #1e2d3d' }}>
-              {(['chat', 'tree'] as const).map(tab => (
+        {/* File path breadcrumb */}
+        {selectedFile && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '4px 10px', borderRadius: '6px',
+            background: 'rgba(79,195,247,0.06)',
+            border: '1px solid rgba(79,195,247,0.12)',
+          }}>
+            <Code2 size={11} style={{ color: '#4fc3f7' }} />
+            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4fc3f7' }}>
+              {selectedFile.path}
+            </span>
+            {isDirty && (
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fb923c' }} />
+            )}
+          </div>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        {/* Model selector */}
+        <select
+          value={selectedModel.id}
+          onChange={e => setSelectedModel(MODELS.find(m => m.id === e.target.value) || MODELS[0])}
+          style={{
+            padding: '6px 12px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            background: '#080c14',
+            border: `1px solid ${PROVIDER_COLORS[selectedModel.provider]}33`,
+            color: PROVIDER_COLORS[selectedModel.provider],
+            outline: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          {MODELS.map(m => (
+            <option key={m.id} value={m.id}>{m.label}</option>
+          ))}
+        </select>
+
+        {/* Deploy preview */}
+        <button
+          onClick={() => handleDeploy('preview')}
+          disabled={deployLoading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '6px 14px', borderRadius: '8px',
+            fontSize: '12px', fontWeight: 600,
+            background: 'rgba(201,168,76,0.08)',
+            border: `1px solid rgba(201,168,76,0.2)`,
+            color: gold, cursor: deployLoading ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(201,168,76,0.14)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(201,168,76,0.08)'; }}
+        >
+          {deployLoading ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+          Deploy Preview
+        </button>
+
+        {/* Deploy production */}
+        <button
+          onClick={() => {
+            if (confirm('Deploy to PRODUCTION? This will update the live website immediately.')) {
+              handleDeploy('production');
+            }
+          }}
+          disabled={deployLoading}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '6px 14px', borderRadius: '8px',
+            fontSize: '12px', fontWeight: 600,
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.2)',
+            color: '#f87171', cursor: deployLoading ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.14)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)'; }}
+        >
+          <Lock size={12} /> Production
+        </button>
+
+        {/* Settings */}
+        <button
+          onClick={() => setShowSettings(true)}
+          style={{
+            width: '34px', height: '34px', borderRadius: '8px',
+            background: 'rgba(255,255,255,0.04)',
+            border: `1px solid ${borderDim}`,
+            color: textSecondary, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = textPrimary; (e.currentTarget as HTMLElement).style.borderColor = borderGold; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = textSecondary; (e.currentTarget as HTMLElement).style.borderColor = borderDim; }}
+        >
+          <Settings size={15} />
+        </button>
+      </header>
+
+      {/* ── 3-COLUMN LAYOUT ───────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* ── LEFT: File Tree ──────────────────────────────────────────────────── */}
+        <aside style={{
+          width: '210px',
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          background: bgPanel,
+          borderRight: `1px solid ${borderDim}`,
+          overflow: 'hidden',
+        }}>
+          {/* Tree header */}
+          <div style={{
+            padding: '12px 14px 10px',
+            borderBottom: `1px solid ${borderDim}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+              <Folder size={12} style={{ color: gold }} />
+              <span style={{ fontSize: '10px', fontWeight: 700, color: textSecondary, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                Repository
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                itangoFetch('/api/itango/files', { credentials: 'include' })
+                  .then(r => r.json()).then(d => setTreeRoot(d.items || [])).catch(() => {});
+              }}
+              style={{
+                width: '22px', height: '22px', borderRadius: '5px',
+                background: 'transparent', border: 'none',
+                color: textMuted, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              title="Refresh file tree"
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = textSecondary; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = textMuted; }}
+            >
+              <RefreshCw size={11} />
+            </button>
+          </div>
+
+          {/* Tree content */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+            {treeRoot.length === 0 ? (
+              <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+                <Folder size={22} style={{ color: textMuted, margin: '0 auto 8px', display: 'block' }} />
+                <p style={{ fontSize: '11px', color: textMuted, lineHeight: '1.5' }}>
+                  Add GITHUB_TOKEN to .env to browse files
+                </p>
+              </div>
+            ) : renderTree(treeRoot)}
+          </div>
+        </aside>
+
+        {/* ── CENTER: Chat Interface ───────────────────────────────────────────── */}
+        <main style={{
+          flex: '1 1 0',
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          background: bgBase,
+          borderRight: `1px solid ${borderDim}`,
+        }}>
+          {/* Chat header */}
+          <div style={{
+            height: '44px',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 16px',
+            gap: '10px',
+            borderBottom: `1px solid ${borderDim}`,
+            background: bgPanel,
+          }}>
+            <Bot size={14} style={{ color: gold }} />
+            <span style={{ fontSize: '12px', fontWeight: 700, color: textPrimary, letterSpacing: '0.02em' }}>
+              AI Assistant
+            </span>
+            <div style={{
+              padding: '2px 8px', borderRadius: '20px',
+              background: `${PROVIDER_COLORS[selectedModel.provider]}12`,
+              border: `1px solid ${PROVIDER_COLORS[selectedModel.provider]}25`,
+              fontSize: '10px', fontWeight: 600,
+              color: PROVIDER_COLORS[selectedModel.provider],
+              letterSpacing: '0.05em',
+            }}>
+              {selectedModel.label}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '20px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+          }}>
+            {messages.map((m, i) => (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
+              }}>
+                {m.role === 'assistant' && (
+                  <div style={{
+                    width: '26px', height: '26px', borderRadius: '8px', flexShrink: 0,
+                    background: 'rgba(201,168,76,0.1)',
+                    border: `1px solid rgba(201,168,76,0.2)`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginRight: '10px', marginTop: '2px',
+                  }}>
+                    <Bot size={13} style={{ color: gold }} />
+                  </div>
+                )}
+                <div style={{
+                  maxWidth: '86%',
+                  padding: m.role === 'user' ? '10px 14px' : '12px 14px',
+                  borderRadius: m.role === 'user' ? '14px 14px 4px 14px' : '4px 14px 14px 14px',
+                  background: m.role === 'user'
+                    ? 'rgba(201,168,76,0.1)'
+                    : 'rgba(255,255,255,0.03)',
+                  border: m.role === 'user'
+                    ? `1px solid rgba(201,168,76,0.22)`
+                    : `1px solid ${borderDim}`,
+                }}>
+                  {m.role === 'assistant' && i === messages.length - 1 && streaming && !m.content ? (
+                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', padding: '4px 2px' }}>
+                      {[0, 1, 2].map(j => (
+                        <div key={j} style={{
+                          width: '6px', height: '6px', borderRadius: '50%', background: gold,
+                          animation: 'bounce 1.2s infinite',
+                          animationDelay: `${j * 0.18}s`,
+                        }} />
+                      ))}
+                    </div>
+                  ) : (
+                    <MessageContent content={m.content} />
+                  )}
+                </div>
+              </div>
+            ))}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Quick prompts — shown only on first message */}
+          {messages.length === 1 && (
+            <div style={{ padding: '0 18px 12px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <div style={{ fontSize: '10px', color: textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '6px' }}>
+                Quick prompts
+              </div>
+              {quickPrompts.map((q, i) => (
                 <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className="flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                  key={i}
+                  onClick={() => { setInput(q); textareaRef.current?.focus(); }}
                   style={{
-                    background: activeTab === tab ? 'rgba(52,124,37,0.12)' : 'transparent',
-                    color: activeTab === tab ? '#4ade80' : '#475569',
-                    borderBottom: activeTab === tab ? '2px solid #347c25' : '2px solid transparent',
+                    textAlign: 'left', padding: '8px 12px', borderRadius: '8px',
+                    fontSize: '12px',
+                    background: 'rgba(255,255,255,0.02)',
+                    border: `1px solid ${borderDim}`,
+                    color: textSecondary, cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.borderColor = borderGold;
+                    (e.currentTarget as HTMLElement).style.color = gold;
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(201,168,76,0.04)';
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.borderColor = borderDim;
+                    (e.currentTarget as HTMLElement).style.color = textSecondary;
+                    (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.02)';
                   }}
                 >
-                  {tab === 'chat' ? <Bot size={12} /> : <Folder size={12} />}
-                  {tab === 'chat' ? 'Chat' : 'Files'}
+                  {q}
                 </button>
               ))}
             </div>
+          )}
 
-            {/* Chat panel */}
-            {activeTab === 'chat' && (
-              <div className="flex flex-col flex-1 overflow-hidden">
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                  {messages.map((m, i) => (
-                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div
-                        className="max-w-[95%] rounded-xl p-2.5"
-                        style={m.role === 'user'
-                          ? { background: 'rgba(52,124,37,0.2)', border: '1px solid rgba(52,124,37,0.3)' }
-                          : { background: '#1e293b', border: '1px solid #334155' }
-                        }
-                      >
-                        {m.role === 'assistant' && i === messages.length - 1 && streaming && !m.content
-                          ? <div className="flex gap-1 p-1">
-                              {[0,1,2].map(j => <div key={j} className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#4ade80', animationDelay: `${j * 0.15}s` }} />)}
-                            </div>
-                          : <MessageContent content={m.content} />
-                        }
-                      </div>
-                    </div>
-                  ))}
-                  <div ref={chatEndRef} />
-                </div>
+          {/* Input area */}
+          <div style={{
+            padding: '14px 16px',
+            borderTop: `1px solid ${borderDim}`,
+            background: bgPanel,
+          }}>
+            <div style={{
+              display: 'flex',
+              gap: '10px',
+              alignItems: 'flex-end',
+              padding: '10px 12px',
+              borderRadius: '12px',
+              background: bgCard,
+              border: `1px solid ${borderDim}`,
+              transition: 'border-color 0.2s',
+            }}
+              onFocusCapture={e => { (e.currentTarget as HTMLElement).style.borderColor = borderGold; }}
+              onBlurCapture={e => { (e.currentTarget as HTMLElement).style.borderColor = borderDim; }}
+            >
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                placeholder="Ask iTango anything…"
+                rows={2}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  resize: 'none',
+                  fontSize: '13px',
+                  color: textPrimary,
+                  lineHeight: '1.6',
+                  fontFamily: 'system-ui, -apple-system, sans-serif',
+                }}
+              />
+              <button
+                onClick={() => sendMessage()}
+                disabled={!input.trim() || streaming}
+                style={{
+                  width: '34px', height: '34px', borderRadius: '9px',
+                  background: !input.trim() || streaming ? 'rgba(201,168,76,0.08)' : gold,
+                  border: `1px solid ${!input.trim() || streaming ? borderGold : gold}`,
+                  color: !input.trim() || streaming ? 'rgba(201,168,76,0.5)' : '#050507',
+                  cursor: !input.trim() || streaming ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {streaming ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              </button>
+            </div>
+            <div style={{ fontSize: '10px', color: textMuted, marginTop: '6px', textAlign: 'center' }}>
+              Enter to send · Shift+Enter for new line
+            </div>
+          </div>
+        </main>
 
-                {/* Quick prompts */}
-                {messages.length === 1 && (
-                  <div className="px-3 pb-2 space-y-1">
-                    {quickPrompts.map((q, i) => (
-                      <button
-                        key={i}
-                        onClick={() => { setInput(q); textareaRef.current?.focus(); }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-[10px] transition-colors"
-                        style={{ background: 'rgba(52,124,37,0.06)', color: '#64748b', border: '1px solid #1e293b' }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#4ade80'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#64748b'; }}
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Input */}
-                <div className="p-2" style={{ borderTop: '1px solid #1e2d3d' }}>
-                  <div className="flex gap-2 items-end">
-                    <textarea
-                      ref={textareaRef}
-                      value={input}
-                      onChange={e => setInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }}}
-                      placeholder="Ask iTango anything…"
-                      rows={2}
-                      className="flex-1 px-3 py-2 rounded-xl text-xs resize-none"
-                      style={{ background: '#1e293b', border: '1px solid #334155', color: '#e2e8f0' }}
-                    />
-                    <button
-                      onClick={() => sendMessage()}
-                      disabled={!input.trim() || streaming}
-                      className="p-2 rounded-xl flex-shrink-0"
-                      style={{ background: streaming ? '#166534' : '#347c25', color: 'white' }}
-                    >
-                      {streaming ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* File tree panel */}
-            {activeTab === 'tree' && (
-              <div className="flex-1 overflow-y-auto py-2">
-                {treeRoot.length === 0
-                  ? <div className="p-4 text-xs text-slate-600 text-center">
-                      <Folder size={24} className="mx-auto mb-2 opacity-30" />
-                      {process.env.VITE_GITHUB_TOKEN !== undefined
-                        ? 'Loading…'
-                        : 'Add GITHUB_TOKEN to .env to browse files'}
-                    </div>
-                  : renderTree(treeRoot)
-                }
-              </div>
-            )}
+        {/* ── RIGHT: Editor / Preview / Activity ──────────────────────────────── */}
+        <section style={{
+          flex: '1.3 1 0',
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          background: bgPanel,
+        }}>
+          {/* Tab bar */}
+          <div style={{
+            height: '44px',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'stretch',
+            borderBottom: `1px solid ${borderDim}`,
+            background: bgCard,
+          }}>
+            {[
+              { id: 'editor', label: 'Code Editor', Icon: Code2 },
+              { id: 'preview', label: 'Live Preview', Icon: Globe },
+              { id: 'activity', label: 'Activity', Icon: Activity },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setRightTab(tab.id as any)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '7px',
+                  padding: '0 18px',
+                  fontSize: '12px', fontWeight: 600,
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  color: rightTab === tab.id ? textPrimary : textSecondary,
+                  borderBottom: rightTab === tab.id ? `2px solid ${gold}` : '2px solid transparent',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { if (rightTab !== tab.id) (e.currentTarget as HTMLElement).style.color = '#a0b0c8'; }}
+                onMouseLeave={e => { if (rightTab !== tab.id) (e.currentTarget as HTMLElement).style.color = textSecondary; }}
+              >
+                <tab.Icon size={12} />
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          {/* ── CENTER + RIGHT: Editor / Preview ── */}
-          <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#0d1117' }}>
-            {/* Tab bar */}
-            <div className="flex items-center justify-between px-4" style={{ background: '#161b22', borderBottom: '1px solid #30363d', height: '40px' }}>
-              <div className="flex">
-                {[
-                  { id: 'editor', label: 'Code Editor', icon: Code2 },
-                  { id: 'preview', label: 'Live Preview', icon: Globe },
-                  { id: 'activity', label: 'Activity Log', icon: Activity },
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setRightTab(tab.id as any)}
-                    className="flex items-center gap-1.5 px-3 h-full text-xs font-medium transition-colors"
-                    style={{
-                      color: rightTab === tab.id ? '#e6edf3' : '#8b949e',
-                      borderBottom: rightTab === tab.id ? '2px solid #347c25' : '2px solid transparent',
-                    }}
-                  >
-                    <tab.icon size={12} />
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              {selectedFile && (
-                <span className="text-[10px] font-mono" style={{ color: '#58a6ff' }}>
-                  {selectedFile.path} {isDirty && <span style={{ color: '#fb923c' }}>●</span>}
-                </span>
-              )}
-            </div>
-
-            {/* Code editor tab */}
-            {rightTab === 'editor' && (
-              <div className="flex flex-col flex-1 overflow-hidden">
-                {!selectedFile ? (
-                  <div className="flex-1 flex flex-col items-center justify-center" style={{ color: '#30363d' }}>
-                    <Code2 size={48} className="mb-4 opacity-30" />
-                    <p className="text-sm">Select a file from the tree to edit</p>
-                    <p className="text-xs mt-1 opacity-50">Or ask iTango AI to show you a file</p>
+          {/* ── EDITOR ── */}
+          {rightTab === 'editor' && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {!selectedFile ? (
+                <div style={{
+                  flex: 1, display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center', gap: '12px',
+                }}>
+                  <div style={{
+                    width: '60px', height: '60px', borderRadius: '16px',
+                    background: 'rgba(201,168,76,0.06)',
+                    border: `1px solid ${borderGold}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Code2 size={26} style={{ color: 'rgba(201,168,76,0.4)' }} />
                   </div>
-                ) : fileLoading ? (
-                  <div className="flex-1 flex items-center justify-center">
-                    <Loader2 size={24} className="animate-spin" style={{ color: '#347c25' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: '14px', fontWeight: 600, color: textSecondary, margin: '0 0 4px' }}>
+                      No file selected
+                    </p>
+                    <p style={{ fontSize: '12px', color: textMuted, margin: 0 }}>
+                      Choose a file from the tree to start editing
+                    </p>
                   </div>
-                ) : (
-                  <>
-                    {/* Analysis bar */}
-                    <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0" style={{ background: '#161b22', borderBottom: '1px solid #30363d' }}>
-                      <span className="text-[10px] text-slate-500 mr-1">AI Analyze:</span>
-                      {(['general', 'seo', 'security', 'performance'] as AnalysisType[]).map(t => (
+                </div>
+              ) : fileLoading ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                    <Loader2 size={24} style={{ color: gold }} className="animate-spin" />
+                    <span style={{ fontSize: '12px', color: textSecondary }}>Loading file…</span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Analysis + action toolbar */}
+                  <div style={{
+                    padding: '8px 14px',
+                    borderBottom: `1px solid ${borderDim}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: bgCard,
+                    flexShrink: 0,
+                  }}>
+                    <span style={{ fontSize: '10px', color: textMuted, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginRight: '2px' }}>
+                      Analyze:
+                    </span>
+                    {(['general', 'seo', 'security', 'performance'] as AnalysisType[]).map(t => {
+                      const icons: Record<AnalysisType, string> = { general: '⌕', seo: '↗', security: '⛨', performance: '⚡' };
+                      return (
                         <button
                           key={t}
                           onClick={() => handleAnalyze(t)}
                           disabled={analysisLoading}
-                          className="text-[10px] px-2 py-1 rounded font-medium capitalize transition-colors"
-                          style={{ background: 'rgba(52,124,37,0.08)', color: '#64748b', border: '1px solid #1e293b' }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#4ade80'; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = '#64748b'; }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            padding: '4px 10px', borderRadius: '6px',
+                            fontSize: '11px', fontWeight: 600, textTransform: 'capitalize',
+                            background: 'rgba(255,255,255,0.03)',
+                            border: `1px solid ${borderDim}`,
+                            color: textSecondary, cursor: analysisLoading ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => {
+                            (e.currentTarget as HTMLElement).style.color = gold;
+                            (e.currentTarget as HTMLElement).style.borderColor = borderGold;
+                          }}
+                          onMouseLeave={e => {
+                            (e.currentTarget as HTMLElement).style.color = textSecondary;
+                            (e.currentTarget as HTMLElement).style.borderColor = borderDim;
+                          }}
                         >
-                          {analysisLoading && <Loader2 size={9} className="inline animate-spin mr-1" />}
-                          {t === 'general' ? '🔍' : t === 'seo' ? '📈' : t === 'security' ? '🛡' : '⚡'} {t}
+                          {analysisLoading && <Loader2 size={9} className="animate-spin" />}
+                          {icons[t]} {t}
                         </button>
-                      ))}
-                      <div className="ml-auto flex items-center gap-1">
-                        <button
-                          onClick={() => { setEditedContent(fileContent); setIsDirty(false); }}
-                          className="text-[10px] px-2 py-1 rounded flex items-center gap-1"
-                          style={{ color: '#6b7280' }}
-                          title="Reset changes"
-                        >
-                          <RotateCcw size={10} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Code textarea */}
-                    <textarea
-                      value={editedContent}
-                      onChange={e => { setEditedContent(e.target.value); setIsDirty(e.target.value !== fileContent); }}
-                      spellCheck={false}
-                      className="flex-1 p-4 text-xs font-mono resize-none outline-none"
-                      style={{
-                        background: '#0d1117', color: '#e6edf3',
-                        lineHeight: '1.6', tabSize: 2,
-                      }}
-                    />
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Live preview tab */}
-            {rightTab === 'preview' && (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-2 flex-shrink-0" style={{ background: '#161b22', borderBottom: '1px solid #30363d' }}>
-                  <Globe size={12} style={{ color: '#58a6ff' }} />
-                  <span className="text-xs font-mono" style={{ color: '#8b949e' }}>https://www.mayobebros.com</span>
-                  <div className="ml-auto flex gap-2">
+                      );
+                    })}
+                    <div style={{ flex: 1 }} />
+                    {isDirty && (
+                      <button
+                        onClick={() => { setEditedContent(fileContent); setIsDirty(false); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '5px',
+                          padding: '4px 10px', borderRadius: '6px',
+                          fontSize: '11px', fontWeight: 600,
+                          background: 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${borderDim}`,
+                          color: textSecondary, cursor: 'pointer',
+                        }}
+                        title="Discard changes"
+                      >
+                        <RotateCcw size={10} /> Reset
+                      </button>
+                    )}
                     <button
-                      onClick={() => { const f = document.getElementById('site-preview') as HTMLIFrameElement; if (f) f.src = f.src; }}
-                      className="text-[10px] flex items-center gap-1 px-2 py-1 rounded"
-                      style={{ background: '#1e293b', color: '#8b949e' }}
+                      onClick={() => setShowCommitModal(true)}
+                      disabled={!isDirty}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        padding: '5px 14px', borderRadius: '7px',
+                        fontSize: '12px', fontWeight: 700,
+                        background: isDirty ? 'rgba(201,168,76,0.12)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${isDirty ? 'rgba(201,168,76,0.35)' : borderDim}`,
+                        color: isDirty ? gold : textMuted,
+                        cursor: isDirty ? 'pointer' : 'not-allowed',
+                        transition: 'all 0.15s',
+                        letterSpacing: '0.02em',
+                      }}
                     >
-                      <RefreshCw size={10} /> Refresh
+                      <GitCommit size={11} />
+                      Commit
+                      {isDirty && <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#fb923c' }} />}
                     </button>
                   </div>
-                </div>
-                <iframe
-                  id="site-preview"
-                  src="https://www.mayobebros.com"
-                  className="flex-1 w-full border-0"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                  title="Site Preview"
-                />
-              </div>
-            )}
 
-            {/* Activity log tab */}
-            {rightTab === 'activity' && (
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Shield size={14} className="text-green-400" /> Security Activity Log
-                  </h3>
-                  <button
-                    onClick={() => itangoFetch('/api/itango/activity', { credentials: 'include' }).then(r => r.json()).then(d => setActivityLog(d.log || []))}
-                    className="text-xs flex items-center gap-1 px-2 py-1 rounded"
-                    style={{ background: '#1e293b', color: '#8b949e' }}
-                  >
-                    <RefreshCw size={10} /> Refresh
-                  </button>
-                </div>
-                {activityLog.length === 0 ? (
-                  <div className="text-center py-8 text-slate-600">
-                    <Activity size={24} className="mx-auto mb-2 opacity-30" />
-                    <p className="text-xs">No activity yet</p>
-                  </div>
-                ) : activityLog.map((entry: any) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs"
+                  {/* Code editor */}
+                  <textarea
+                    value={editedContent}
+                    onChange={e => { setEditedContent(e.target.value); setIsDirty(e.target.value !== fileContent); }}
+                    spellCheck={false}
                     style={{
-                      background: entry.risk === 'high' ? 'rgba(239,68,68,0.08)' : entry.risk === 'medium' ? 'rgba(251,146,60,0.08)' : '#1e293b',
-                      border: `1px solid ${entry.risk === 'high' ? 'rgba(239,68,68,0.2)' : entry.risk === 'medium' ? 'rgba(251,146,60,0.2)' : '#334155'}`,
+                      flex: 1,
+                      padding: '16px 18px',
+                      background: '#020408',
+                      border: 'none',
+                      outline: 'none',
+                      resize: 'none',
+                      color: '#d4dbe8',
+                      fontSize: '12px',
+                      fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', 'Monaco', monospace",
+                      lineHeight: '1.65',
+                      tabSize: 2,
                     }}
-                  >
-                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: entry.risk === 'high' ? '#ef4444' : entry.risk === 'medium' ? '#fb923c' : '#4ade80' }} />
-                    <span className="font-mono font-bold" style={{ color: '#58a6ff', minWidth: '110px' }}>{entry.action}</span>
-                    <span style={{ color: '#8b949e' }} className="truncate">{entry.detail}</span>
-                    <span className="ml-auto text-slate-600 flex-shrink-0">{new Date(entry.ts).toLocaleTimeString()}</span>
-                  </div>
-                ))}
+                  />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── PREVIEW ── */}
+          {rightTab === 'preview' && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div style={{
+                padding: '8px 14px',
+                borderBottom: `1px solid ${borderDim}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                background: bgCard,
+                flexShrink: 0,
+              }}>
+                <Globe size={12} style={{ color: '#4fc3f7' }} />
+                <span style={{ fontSize: '11px', fontFamily: 'monospace', color: textSecondary, flex: 1 }}>
+                  https://www.mayobebros.com
+                </span>
+                <button
+                  onClick={() => { const f = document.getElementById('site-preview') as HTMLIFrameElement; if (f) f.src = f.src; }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '4px 10px', borderRadius: '6px',
+                    fontSize: '11px', fontWeight: 600,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${borderDim}`,
+                    color: textSecondary, cursor: 'pointer',
+                  }}
+                >
+                  <RefreshCw size={10} /> Refresh
+                </button>
               </div>
-            )}
-          </div>
-        </div>
+              <iframe
+                id="site-preview"
+                src="https://www.mayobebros.com"
+                style={{ flex: 1, width: '100%', border: 'none' }}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                title="Site Preview"
+              />
+            </div>
+          )}
 
-        {/* Bottom action bar */}
-        <div
-          className="flex items-center gap-3 px-4 py-2.5 mt-2 rounded-xl flex-shrink-0"
-          style={{ background: '#0b1220', border: '1px solid #1e2d3d' }}
-        >
-          <Terminal size={14} style={{ color: '#347c25' }} />
-          <span className="text-xs font-bold text-white">Actions:</span>
+          {/* ── ACTIVITY LOG ── */}
+          {rightTab === 'activity' && (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '9px',
+                    background: 'rgba(16,217,160,0.08)',
+                    border: '1px solid rgba(16,217,160,0.2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Shield size={14} style={{ color: emerald }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: textPrimary }}>Security Activity</div>
+                    <div style={{ fontSize: '10px', color: textSecondary }}>All system events</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => itangoFetch('/api/itango/activity', { credentials: 'include' }).then(r => r.json()).then(d => setActivityLog(d.log || []))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '5px',
+                    padding: '5px 12px', borderRadius: '7px',
+                    fontSize: '11px', fontWeight: 600,
+                    background: 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${borderDim}`,
+                    color: textSecondary, cursor: 'pointer',
+                  }}
+                >
+                  <RefreshCw size={10} /> Refresh
+                </button>
+              </div>
 
-          <button
-            onClick={() => handleAnalyze('general')}
-            disabled={!selectedFile || analysisLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity"
-            style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.25)', opacity: !selectedFile ? 0.5 : 1 }}
-          >
-            <Search size={12} /> Analyze File
-          </button>
-
-          <button
-            onClick={() => setRightTab('preview')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-            style={{ background: 'rgba(168,85,247,0.15)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.25)' }}
-          >
-            <Eye size={12} /> Preview Site
-          </button>
-
-          <button
-            onClick={() => setShowCommitModal(true)}
-            disabled={!isDirty || !selectedFile}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity"
-            style={{ background: 'rgba(52,124,37,0.2)', color: '#4ade80', border: '1px solid rgba(52,124,37,0.35)', opacity: !isDirty ? 0.5 : 1 }}
-          >
-            <GitCommit size={12} /> Commit Changes
-            {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />}
-          </button>
-
-          <div className="ml-auto flex gap-2">
-            <button
-              onClick={() => handleDeploy('preview')}
-              disabled={deployLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-              style={{ background: 'rgba(251,146,60,0.12)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.2)' }}
-            >
-              {deployLoading ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-              Deploy Preview
-            </button>
-            <button
-              onClick={() => {
-                if (confirm('Deploy to PRODUCTION? This will update the live website immediately.')) {
-                  handleDeploy('production');
-                }
-              }}
-              disabled={deployLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-              style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
-            >
-              <Lock size={12} /> Deploy Production
-            </button>
-          </div>
-        </div>
+              {activityLog.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                  <Activity size={28} style={{ color: textMuted, margin: '0 auto 10px', display: 'block' }} />
+                  <p style={{ fontSize: '13px', color: textSecondary, margin: '0 0 4px' }}>No activity recorded</p>
+                  <p style={{ fontSize: '11px', color: textMuted, margin: 0 }}>Events will appear here as you use the editor</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {activityLog.map((entry: any) => {
+                    const riskColor = entry.risk === 'high' ? '#ef4444' : entry.risk === 'medium' ? '#fb923c' : emerald;
+                    return (
+                      <div
+                        key={entry.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '12px',
+                          padding: '10px 14px', borderRadius: '9px',
+                          background: entry.risk === 'high'
+                            ? 'rgba(239,68,68,0.05)'
+                            : entry.risk === 'medium'
+                              ? 'rgba(251,146,60,0.05)'
+                              : 'rgba(255,255,255,0.02)',
+                          border: `1px solid ${riskColor}22`,
+                        }}
+                      >
+                        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: riskColor, flexShrink: 0, boxShadow: `0 0 6px ${riskColor}55` }} />
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 700, color: '#4fc3f7', flexShrink: 0, minWidth: '100px' }}>
+                          {entry.action}
+                        </span>
+                        <span style={{ fontSize: '12px', color: textSecondary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {entry.detail}
+                        </span>
+                        <span style={{ fontSize: '10px', color: textMuted, flexShrink: 0, fontFamily: 'monospace' }}>
+                          {new Date(entry.ts).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Modals */}
+      {/* ── MODALS ────────────────────────────────────────────────────────────── */}
       {showCommitModal && selectedFile && (
         <CommitModal
           filePath={selectedFile.path}
@@ -948,17 +1493,24 @@ export default function ITangoEditorPage() {
       )}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
-      {/* Toast */}
+      {/* ── TOAST ─────────────────────────────────────────────────────────────── */}
       {toast && (
-        <div
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-2xl text-sm font-medium"
-          style={{
-            background: toast.type === 'success' ? '#166534' : '#7f1d1d',
-            border: `1px solid ${toast.type === 'success' ? '#16a34a' : '#dc2626'}`,
-            color: toast.type === 'success' ? '#4ade80' : '#fca5a5',
-          }}
-        >
-          {toast.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 60,
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '12px 18px', borderRadius: '12px',
+          background: toast.type === 'success' ? 'rgba(16,217,160,0.1)' : 'rgba(239,68,68,0.1)',
+          border: `1px solid ${toast.type === 'success' ? 'rgba(16,217,160,0.3)' : 'rgba(239,68,68,0.3)'}`,
+          boxShadow: `0 8px 32px ${toast.type === 'success' ? 'rgba(16,217,160,0.12)' : 'rgba(239,68,68,0.12)'}`,
+          color: toast.type === 'success' ? emerald : '#f87171',
+          fontSize: '13px', fontWeight: 600,
+          backdropFilter: 'blur(8px)',
+          animation: 'slideUp 0.2s ease',
+        }}>
+          {toast.type === 'success'
+            ? <CheckCircle2 size={16} />
+            : <AlertTriangle size={16} />
+          }
           {toast.msg}
         </div>
       )}
