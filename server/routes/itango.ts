@@ -678,6 +678,14 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
         });
 
         if (!response.ok) {
+          if (response.status === 529) {
+            // Anthropic overloaded — wait 3s and retry once
+            if (iteration === 0) {
+              await new Promise(r => setTimeout(r, 3000));
+              continue;
+            }
+            return res.status(503).json({ error: 'Anthropic AI is temporarily overloaded. Please wait a moment and try again.' });
+          }
           const err = await response.json().catch(() => ({}));
           return res.status(response.status).json({ error: (err as any).error?.message || `Anthropic error (${response.status})` });
         }
@@ -756,6 +764,13 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
         });
 
         if (!response.ok) {
+          if (response.status === 529 || response.status === 503) {
+            if (iteration === 0) {
+              await new Promise(r => setTimeout(r, 3000));
+              continue;
+            }
+            return res.status(503).json({ error: 'AI is temporarily overloaded. Please wait a moment and try again.' });
+          }
           const err = await response.json().catch(() => ({}));
           return res.status(response.status).json({ error: (err as any).error?.message || `OpenAI error (${response.status})` });
         }

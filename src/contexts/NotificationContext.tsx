@@ -77,7 +77,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         .eq('status', 'pending'),
       supabase.from('posts').select('*', { count: 'exact', head: true })
         .gte('created_at', seen['posts'] || epoch),
-      supabase.from('pages').select('*', { count: 'exact', head: true })
+      supabase.from('static_pages').select('*', { count: 'exact', head: true })
         .gte('created_at', seen['pages'] || epoch),
       (isCEO
         ? supabase.from('contact_submissions').select('*', { count: 'exact', head: true })

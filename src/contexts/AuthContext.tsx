@@ -24,47 +24,62 @@ const CEO_EMAIL = 'mclean@mayobebros.com';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// In-flight cache: prevents concurrent calls for the same user from each
+// triggering a duplicate upsert, which causes 409 Conflict errors.
+const resolveInFlight = new Map<string, Promise<AdminUser | null>>();
+
 async function resolveAdminUser(supabaseUser: { id: string; email?: string }): Promise<AdminUser | null> {
-  const email = supabaseUser.email || '';
+  // If a resolve is already running for this user, reuse that promise
+  const existing = resolveInFlight.get(supabaseUser.id);
+  if (existing) return existing;
 
-  const { data: adminRecord } = await supabase
-    .from('admin_users')
-    .select('role, display_name, is_active')
-    .eq('user_id', supabaseUser.id)
-    .maybeSingle();
+  const promise = (async () => {
+    const email = supabaseUser.email || '';
 
-  if (adminRecord) {
-    if (!adminRecord.is_active) return null;
-    return {
-      id: supabaseUser.id,
-      email,
-      role: adminRecord.role as AdminRole,
-      displayName: adminRecord.display_name || email.split('@')[0],
-      isActive: adminRecord.is_active,
-    };
-  }
+    const { data: adminRecord } = await supabase
+      .from('admin_users')
+      .select('role, display_name, is_active')
+      .eq('user_id', supabaseUser.id)
+      .maybeSingle();
 
-  if (email.toLowerCase() === CEO_EMAIL.toLowerCase()) {
-    await supabase.from('admin_users').upsert(
-      {
-        user_id: supabaseUser.id,
-        email: email.toLowerCase(),
-        display_name: 'Mclean Mbaga',
+    if (adminRecord) {
+      if (!adminRecord.is_active) return null;
+      return {
+        id: supabaseUser.id,
+        email,
+        role: adminRecord.role as AdminRole,
+        displayName: adminRecord.display_name || email.split('@')[0],
+        isActive: adminRecord.is_active,
+      };
+    }
+
+    if (email.toLowerCase() === CEO_EMAIL.toLowerCase()) {
+      // Upsert — safe to ignore 409 since it just means the record already exists
+      await supabase.from('admin_users').upsert(
+        {
+          user_id: supabaseUser.id,
+          email: email.toLowerCase(),
+          display_name: 'Mclean Mbaga',
+          role: 'ceo',
+          is_active: true,
+        },
+        { onConflict: 'user_id' }
+      ).then(() => {}).catch(() => {});
+      return {
+        id: supabaseUser.id,
+        email,
         role: 'ceo',
-        is_active: true,
-      },
-      { onConflict: 'user_id' }
-    );
-    return {
-      id: supabaseUser.id,
-      email,
-      role: 'ceo',
-      displayName: 'Mclean Mbaga',
-      isActive: true,
-    };
-  }
+        displayName: 'Mclean Mbaga',
+        isActive: true,
+      };
+    }
 
-  return null;
+    return null;
+  })();
+
+  resolveInFlight.set(supabaseUser.id, promise);
+  promise.finally(() => resolveInFlight.delete(supabaseUser.id));
+  return promise;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
