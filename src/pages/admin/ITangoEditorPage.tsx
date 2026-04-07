@@ -69,8 +69,8 @@ function getMonacoLanguage(filename: string): string {
     ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
     json: 'json', css: 'css', scss: 'scss', html: 'html', md: 'markdown',
     mdx: 'markdown', yaml: 'yaml', yml: 'yaml', py: 'python', sh: 'shell',
-    sql: 'sql', prisma: 'prisma', env: 'plaintext', txt: 'plaintext',
-    xml: 'xml', svg: 'xml', toml: 'toml',
+    sql: 'sql', prisma: 'plaintext', env: 'plaintext', txt: 'plaintext',
+    xml: 'xml', svg: 'xml', toml: 'ini',
   };
   return map[ext] ?? 'plaintext';
 }
@@ -775,6 +775,8 @@ export default function ITangoEditorPage() {
       setFileContent(editedContent);
       setIsDirty(false);
       setShowCommitModal(false);
+      // Update SHA so a second commit to the same file doesn't get a 409 conflict
+      if (d.sha) setFileSha(d.sha);
       showToast('Changes committed to GitHub');
     } finally {
       setCommitLoading(false);

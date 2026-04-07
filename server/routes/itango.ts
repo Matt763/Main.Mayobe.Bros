@@ -833,13 +833,14 @@ router.post('/commit', requireITangoAuth, async (req: Request, res: Response) =>
     };
     if (sha) body.sha = sha;
 
-    await ghFetch(`/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`, {
+    const result = await ghFetch(`/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`, {
       method: 'PUT',
       body: JSON.stringify(body),
-    });
+    }) as any;
 
+    const newSha = result?.content?.sha || result?.commit?.sha || '';
     logActivity(user, 'FILE_COMMIT', `path=${path} msg="${message}"`, 'high');
-    res.json({ success: true, message: `Committed ${path} to ${GH_BRANCH}` });
+    res.json({ success: true, message: `Committed ${path} to ${GH_BRANCH}`, sha: newSha });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -853,21 +854,31 @@ router.post('/deploy', requireITangoAuth, async (req: Request, res: Response) =>
   const user = (req as any).itangoUser || 'unknown';
   const vercelToken = process.env.VERCEL_TOKEN;
   const vercelProjectId = process.env.VERCEL_PROJECT_ID;
+  const teamId = process.env.VERCEL_TEAM_ID || '';
 
   if (!vercelToken || !vercelProjectId) {
-    return res.status(400).json({ error: 'VERCEL_TOKEN and VERCEL_PROJECT_ID are required.' });
+    return res.status(400).json({ error: 'VERCEL_TOKEN and VERCEL_PROJECT_ID are required in .env' });
+  }
+
+  const repoId = Number(process.env.VERCEL_GITHUB_REPO_ID);
+  if (!repoId) {
+    return res.status(400).json({ error: 'VERCEL_GITHUB_REPO_ID is required in .env (get it from GitHub API)' });
   }
 
   try {
-    const deployRes = await fetch('https://api.vercel.com/v13/deployments', {
+    const teamQuery = teamId ? `?teamId=${teamId}` : '';
+    const deployRes = await fetch(`https://api.vercel.com/v13/deployments${teamQuery}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${vercelToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: GH_REPO,
+        name: GH_REPO.toLowerCase(),
+        project: vercelProjectId,
         gitSource: {
           type: 'github',
-          repoId: process.env.VERCEL_GITHUB_REPO_ID || '',
+          repoId,
           ref: GH_BRANCH,
+          org: GH_OWNER,
+          repo: GH_REPO,
         },
         target: target === 'production' ? 'production' : undefined,
       }),
@@ -875,15 +886,19 @@ router.post('/deploy', requireITangoAuth, async (req: Request, res: Response) =>
 
     if (!deployRes.ok) {
       const err = await deployRes.json().catch(() => ({}));
-      return res.status(deployRes.status).json({ error: (err as any).error?.message || 'Vercel API error' });
+      const msg = (err as any).error?.message || (err as any).message || `Vercel API error (${deployRes.status})`;
+      logActivity(user, 'DEPLOY_FAILED', `target=${target} error=${msg}`, 'high');
+      return res.status(deployRes.status).json({ error: msg });
     }
 
     const deployment = await deployRes.json() as any;
-    logActivity(user, 'DEPLOY', `target=${target} id=${deployment.id}`, 'high');
+    const deployUrl = deployment.url ? `https://${deployment.url}` : null;
+    logActivity(user, 'DEPLOY', `target=${target} id=${deployment.id} url=${deployUrl}`, 'high');
     res.json({
       success: true,
       deploymentId: deployment.id,
-      url: deployment.url ? `https://${deployment.url}` : null,
+      url: deployUrl,
+      state: deployment.readyState || 'BUILDING',
       target,
     });
   } catch (err: any) {
@@ -1009,23 +1024,29 @@ router.get('/branches', requireITangoAuth, async (req: Request, res: Response) =
 router.get('/deployments', requireITangoAuth, async (_req: Request, res: Response) => {
   const vercelToken = process.env.VERCEL_TOKEN;
   const vercelProjectId = process.env.VERCEL_PROJECT_ID;
+  const teamId = process.env.VERCEL_TEAM_ID || '';
   if (!vercelToken || !vercelProjectId) {
     return res.status(400).json({ error: 'VERCEL_TOKEN and VERCEL_PROJECT_ID required' });
   }
   try {
+    const teamQuery = teamId ? `&teamId=${teamId}` : '';
     const r = await fetch(
-      `https://api.vercel.com/v6/deployments?projectId=${vercelProjectId}&limit=10`,
+      `https://api.vercel.com/v6/deployments?projectId=${vercelProjectId}&limit=10${teamQuery}`,
       { headers: { Authorization: `Bearer ${vercelToken}` } }
     );
-    if (!r.ok) return res.status(r.status).json({ error: 'Vercel API error' });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      return res.status(r.status).json({ error: (err as any).error?.message || 'Vercel API error' });
+    }
     const data = await r.json() as any;
     const deployments = (data.deployments || []).map((d: any) => ({
       id: d.uid,
       url: d.url ? `https://${d.url}` : null,
-      state: d.state,
+      state: d.readyState || d.state,
       target: d.target,
-      createdAt: d.createdAt,
-      meta: d.meta,
+      createdAt: d.created || d.createdAt,   // Vercel v6 uses 'created'
+      branch: d.meta?.githubCommitRef || GH_BRANCH,
+      message: d.meta?.githubCommitMessage?.split('\n')[0] || '',
     }));
     res.json({ deployments });
   } catch (err: any) {
