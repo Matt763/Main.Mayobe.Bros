@@ -338,6 +338,27 @@ ${fileContext ? `## Current File Under Review\n${fileContext}` : ''}
 Remember: You are the guardian of this codebase. Think proactively. Catch problems before they reach production. Be decisive, be complete, be accurate.`;
 }
 
+// ─── Slim system prompt for the agentic tool-use loop ────────────────────────
+// The full master prompt is ~4000 tokens. In the agentic loop it's sent on
+// every iteration — 8 iterations × 4000 tokens = 32K tokens just in system
+// prompts, blowing the 30K/min rate limit. This slim version is ~300 tokens.
+function buildAgentSystemPrompt(): string {
+  return `You are iTango AI — a full-stack engineer working on the Mayobe Bros website (mayobebros.com).
+
+Stack: React 18 + TypeScript + Vite 5 (frontend) | Express.js + TypeScript (backend) | Supabase PostgreSQL | Vercel deployment.
+Repo: Matt763/Main.Mayobe.Bros, branch: main.
+
+Tool use rules:
+- Always call read_file before write_file so you have the current content and SHA.
+- write_file must contain the COMPLETE new file content — never a partial diff.
+- Protected files (never write without explicit user instruction): server/middleware/auth.ts, contexts/AuthContext.tsx, any .env file.
+- If a task needs multiple files, read them all first, then write them.
+- Use search_code to find where things are defined before editing.
+- Use list_files with a directory path to explore structure.
+
+Be concise in tool decisions. After completing the task, give a short summary of what changed.`;
+}
+
 // ─── Helper: call Claude cleanly ─────────────────────────────────────────────
 async function callClaude(
   systemPrompt: string,
@@ -620,21 +641,24 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
 
   logActivity(user, 'AI_CHAT', `model=${resolvedModel}`, 'low');
 
-  const systemPrompt = buildMasterSystemPrompt(systemContext ? `Current file context:\n${systemContext}` : '');
+  // Use slim prompt in the agentic loop — the full master prompt is ~4000 tokens
+  // and gets sent on every loop iteration, quickly exceeding the 30K token/min limit.
+  // The slim prompt (~300 tokens) keeps total usage well under the limit.
+  const agentSystemPrompt = buildAgentSystemPrompt();
   const toolCallLog: ToolCallRecord[] = [];
 
   try {
     // ── CLAUDE (full agentic loop with tool use) ──────────────────────────────
     if (provider === 'claude') {
-      // Keep only the last 6 messages from conversation history to stay under token limits
-      const recentMessages = messages.slice(-6);
+      // Keep only the last 4 messages from conversation history to stay under token limits
+      const recentMessages = messages.slice(-4);
       let loopMessages = recentMessages.map((m: any) => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: String(m.content),
       }));
 
       let finalText = '';
-      const MAX_ITERATIONS = 8;
+      const MAX_ITERATIONS = 5;
 
       for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
         const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -647,7 +671,7 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
           body: JSON.stringify({
             model: resolvedModel,
             max_tokens: 4096,
-            system: systemPrompt,
+            system: agentSystemPrompt,
             tools: ITANGO_TOOLS,
             messages: loopMessages,
           }),
@@ -712,12 +736,12 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
     // ── OPENAI (function calling) ─────────────────────────────────────────────
     if (provider === 'openai') {
       let loopMessages: any[] = [
-        { role: 'system', content: systemPrompt },
-        ...messages.slice(-6).map((m: any) => ({ role: m.role, content: String(m.content) })),
+        { role: 'system', content: agentSystemPrompt },
+        ...messages.slice(-4).map((m: any) => ({ role: m.role, content: String(m.content) })),
       ];
 
       let finalText = '';
-      const MAX_ITERATIONS = 8;
+      const MAX_ITERATIONS = 5;
 
       for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -769,7 +793,7 @@ router.post('/chat', requireITangoAuth, async (req: Request, res: Response) => {
     if (provider === 'gemini') {
       // Inject repo info into the system prompt since Gemini tool use is complex
       const repoInfo = await executeTool('get_repo_info', {}).catch(() => '');
-      const geminiSystem = systemPrompt + `\n\nRepo info:\n${repoInfo}\n\nNote: You cannot directly browse the repo in this mode. Ask the user to select a file in the editor sidebar, and I will include its content in context.`;
+      const geminiSystem = agentSystemPrompt + `\n\nRepo info:\n${repoInfo}\n\nNote: You cannot directly browse the repo in this mode. Ask the user to select a file in the editor sidebar, and I will include its content in context.`;
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
