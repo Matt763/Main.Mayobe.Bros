@@ -138,6 +138,7 @@ function normalizeLabel(l: any): any {
     slug: l.slug,
     description: l.description,
     displayOrder: l.display_order,
+    heroImage: l.hero_image || null,
     createdAt: l.created_at,
   };
 }
@@ -666,6 +667,7 @@ export const api = {
           description: body.description || null,
           category_id: body.categoryId || body.category_id,
           display_order: body.displayOrder || body.display_order || 0,
+          hero_image: body.hero_image || body.heroImage || null,
         })
         .select('*, categories(name, slug)')
         .single();
@@ -684,6 +686,8 @@ export const api = {
         update.category_id = body.categoryId ?? body.category_id;
       if (body.displayOrder !== undefined || body.display_order !== undefined)
         update.display_order = body.displayOrder ?? body.display_order;
+      if ('hero_image' in body || 'heroImage' in body)
+        update.hero_image = body.hero_image ?? body.heroImage ?? null;
 
       const { data, error } = await supabase
         .from('labels')
@@ -826,7 +830,7 @@ export const api = {
     create: async (body: any) => {
       invalidateCache('comments:');
       const authorRole = body.authorRole || null;
-      const isPrivileged = authorRole && ['ceo', 'admin', 'staff'].includes(authorRole);
+      const isPrivileged = authorRole && ['ceo', 'admin', 'publisher', 'staff'].includes(authorRole);
       const content = (body.content || '').trim().slice(0, 5000);
       if (!content || content.length < 2) throw new Error('Comment content is too short.');
 

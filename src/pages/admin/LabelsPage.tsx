@@ -20,11 +20,12 @@ interface Category {
 
 interface Label {
   id: string;
-  category_id: string;
+  categoryId: string;
   name: string;
   slug: string;
   description: string | null;
-  display_order: number;
+  displayOrder: number;
+  heroImage: string | null;
 }
 
 export default function LabelsPage() {
@@ -42,6 +43,7 @@ export default function LabelsPage() {
     description: '',
     category_id: '',
     display_order: 0,
+    hero_image: '',
   });
 
   useEffect(() => {
@@ -71,8 +73,9 @@ export default function LabelsPage() {
       name: label.name,
       slug: label.slug,
       description: label.description || '',
-      category_id: label.category_id,
-      display_order: label.display_order,
+      category_id: label.categoryId,
+      display_order: label.displayOrder,
+      hero_image: label.heroImage || '',
     });
     setShowAddForm(false);
   };
@@ -94,6 +97,7 @@ export default function LabelsPage() {
         description: formData.description || null,
         category_id: formData.category_id,
         display_order: formData.display_order,
+        hero_image: formData.hero_image || null,
       };
 
       if (editingId) {
@@ -124,14 +128,14 @@ export default function LabelsPage() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', slug: '', description: '', category_id: '', display_order: 0 });
+    setFormData({ name: '', slug: '', description: '', category_id: '', display_order: 0, hero_image: '' });
     setEditingId(null);
     setShowAddForm(false);
   };
 
   const groupedLabels = categories.map(cat => ({
     category: cat,
-    labels: labels.filter(l => l.category_id === cat.id),
+    labels: labels.filter(l => l.categoryId === cat.id),
   }));
 
   const deleteTarget = labels.find(l => l.id === deleteConfirmId);
@@ -229,6 +233,21 @@ export default function LabelsPage() {
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Hero Image URL</label>
+                <input
+                  type="url"
+                  value={formData.hero_image}
+                  onChange={(e) => setFormData({ ...formData, hero_image: e.target.value })}
+                  placeholder="https://example.com/image.jpg"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {formData.hero_image && (
+                  <div className="mt-2 relative w-full h-32 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+                    <img src={formData.hero_image} alt="Hero preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-3 mt-4">
@@ -276,8 +295,14 @@ export default function LabelsPage() {
                     {labels.map((label) => (
                       <tr key={label.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                         <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <Tag size={16} className="text-green-500" />
+                          <div className="flex items-center gap-3">
+                            {label.heroImage ? (
+                              <img src={label.heroImage} alt={label.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-gray-200 dark:border-gray-700" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                <Tag size={16} className="text-green-500" />
+                              </div>
+                            )}
                             <span className="font-medium text-gray-900 dark:text-white">{label.name}</span>
                           </div>
                         </td>
@@ -285,7 +310,7 @@ export default function LabelsPage() {
                           <span className="text-sm text-gray-600 dark:text-gray-400">{label.slug}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm text-gray-600 dark:text-gray-400">{label.display_order}</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-400">{label.displayOrder}</span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
