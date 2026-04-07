@@ -1,23 +1,46 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — react-simple-maps v3 ships no declaration file
+import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
 import AdminLayout from '../../components/admin/AdminLayout';
+import Toast from '../../components/admin/Toast';
 import { supabase } from '../../lib/supabase';
 import {
-  Users,
-  Eye,
-  Globe,
-  Monitor,
-  Smartphone,
-  Tablet,
-  TrendingUp,
-  RefreshCw,
-  MapPin,
-  Clock,
-  Activity,
-  ChevronDown,
-  DollarSign,
-  MousePointer,
-  BarChart2,
+  Eye, Users, Activity, Globe, Monitor, Smartphone, Tablet,
+  TrendingUp, RefreshCw, MapPin, Clock, Search, BarChart2,
+  DollarSign, MousePointer, Download, Trash2, AlertTriangle,
+  X, ArrowUpRight, ArrowDownRight, Wifi, ExternalLink, Zap,
+  Link2, Grid3X3, RotateCcw, ChevronRight,
 } from 'lucide-react';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Range = 'day' | 'week' | 'month' | 'year';
+type TrafficSource = 'organic' | 'social' | 'direct' | 'referral';
+
+interface ViewRow {
+  created_at: string;
+  session_id: string | null;
+  visitor_id: string;
+  is_unique: boolean;
+  country_code: string | null;
+  country_name: string | null;
+  city: string | null;
+  device_type: string | null;
+  browser: string | null;
+  os: string | null;
+  page_path: string;
+  referrer: string | null;
+}
+
+interface OnlineRow {
+  visitor_id: string;
+  page_path: string;
+  country_name: string | null;
+  city: string | null;
+  device_type: string | null;
+  last_seen: string;
+}
 
 interface AdEventRow {
   slot: string;
@@ -37,819 +60,1330 @@ interface AdSlotStats {
   ecpm: number;
 }
 
+interface BarItem { label: string; value: number; }
+interface MapTooltip { name: string; count: number; x: number; y: number; }
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const GEO_URL =
+  'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_110m_admin_0_countries.geojson';
+
 const PLATFORM_RATES: Record<string, { cpm: number; cpc: number }> = {
-  adsense: { cpm: 2.50, cpc: 0.25 },
-  adcash: { cpm: 1.80, cpc: 0.15 },
-  adsterra: { cpm: 2.20, cpc: 0.18 },
+  adsense:   { cpm: 2.50, cpc: 0.25 },
+  adcash:    { cpm: 1.80, cpc: 0.15 },
+  adsterra:  { cpm: 2.20, cpc: 0.18 },
   media_net: { cpm: 1.90, cpc: 0.20 },
-  ezoic: { cpm: 3.10, cpc: 0.30 },
-  custom: { cpm: 1.50, cpc: 0.10 },
+  ezoic:     { cpm: 3.10, cpc: 0.30 },
+  custom:    { cpm: 1.50, cpc: 0.10 },
 };
 
-type Range = 'day' | 'week' | 'month' | 'year';
-
-interface ViewRow {
-  created_at: string;
-  visitor_id: string;
-  is_unique: boolean;
-  country_name: string | null;
-  city: string | null;
-  device_type: string | null;
-  browser: string | null;
-  os: string | null;
-  page_path: string;
-}
-
-interface OnlineRow {
-  visitor_id: string;
-  page_path: string;
-  country_name: string | null;
-  city: string | null;
-  device_type: string | null;
-  last_seen: string;
-}
-
-interface ChartPoint {
-  label: string;
-  views: number;
-  visitors: number;
-}
-
-interface GeoRow {
-  name: string;
-  views: number;
-  visitors: number;
-}
-
-interface PageRow {
-  path: string;
-  views: number;
-}
-
-const RANGE_LABELS: Record<Range, string> = {
-  day: 'Today',
-  week: 'Last 7 Days',
-  month: 'Last 30 Days',
-  year: 'Last 12 Months',
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getRangeStart(range: Range): Date {
   const now = new Date();
-  switch (range) {
-    case 'day': {
-      const d = new Date(now);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    case 'week': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 6);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    case 'month': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 29);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-    case 'year': {
-      const d = new Date(now);
-      d.setFullYear(d.getFullYear() - 1);
-      d.setDate(1);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
-  }
+  if (range === 'day') { const d = new Date(now); d.setHours(0, 0, 0, 0); return d; }
+  const days = { week: 6, month: 29, year: 364 }[range] as number;
+  const d = new Date(now);
+  d.setDate(d.getDate() - days);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
-function buildChartPoints(rows: ViewRow[], range: Range): ChartPoint[] {
-  const points: ChartPoint[] = [];
+function classifyReferrer(referrer: string | null): TrafficSource {
+  if (!referrer) return 'direct';
+  const r = referrer.toLowerCase();
+  if (/google\.|bing\.|yahoo\.|duckduckgo\.|yandex\.|baidu\.|ecosia\.|search\.yahoo/.test(r)) return 'organic';
+  if (/facebook\.|twitter\.|t\.co\/|instagram\.|linkedin\.|youtube\.|tiktok\.|pinterest\.|reddit\.|whatsapp\.|telegram\./.test(r)) return 'social';
+  return 'referral';
+}
+
+function getSearchEngine(referrer: string): string {
+  const r = referrer.toLowerCase();
+  if (r.includes('google.'))     return 'Google';
+  if (r.includes('bing.'))       return 'Bing';
+  if (r.includes('yahoo.'))      return 'Yahoo';
+  if (r.includes('duckduckgo.')) return 'DuckDuckGo';
+  if (r.includes('yandex.'))     return 'Yandex';
+  if (r.includes('baidu.'))      return 'Baidu';
+  if (r.includes('ecosia.'))     return 'Ecosia';
+  return 'Other';
+}
+
+function extractReferrerDomain(referrer: string | null): string | null {
+  if (!referrer) return null;
+  try {
+    const url = new URL(referrer);
+    return url.hostname.replace(/^www\./, '');
+  } catch { return null; }
+}
+
+function formatDuration(seconds: number): string {
+  if (!seconds || seconds < 1) return '0s';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+function formatRelTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  return `${Math.floor(diff / 3_600_000)}h ago`;
+}
+
+function buildChartData(rows: ViewRow[], range: Range): { label: string; views: number; visitors: number }[] {
   const now = new Date();
+  const bins = new Map<string, { views: number; visitors: Set<string> }>();
 
   if (range === 'day') {
-    for (let h = 0; h < 24; h++) {
-      const label = h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`;
-      points.push({ label, views: 0, visitors: new Set<string>().size });
-    }
-    const visitorsByHour: Map<number, Set<string>> = new Map();
-    for (const row of rows) {
-      const d = new Date(row.created_at);
-      const h = d.getHours();
-      points[h].views++;
-      if (!visitorsByHour.has(h)) visitorsByHour.set(h, new Set());
-      visitorsByHour.get(h)!.add(row.visitor_id);
-    }
-    for (const [h, s] of visitorsByHour) {
-      points[h].visitors = s.size;
-    }
+    for (let h = 0; h < 24; h++) bins.set(`${h}:00`, { views: 0, visitors: new Set() });
   } else if (range === 'week') {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      points.push({ label: `${days[d.getDay()]} ${d.getDate()}`, views: 0, visitors: 0 });
-    }
-    const visitorsByIdx: Map<number, Set<string>> = new Map();
-    const start = getRangeStart(range);
-    for (const row of rows) {
-      const d = new Date(row.created_at);
-      const idx = Math.floor((d.getTime() - start.getTime()) / (86400 * 1000));
-      if (idx >= 0 && idx < 7) {
-        points[idx].views++;
-        if (!visitorsByIdx.has(idx)) visitorsByIdx.set(idx, new Set());
-        visitorsByIdx.get(idx)!.add(row.visitor_id);
-      }
-    }
-    for (const [i, s] of visitorsByIdx) {
-      if (i < points.length) points[i].visitors = s.size;
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      bins.set(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), { views: 0, visitors: new Set() });
     }
   } else if (range === 'month') {
     for (let i = 29; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      points.push({ label: `${d.getMonth() + 1}/${d.getDate()}`, views: 0, visitors: 0 });
-    }
-    const visitorsByIdx: Map<number, Set<string>> = new Map();
-    const start = getRangeStart(range);
-    for (const row of rows) {
-      const d = new Date(row.created_at);
-      const idx = Math.floor((d.getTime() - start.getTime()) / (86400 * 1000));
-      if (idx >= 0 && idx < 30) {
-        points[idx].views++;
-        if (!visitorsByIdx.has(idx)) visitorsByIdx.set(idx, new Set());
-        visitorsByIdx.get(idx)!.add(row.visitor_id);
-      }
-    }
-    for (const [i, s] of visitorsByIdx) {
-      if (i < points.length) points[i].visitors = s.size;
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      bins.set(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), { views: 0, visitors: new Set() });
     }
   } else {
-    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      points.push({ label: `${MONTHS[d.getMonth()]} ${d.getFullYear()}`, views: 0, visitors: 0 });
-    }
-    const visitorsByIdx: Map<number, Set<string>> = new Map();
-    const startMonth = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-    for (const row of rows) {
-      const d = new Date(row.created_at);
-      const monthDiff =
-        (d.getFullYear() - startMonth.getFullYear()) * 12 +
-        (d.getMonth() - startMonth.getMonth());
-      if (monthDiff >= 0 && monthDiff < 12) {
-        points[monthDiff].views++;
-        if (!visitorsByIdx.has(monthDiff)) visitorsByIdx.set(monthDiff, new Set());
-        visitorsByIdx.get(monthDiff)!.add(row.visitor_id);
-      }
-    }
-    for (const [i, s] of visitorsByIdx) {
-      if (i < points.length) points[i].visitors = s.size;
+      const d = new Date(now); d.setMonth(d.getMonth() - i); d.setDate(1);
+      bins.set(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), { views: 0, visitors: new Set() });
     }
   }
 
-  return points;
+  rows.forEach(row => {
+    const d = new Date(row.created_at);
+    let key: string;
+    if (range === 'day')       key = `${d.getHours()}:00`;
+    else if (range === 'year') key = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    else                       key = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const bin = bins.get(key);
+    if (bin) { bin.views++; bin.visitors.add(row.visitor_id); }
+  });
+
+  return Array.from(bins.entries()).map(([label, { views, visitors }]) => ({
+    label, views, visitors: visitors.size,
+  }));
 }
 
-function MiniLineChart({
-  points,
-  color,
-  height = 80,
-}: {
-  points: number[];
-  color: string;
-  height?: number;
-}) {
-  if (!points.length) return null;
-  const max = Math.max(...points, 1);
-  const w = 100;
-  const h = height;
-  const step = w / Math.max(points.length - 1, 1);
+function buildHourlyHeatmap(rows: ViewRow[]): number[][] {
+  // Returns [day][hour] grid for last 7 days × 24 hours
+  const grid: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  const now = Date.now();
+  rows.forEach(row => {
+    const d = new Date(row.created_at);
+    const daysAgo = Math.floor((now - d.getTime()) / 86_400_000);
+    if (daysAgo >= 0 && daysAgo < 7) {
+      grid[6 - daysAgo][d.getHours()]++;
+    }
+  });
+  return grid;
+}
 
-  const coords = points.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h * 0.9 - h * 0.05).toFixed(1)}`);
-  const path = `M${coords.join(' L')}`;
-  const fill = `M${coords[0]} L${coords.join(' L')} L${(w).toFixed(1)},${h} L0,${h} Z`;
+function exportCSV(rows: ViewRow[]): void {
+  const headers = ['Date', 'Path', 'Country', 'City', 'Device', 'Browser', 'OS', 'Source', 'Referrer'];
+  const csvRows = rows.map(r =>
+    [new Date(r.created_at).toISOString(), r.page_path, r.country_name || '', r.city || '',
+     r.device_type || '', r.browser || '', r.os || '',
+     classifyReferrer(r.referrer), r.referrer || '']
+      .map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')
+  );
+  const csv = [headers.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url;
+  a.download = `mayobe-analytics-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SectionCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`bg-[#0d1117]/80 border border-[#1e2a3a] rounded-2xl overflow-hidden backdrop-blur-sm ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function SectionHeader({ icon: Icon, title, subtitle, accent = 'emerald', right }: {
+  icon: React.ElementType; title: string; subtitle?: string;
+  accent?: 'emerald' | 'blue' | 'violet' | 'amber' | 'cyan' | 'rose';
+  right?: React.ReactNode;
+}) {
+  const colors: Record<string, string> = {
+    emerald: 'text-emerald-400', blue: 'text-blue-400',
+    violet: 'text-violet-400', amber: 'text-amber-400',
+    cyan: 'text-cyan-400', rose: 'text-rose-400',
+  };
+  return (
+    <div className="flex items-start justify-between gap-3 mb-6">
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-xl bg-white/5 ${colors[accent]}`}>
+          <Icon size={15} />
+        </div>
+        <div>
+          <h2 className="text-sm font-bold text-white tracking-wide">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+        </div>
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function DualLineChart({ data }: { data: { label: string; views: number; visitors: number }[] }) {
+  if (data.length < 2) {
+    return <div className="flex items-center justify-center h-48 text-slate-600 text-sm">No data for selected period</div>;
+  }
+  const VW = 700; const VH = 200;
+  const PAD = { t: 16, r: 16, b: 36, l: 50 };
+  const CW = VW - PAD.l - PAD.r;
+  const CH = VH - PAD.t - PAD.b;
+  const maxVal = Math.max(...data.map(d => Math.max(d.views, d.visitors)), 1);
+
+  const xOf = (i: number) => PAD.l + (i / (data.length - 1)) * CW;
+  const yOf = (v: number) => PAD.t + (1 - v / maxVal) * CH;
+
+  const linePath = (key: 'views' | 'visitors') =>
+    data.map((d, i) => `${i === 0 ? 'M' : 'L'}${xOf(i).toFixed(1)},${yOf(d[key]).toFixed(1)}`).join(' ');
+
+  const areaPath = (key: 'views' | 'visitors') =>
+    `${linePath(key)} L${xOf(data.length - 1).toFixed(1)},${(PAD.t + CH).toFixed(1)} L${PAD.l.toFixed(1)},${(PAD.t + CH).toFixed(1)} Z`;
+
+  const step = Math.max(1, Math.floor(data.length / 8));
+  const gridLines = [0, 0.25, 0.5, 0.75, 1];
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full" style={{ height }}>
+    <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }}>
       <defs>
-        <linearGradient id={`grad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        <linearGradient id="gV" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
+        </linearGradient>
+        <linearGradient id="gU" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+          <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
         </linearGradient>
       </defs>
-      <path d={fill} fill={`url(#grad-${color.replace('#', '')})`} />
-      <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {gridLines.map(frac => {
+        const y = PAD.t + frac * CH;
+        const val = Math.round((1 - frac) * maxVal);
+        return (
+          <g key={frac}>
+            <line x1={PAD.l} y1={y} x2={VW - PAD.r} y2={y} stroke="#1e2a3a" strokeWidth="1" />
+            <text x={PAD.l - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#475569">{val.toLocaleString()}</text>
+          </g>
+        );
+      })}
+      {data.map((d, i) => {
+        if (i % step !== 0 && i !== data.length - 1) return null;
+        return (
+          <text key={i} x={xOf(i)} y={VH - 8} textAnchor="middle" fontSize="10" fill="#475569">{d.label}</text>
+        );
+      })}
+      <path d={areaPath('views')} fill="url(#gV)" />
+      <path d={areaPath('visitors')} fill="url(#gU)" />
+      <path d={linePath('views')} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      <path d={linePath('visitors')} fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {[data[data.length - 1]].map((pt) => (
+        <>
+          <circle key="v" cx={xOf(data.length - 1)} cy={yOf(pt.views)} r="4" fill="#3b82f6" />
+          <circle key="u" cx={xOf(data.length - 1)} cy={yOf(pt.visitors)} r="4" fill="#10b981" />
+        </>
+      ))}
     </svg>
   );
 }
 
-function BarChart({
-  points,
-  metric,
-}: {
-  points: ChartPoint[];
-  metric: 'views' | 'visitors';
+function BarList({ items, accent = 'emerald', maxItems = 10 }: {
+  items: BarItem[]; accent?: 'emerald' | 'blue' | 'violet' | 'amber' | 'cyan'; maxItems?: number;
 }) {
-  const values = points.map(p => p[metric]);
-  const max = Math.max(...values, 1);
-  const showEvery = points.length > 20 ? Math.ceil(points.length / 12) : points.length > 10 ? 2 : 1;
+  const max = Math.max(...items.map(i => i.value), 1);
+  const cfg = {
+    emerald: { bar: 'from-emerald-600 to-emerald-400', text: 'text-emerald-400' },
+    blue:    { bar: 'from-blue-600 to-blue-400',       text: 'text-blue-400' },
+    violet:  { bar: 'from-violet-600 to-violet-400',   text: 'text-violet-400' },
+    amber:   { bar: 'from-amber-600 to-amber-400',     text: 'text-amber-400' },
+    cyan:    { bar: 'from-cyan-600 to-cyan-400',       text: 'text-cyan-400' },
+  }[accent];
 
   return (
-    <div className="w-full">
-      <div className="flex items-end gap-0.5 h-40">
-        {points.map((p, i) => {
-          const val = p[metric];
-          const pct = (val / max) * 100;
-          return (
-            <div key={i} className="flex-1 flex flex-col items-center group relative">
-              <div className="absolute bottom-full mb-1 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs rounded px-2 py-1 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 left-1/2 -translate-x-1/2">
-                <span className="font-semibold">{val.toLocaleString()}</span>
-                <span className="text-gray-400 dark:text-gray-600 ml-1">{metric}</span>
-                <br />
-                <span className="text-gray-400 dark:text-gray-600 text-[10px]">{p.label}</span>
-              </div>
-              <div
-                className={`w-full rounded-t transition-all duration-300 ${metric === 'views' ? 'bg-blue-500 hover:bg-blue-400' : 'bg-emerald-500 hover:bg-emerald-400'}`}
-                style={{ height: `${Math.max(pct, val > 0 ? 2 : 0)}%`, minHeight: val > 0 ? '3px' : '0' }}
-              />
+    <div className="space-y-3">
+      {items.slice(0, maxItems).map((item, i) => (
+        <div key={i}>
+          <div className="flex items-center justify-between mb-1.5 gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="text-[11px] font-mono text-slate-600 w-5 text-right flex-shrink-0">{i + 1}</span>
+              <span className="text-sm text-slate-300 truncate">{item.label}</span>
             </div>
-          );
-        })}
-      </div>
-      <div className="flex mt-1">
-        {points.map((p, i) => (
-          <div key={i} className="flex-1 text-center">
-            {i % showEvery === 0 && (
-              <span className="text-[9px] text-gray-400 dark:text-gray-600 leading-none truncate block">
-                {p.label.split(' ')[0]}
-              </span>
-            )}
+            <span className={`text-sm font-bold ${cfg.text} flex-shrink-0 tabular-nums`}>
+              {item.value.toLocaleString()}
+            </span>
           </div>
-        ))}
+          <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden ml-7">
+            <div
+              className={`h-full bg-gradient-to-r ${cfg.bar} rounded-full transition-all duration-700`}
+              style={{ width: `${(item.value / max) * 100}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, sub, accentClass, trend }: {
+  icon: React.ElementType; label: string; value: string | number; sub?: string;
+  accentClass: string; trend?: { value: number; positive: boolean };
+}) {
+  return (
+    <div className="bg-[#0d1117]/80 border border-[#1e2a3a] rounded-2xl p-4 hover:border-[#2a3a4a] transition-all duration-200 backdrop-blur-sm">
+      <div className="flex items-start justify-between mb-3">
+        <div className={`p-2.5 rounded-xl ${accentClass}`}>
+          <Icon size={15} />
+        </div>
+        {trend && (
+          <span className={`flex items-center gap-0.5 text-xs font-semibold ${trend.positive ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {trend.positive ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+            {Math.abs(trend.value)}%
+          </span>
+        )}
+      </div>
+      <div className="text-2xl font-black text-white tracking-tight tabular-nums">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </div>
+      <div className="text-xs text-slate-400 mt-0.5 font-medium">{label}</div>
+      {sub && <div className="text-[11px] text-slate-600 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+function WorldMapEnhanced({ countryData }: { countryData: Map<string, number> }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [tooltip, setTooltip] = useState<MapTooltip | null>(null);
+  const maxVisits = Math.max(...Array.from(countryData.values()), 1);
+
+  // Premium gradient: dark navy → teal → bright emerald
+  const getColor = (iso2: string): string => {
+    const n = countryData.get(iso2) || 0;
+    if (n === 0) return '#0a1628';
+    const r = n / maxVisits;
+    if (r >= 0.8) return '#00e676';
+    if (r >= 0.6) return '#00c853';
+    if (r >= 0.4) return '#00897b';
+    if (r >= 0.2) return '#00695c';
+    if (r >= 0.05) return '#004d40';
+    return '#1b3a4b';
+  };
+
+  // Build tier labels with actual visitor thresholds
+  const tiers = useMemo(() => {
+    if (maxVisits <= 1) return [];
+    return [
+      { color: '#1b3a4b', label: `1–${Math.round(maxVisits * 0.05)}` },
+      { color: '#004d40', label: `${Math.round(maxVisits * 0.05)}–${Math.round(maxVisits * 0.2)}` },
+      { color: '#00695c', label: `${Math.round(maxVisits * 0.2)}–${Math.round(maxVisits * 0.4)}` },
+      { color: '#00897b', label: `${Math.round(maxVisits * 0.4)}–${Math.round(maxVisits * 0.6)}` },
+      { color: '#00c853', label: `${Math.round(maxVisits * 0.6)}–${Math.round(maxVisits * 0.8)}` },
+      { color: '#00e676', label: `${Math.round(maxVisits * 0.8)}+` },
+    ];
+  }, [maxVisits]);
+
+  return (
+    <div ref={mapRef} className="relative bg-[#060d18] rounded-xl overflow-hidden select-none"
+      onMouseLeave={() => setTooltip(null)}>
+      <ComposableMap
+        projection="geoMercator"
+        projectionConfig={{ scale: 120, center: [10, 20] }}
+        style={{ width: '100%', height: 'auto' }}
+      >
+        <Geographies geography={GEO_URL}>
+          {({ geographies }: { geographies: any[] }) =>
+            geographies.map((geo: any) => {
+              const iso2 = geo.properties.ISO_A2 || '';
+              const count = countryData.get(iso2) || 0;
+              return (
+                <Geography
+                  key={geo.rsmKey}
+                  geography={geo}
+                  fill={getColor(iso2)}
+                  stroke="#0d1f33"
+                  strokeWidth={0.4}
+                  style={{
+                    default: { outline: 'none' },
+                    hover:   { outline: 'none', fill: count > 0 ? '#f59e0b' : '#1e2a3a', cursor: count > 0 ? 'pointer' : 'default' },
+                    pressed: { outline: 'none' },
+                  }}
+                  onMouseEnter={(evt: React.MouseEvent) => {
+                    if (!mapRef.current) return;
+                    const rect = mapRef.current.getBoundingClientRect();
+                    setTooltip({
+                      name:  geo.properties.NAME || iso2,
+                      count: count,
+                      x:     evt.clientX - rect.left,
+                      y:     evt.clientY - rect.top,
+                    });
+                  }}
+                  onMouseMove={(evt: React.MouseEvent) => {
+                    if (!mapRef.current) return;
+                    const rect = mapRef.current.getBoundingClientRect();
+                    setTooltip(prev => prev ? { ...prev, x: evt.clientX - rect.left, y: evt.clientY - rect.top } : null);
+                  }}
+                  onMouseLeave={() => setTooltip(null)}
+                />
+              );
+            })
+          }
+        </Geographies>
+      </ComposableMap>
+
+      {/* Tooltip */}
+      {tooltip && (
+        <div
+          className="absolute pointer-events-none z-20 bg-[#0d1117] border border-[#1e2a3a] rounded-xl px-3 py-2 shadow-2xl text-sm"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 40 }}
+        >
+          <p className="font-bold text-white">{tooltip.name}</p>
+          <p className="text-emerald-400 font-mono text-xs mt-0.5">
+            {tooltip.count > 0 ? `${tooltip.count.toLocaleString()} visitor${tooltip.count !== 1 ? 's' : ''}` : 'No visits recorded'}
+          </p>
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="absolute bottom-3 left-3 bg-[#0d1117]/95 backdrop-blur-sm rounded-xl px-3 py-2.5 border border-[#1e2a3a] shadow-xl">
+        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Visitor Density</p>
+        <div className="flex items-start gap-1">
+          <div className="flex flex-col items-center gap-0.5 mr-1">
+            <div className="w-4 h-3 rounded-sm bg-[#0a1628] border border-[#1e2a3a]" />
+            <span className="text-[8px] text-slate-600">None</span>
+          </div>
+          {tiers.map(({ color }, i) => (
+            <div key={i} className="flex flex-col items-center gap-0.5">
+              <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: color }} />
+              <span className="text-[8px] text-slate-500 leading-none whitespace-nowrap">{i === 0 ? 'Low' : i === tiers.length - 1 ? 'High' : ''}</span>
+            </div>
+          ))}
+        </div>
+        {tiers.length > 0 && (
+          <p className="text-[9px] text-slate-600 mt-1.5">
+            Peak: <span className="text-emerald-400 font-mono">{maxVisits.toLocaleString()}</span> visits
+          </p>
+        )}
+      </div>
+
+      {/* Country count badge */}
+      <div className="absolute bottom-3 right-3 bg-[#0d1117]/95 border border-[#1e2a3a] rounded-xl px-2.5 py-1.5">
+        <span className="text-xs text-slate-400 font-medium">{countryData.size} <span className="text-slate-600">countries</span></span>
       </div>
     </div>
   );
 }
 
+function DonutChart({ returning, newVisitors }: { returning: number; newVisitors: number }) {
+  const total = returning + newVisitors || 1;
+  const newPct = (newVisitors / total) * 100;
+  const retPct = (returning / total) * 100;
+
+  // SVG donut: cx=60, cy=60, r=48, strokeWidth=12
+  const R = 48; const CX = 60; const CY = 60;
+  const CIRC = 2 * Math.PI * R;
+  const newDash = (newPct / 100) * CIRC;
+  const retDash = (retPct / 100) * CIRC;
+
+  return (
+    <div className="flex items-center gap-6">
+      <div className="relative flex-shrink-0">
+        <svg viewBox="0 0 120 120" className="w-28 h-28">
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke="#1e2a3a" strokeWidth={12} />
+          {/* Returning — emerald */}
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke="#10b981" strokeWidth={12}
+            strokeDasharray={`${retDash} ${CIRC - retDash}`}
+            strokeDashoffset={CIRC / 4}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 0.8s ease' }}
+          />
+          {/* New — blue */}
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke="#3b82f6" strokeWidth={12}
+            strokeDasharray={`${newDash} ${CIRC - newDash}`}
+            strokeDashoffset={CIRC / 4 - retDash}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dasharray 0.8s ease' }}
+          />
+          <text x={CX} y={CY - 5} textAnchor="middle" fontSize="18" fontWeight="800" fill="white">{Math.round(retPct)}%</text>
+          <text x={CX} y={CY + 12} textAnchor="middle" fontSize="9" fill="#64748b">Returning</text>
+        </svg>
+      </div>
+      <div className="space-y-3 flex-1">
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 flex-shrink-0" />
+              <span className="text-sm text-slate-300 font-medium">Returning</span>
+            </div>
+            <span className="text-sm font-bold text-emerald-400 tabular-nums">{returning.toLocaleString()}</span>
+          </div>
+          <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full" style={{ width: `${retPct}%`, transition: 'width 0.8s ease' }} />
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-400 flex-shrink-0" />
+              <span className="text-sm text-slate-300 font-medium">New Visitors</span>
+            </div>
+            <span className="text-sm font-bold text-blue-400 tabular-nums">{newVisitors.toLocaleString()}</span>
+          </div>
+          <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full" style={{ width: `${newPct}%`, transition: 'width 0.8s ease' }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HourlyHeatmap({ grid }: { grid: number[][] }) {
+  const dayLabels = useMemo(() => {
+    const labels: string[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      labels.push(d.toLocaleDateString('en-US', { weekday: 'short' }));
+    }
+    return labels;
+  }, []);
+
+  const maxVal = Math.max(...grid.flat(), 1);
+
+  const getCellColor = (val: number): string => {
+    if (val === 0) return '#0d1520';
+    const r = val / maxVal;
+    if (r >= 0.8) return '#f59e0b';
+    if (r >= 0.55) return '#d97706';
+    if (r >= 0.35) return '#92400e';
+    if (r >= 0.15) return '#451a03';
+    return '#292524';
+  };
+
+  return (
+    <div>
+      <div className="flex gap-1 mb-1">
+        <div className="w-8 flex-shrink-0" />
+        {Array.from({ length: 24 }, (_, h) => (
+          <div key={h} className="flex-1 text-center" style={{ minWidth: 0 }}>
+            {h % 6 === 0 && (
+              <span className="text-[9px] text-slate-600 font-mono">
+                {h === 0 ? '12a' : h === 12 ? '12p' : h < 12 ? `${h}a` : `${h - 12}p`}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      {grid.map((row, dayIdx) => (
+        <div key={dayIdx} className="flex items-center gap-1 mb-1">
+          <div className="w-8 flex-shrink-0 text-[10px] text-slate-600 text-right pr-1.5 font-medium">
+            {dayLabels[dayIdx]}
+          </div>
+          {row.map((val, hourIdx) => (
+            <div
+              key={hourIdx}
+              className="flex-1 rounded-sm transition-all duration-200 hover:ring-1 hover:ring-amber-400/60 cursor-default"
+              style={{ height: 16, minWidth: 0, backgroundColor: getCellColor(val) }}
+              title={`${dayLabels[dayIdx]} ${hourIdx}:00 — ${val} view${val !== 1 ? 's' : ''}`}
+            />
+          ))}
+        </div>
+      ))}
+      {/* Legend */}
+      <div className="flex items-center gap-2 mt-3 justify-end">
+        <span className="text-[10px] text-slate-600">Less</span>
+        {['#0d1520', '#292524', '#451a03', '#92400e', '#d97706', '#f59e0b'].map((color, i) => (
+          <div key={i} className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+        ))}
+        <span className="text-[10px] text-slate-600">More</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function AnalyticsPage() {
-  const [range, setRange] = useState<Range>('week');
-  const [rangeOpen, setRangeOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<ViewRow[]>([]);
-  const [online, setOnline] = useState<OnlineRow[]>([]);
-  const [metric, setMetric] = useState<'views' | 'visitors'>('views');
-  const [lastRefresh, setLastRefresh] = useState(new Date());
-  const [adEvents, setAdEvents] = useState<AdEventRow[]>([]);
-  const [adRange, setAdRange] = useState<Range>('week');
+  const [range,      setRange]      = useState<Range>('week');
+  const [adRange,    setAdRange]    = useState<Range>('week');
+  const [rows,       setRows]       = useState<ViewRow[]>([]);
+  const [onlineRows, setOnlineRows] = useState<OnlineRow[]>([]);
+  const [adRows,     setAdRows]     = useState<AdEventRow[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt,  setUpdatedAt]  = useState(new Date());
+  const [showClear,  setShowClear]  = useState(false);
+  const [clearInput, setClearInput] = useState('');
+  const [clearing,   setClearing]   = useState(false);
+  const [toast,      setToast]      = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  // ── Data fetching ────────────────────────────────────────────────────────
+
+  const fetchData = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setRefreshing(true);
     try {
-      const since = getRangeStart(range).toISOString();
-      const { data: viewData } = await supabase
-        .from('page_views')
-        .select('created_at, visitor_id, is_unique, country_name, city, device_type, browser, os, page_path')
-        .gte('created_at', since)
-        .order('created_at', { ascending: true });
+      const rangeStart   = getRangeStart(range);
+      const adRangeStart = getRangeStart(adRange);
+      const twoMinAgo    = new Date(Date.now() - 2 * 60 * 1000);
 
-      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-      const { data: onlineData } = await supabase
-        .from('online_visitors')
-        .select('visitor_id, page_path, country_name, city, device_type, last_seen')
-        .gte('last_seen', twoMinutesAgo)
-        .order('last_seen', { ascending: false });
+      const [pvRes, onRes, adRes] = await Promise.all([
+        supabase
+          .from('page_views')
+          .select('created_at,session_id,visitor_id,is_unique,country_code,country_name,city,device_type,browser,os,page_path,referrer')
+          .gte('created_at', rangeStart.toISOString())
+          .order('created_at', { ascending: true })
+          .limit(50000),
+        supabase
+          .from('online_visitors')
+          .select('visitor_id,page_path,country_name,city,device_type,last_seen')
+          .gte('last_seen', twoMinAgo.toISOString())
+          .order('last_seen', { ascending: false })
+          .limit(50),
+        supabase
+          .from('ad_events')
+          .select('slot,event_type,revenue,platform,created_at')
+          .gte('created_at', adRangeStart.toISOString()),
+      ]);
 
-      setRows((viewData || []) as ViewRow[]);
-      setOnline((onlineData || []) as OnlineRow[]);
-      setLastRefresh(new Date());
+      setRows((pvRes.data as ViewRow[]) || []);
+      setOnlineRows((onRes.data as OnlineRow[]) || []);
+      setAdRows((adRes.data as AdEventRow[]) || []);
+      setUpdatedAt(new Date());
+    } catch (err) {
+      console.error('Analytics fetch error:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, [range]);
+  }, [range, adRange]);
 
-  const fetchAdData = useCallback(async () => {
-    const since = getRangeStart(adRange).toISOString();
-    const { data } = await supabase
-      .from('ad_events')
-      .select('slot, event_type, revenue, platform, created_at')
-      .gte('created_at', since)
-      .order('created_at', { ascending: false });
-    setAdEvents((data || []) as AdEventRow[]);
-  }, [adRange]);
-
-  useEffect(() => { fetchAdData(); }, [fetchAdData]);
-
+  useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
   useEffect(() => {
-    fetchData();
-    const timer = setInterval(fetchData, 30_000);
-    return () => clearInterval(timer);
+    const t = setInterval(() => fetchData(), 30_000);
+    return () => clearInterval(t);
   }, [fetchData]);
 
-  const totalViews = rows.length;
-  const uniqueVisitors = new Set(rows.map(r => r.visitor_id)).size;
-  const uniqueToday = rows.filter(r => r.is_unique).length;
-  const onlineCount = new Set(online.map(o => o.visitor_id)).size;
+  // ── Clear all data ────────────────────────────────────────────────────────
 
-  const chartPoints = buildChartPoints(rows, range);
+  const handleClearData = async () => {
+    if (clearInput.trim().toUpperCase() !== 'RESET') return;
+    setClearing(true);
+    try {
+      const cutoff = new Date(Date.now() + 5000).toISOString();
+      const results = await Promise.all([
+        supabase.from('page_views').delete().lt('created_at', cutoff),
+        supabase.from('online_visitors').delete().lt('last_seen', cutoff),
+        supabase.from('ad_events').delete().lt('created_at', cutoff),
+      ]);
+      const err = results.find(r => r.error)?.error;
+      if (err) throw err;
+      setRows([]); setOnlineRows([]); setAdRows([]);
+      setShowClear(false); setClearInput('');
+      setToast({ message: `Analytics reset — all records cleared. Starting fresh from zero.`, type: 'success' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('42501') || msg.toLowerCase().includes('permission')) {
+        setToast({
+          message: 'Permission denied. Run the Supabase migration: 20260407000001_add_delete_policy_page_views.sql',
+          type: 'error',
+        });
+      } else {
+        setToast({ message: `Reset failed: ${msg}`, type: 'error' });
+      }
+      setShowClear(false); setClearInput('');
+    } finally {
+      setClearing(false);
+    }
+  };
 
-  const byCountry: Map<string, GeoRow> = new Map();
-  for (const r of rows) {
-    const name = r.country_name || 'Unknown';
-    const cur = byCountry.get(name) || { name, views: 0, visitors: 0 };
-    cur.views++;
-    byCountry.set(name, cur);
+  // ── Derived metrics ───────────────────────────────────────────────────────
+
+  const metrics = useMemo(() => {
+    const totalViews     = rows.length;
+    const uniqueVisitors = new Set(rows.map(r => r.visitor_id)).size;
+    const newVisitors    = rows.filter(r => r.is_unique).length;
+    const returningVisitors = uniqueVisitors - newVisitors;
+
+    const sessionPageCounts: Record<string, number> = {};
+    const sessionTimes: Record<string, { first: number; last: number }> = {};
+    rows.forEach(r => {
+      const sid = r.session_id || r.visitor_id;
+      sessionPageCounts[sid] = (sessionPageCounts[sid] || 0) + 1;
+      const t = new Date(r.created_at).getTime();
+      if (!sessionTimes[sid]) sessionTimes[sid] = { first: t, last: t };
+      else {
+        sessionTimes[sid].first = Math.min(sessionTimes[sid].first, t);
+        sessionTimes[sid].last  = Math.max(sessionTimes[sid].last, t);
+      }
+    });
+
+    const sessions = Object.values(sessionPageCounts);
+    const bounceRate = sessions.length > 0
+      ? Math.round((sessions.filter(c => c === 1).length / sessions.length) * 100) : 0;
+    const durations = Object.values(sessionTimes).map(s => (s.last - s.first) / 1000).filter(d => d > 0);
+    const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+    const pagesPerSession = sessions.length > 0 ? (sessions.reduce((a, b) => a + b, 0) / sessions.length) : 0;
+
+    return { totalViews, uniqueVisitors, newVisitors, returningVisitors, bounceRate, avgDuration, pagesPerSession };
+  }, [rows]);
+
+  const chartData       = useMemo(() => buildChartData(rows, range), [rows, range]);
+  const hourlyGrid      = useMemo(() => buildHourlyHeatmap(rows), [rows]);
+
+  const trafficSources  = useMemo(() => {
+    const c = { organic: 0, social: 0, direct: 0, referral: 0 };
+    rows.forEach(r => c[classifyReferrer(r.referrer)]++);
+    return c;
+  }, [rows]);
+
+  const topPages        = useMemo((): BarItem[] => {
+    const m: Record<string, number> = {};
+    rows.forEach(r => { m[r.page_path] = (m[r.page_path] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, value]) => ({ label, value }));
+  }, [rows]);
+
+  const topFromSearch   = useMemo((): BarItem[] => {
+    const m: Record<string, number> = {};
+    rows.filter(r => classifyReferrer(r.referrer) === 'organic')
+        .forEach(r => { m[r.page_path] = (m[r.page_path] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, value]) => ({ label, value }));
+  }, [rows]);
+
+  const engineBreakdown = useMemo((): BarItem[] => {
+    const m: Record<string, number> = {};
+    rows.filter(r => r.referrer && classifyReferrer(r.referrer) === 'organic')
+        .forEach(r => { const e = getSearchEngine(r.referrer!); m[e] = (m[e] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value }));
+  }, [rows]);
+
+  const topReferrers    = useMemo((): BarItem[] => {
+    const m: Record<string, number> = {};
+    rows.filter(r => r.referrer && classifyReferrer(r.referrer) === 'referral')
+        .forEach(r => {
+          const domain = extractReferrerDomain(r.referrer);
+          if (domain) m[domain] = (m[domain] || 0) + 1;
+        });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, value]) => ({ label, value }));
+  }, [rows]);
+
+  const topCities       = useMemo((): BarItem[] => {
+    const m: Record<string, number> = {};
+    rows.forEach(r => { if (r.city) m[r.city] = (m[r.city] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, value]) => ({ label, value }));
+  }, [rows]);
+
+  const topCountries    = useMemo((): BarItem[] => {
+    const m: Record<string, number> = {};
+    rows.forEach(r => { if (r.country_name) m[r.country_name] = (m[r.country_name] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, value]) => ({ label, value }));
+  }, [rows]);
+
+  const countryMapData  = useMemo(() => {
+    const m = new Map<string, number>();
+    rows.forEach(r => { if (r.country_code) m.set(r.country_code, (m.get(r.country_code) || 0) + 1); });
+    return m;
+  }, [rows]);
+
+  const deviceData      = useMemo(() => {
+    const m: Record<string, number> = {};
+    rows.forEach(r => { const d = r.device_type || 'unknown'; m[d] = (m[d] || 0) + 1; });
+    return m;
+  }, [rows]);
+
+  const browserData     = useMemo((): BarItem[] => {
+    const m: Record<string, number> = {};
+    rows.forEach(r => { const b = r.browser || 'Unknown'; m[b] = (m[b] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value }));
+  }, [rows]);
+
+  const osData          = useMemo((): BarItem[] => {
+    const m: Record<string, number> = {};
+    rows.forEach(r => { const o = r.os || 'Unknown'; m[o] = (m[o] || 0) + 1; });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]).map(([label, value]) => ({ label, value }));
+  }, [rows]);
+
+  const adSlotStats     = useMemo((): AdSlotStats[] => {
+    const sm: Record<string, { platform: string; imp: number; clk: number; rev: number }> = {};
+    adRows.forEach(r => {
+      if (!sm[r.slot]) sm[r.slot] = { platform: r.platform, imp: 0, clk: 0, rev: 0 };
+      const rate = PLATFORM_RATES[r.platform] || PLATFORM_RATES.custom;
+      if (r.event_type === 'impression') { sm[r.slot].imp++; sm[r.slot].rev += rate.cpm / 1000; }
+      else { sm[r.slot].clk++; sm[r.slot].rev += rate.cpc; }
+    });
+    return Object.entries(sm).map(([slot, s]) => ({
+      slot, platform: s.platform, impressions: s.imp, clicks: s.clk,
+      revenue: s.rev, ctr: s.imp > 0 ? (s.clk / s.imp) * 100 : 0,
+      ecpm: s.imp > 0 ? (s.rev / s.imp) * 1000 : 0,
+    })).sort((a, b) => b.revenue - a.revenue);
+  }, [adRows]);
+
+  const adTotals = useMemo(() => {
+    const imp = adSlotStats.reduce((s, r) => s + r.impressions, 0);
+    const clk = adSlotStats.reduce((s, r) => s + r.clicks, 0);
+    return {
+      impressions: imp, clicks: clk,
+      revenue: adSlotStats.reduce((s, r) => s + r.revenue, 0),
+      ctr: imp > 0 ? (clk / imp) * 100 : 0,
+    };
+  }, [adSlotStats]);
+
+  const totalSourceViews = Object.values(trafficSources).reduce((a, b) => a + b, 0) || 1;
+  const srcPct = (k: TrafficSource) => Math.round((trafficSources[k] / totalSourceViews) * 100);
+
+  const RANGE_BTNS: { v: Range; label: string }[] = [
+    { v: 'day', label: 'Today' }, { v: 'week', label: '7 Days' },
+    { v: 'month', label: '30 Days' }, { v: 'year', label: '12 Mo' },
+  ];
+
+  // ── Loading ───────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-[70vh]">
+          <div className="flex flex-col items-center gap-5">
+            <div className="relative w-16 h-16">
+              <div className="absolute inset-0 rounded-full border-4 border-emerald-500/15" />
+              <div className="absolute inset-0 rounded-full border-4 border-t-emerald-400 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+            </div>
+            <div className="text-center">
+              <p className="text-white font-semibold">Loading Analytics</p>
+              <p className="text-slate-500 text-sm mt-1">Fetching visitor intelligence…</p>
+            </div>
+          </div>
+        </div>
+      </AdminLayout>
+    );
   }
-  const countryRows = Array.from(byCountry.values())
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 10);
 
-  const byCity: Map<string, GeoRow> = new Map();
-  for (const r of rows) {
-    const name = r.city || 'Unknown';
-    const cur = byCity.get(name) || { name, views: 0, visitors: 0 };
-    cur.views++;
-    byCity.set(name, cur);
-  }
-  const cityRows = Array.from(byCity.values())
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 10);
-
-  const byPage: Map<string, PageRow> = new Map();
-  for (const r of rows) {
-    const cur = byPage.get(r.page_path) || { path: r.page_path, views: 0 };
-    cur.views++;
-    byPage.set(r.page_path, cur);
-  }
-  const pageRows = Array.from(byPage.values())
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 10);
-
-  const deviceBreakdown = { desktop: 0, mobile: 0, tablet: 0 };
-  for (const r of rows) {
-    const d = r.device_type || 'desktop';
-    if (d in deviceBreakdown) (deviceBreakdown as any)[d]++;
-    else deviceBreakdown.desktop++;
-  }
-  const totalDev = deviceBreakdown.desktop + deviceBreakdown.mobile + deviceBreakdown.tablet || 1;
-
-  const browserMap: Map<string, number> = new Map();
-  for (const r of rows) {
-    const b = r.browser || 'Unknown';
-    browserMap.set(b, (browserMap.get(b) || 0) + 1);
-  }
-  const browserRows = Array.from(browserMap.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-
-  const maxChartVal = Math.max(...chartPoints.map(p => p[metric]), 1);
-  const miniTrend = chartPoints.map(p => p[metric]);
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Background gradient accent */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl" />
+        <div className="absolute top-32 right-1/4 w-72 h-72 bg-blue-500/5 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative z-10 max-w-screen-2xl mx-auto space-y-6 pb-20">
+
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pt-1">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              Visitor insights and traffic data
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 rounded-xl bg-emerald-500/15">
+                <BarChart2 size={18} className="text-emerald-400" />
+              </div>
+              <h1 className="text-2xl font-black text-white tracking-tight">
+                Analytics <span className="text-emerald-400">Intelligence</span>
+              </h1>
+            </div>
+            <p className="text-xs text-slate-500 ml-11">
+              Real visitor data · Bots & admin filtered · Updated{' '}
+              <span className="text-slate-400">{updatedAt.toLocaleTimeString()}</span>
+              {refreshing && <span className="ml-2 text-emerald-400 animate-pulse">↻ refreshing</span>}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Range picker */}
-            <div className="relative">
-              <button
-                onClick={() => setRangeOpen(!rangeOpen)}
-                className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                <Clock size={15} />
-                {RANGE_LABELS[range]}
-                <ChevronDown size={14} />
-              </button>
-              {rangeOpen && (
-                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20 overflow-hidden min-w-[160px]">
-                  {(Object.keys(RANGE_LABELS) as Range[]).map(r => (
-                    <button
-                      key={r}
-                      onClick={() => { setRange(r); setRangeOpen(false); }}
-                      className={`w-full text-left px-4 py-2 text-sm transition-colors ${range === r ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
-                    >
-                      {RANGE_LABELS[r]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            <button
-              onClick={fetchData}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-60"
-            >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-              Refresh
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex bg-[#0d1117] border border-[#1e2a3a] rounded-xl p-1">
+              {RANGE_BTNS.map(({ v, label }) => (
+                <button key={v} onClick={() => setRange(v)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${range === v ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => fetchData(true)} disabled={refreshing} title="Refresh"
+              className="p-2.5 bg-[#0d1117] border border-[#1e2a3a] rounded-xl text-slate-400 hover:text-white hover:border-[#2a3a4a] transition-all">
+              <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+            <button onClick={() => exportCSV(rows)}
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-[#0d1117] border border-[#1e2a3a] rounded-xl text-slate-300 hover:text-white hover:border-[#2a3a4a] transition-all text-xs font-semibold">
+              <Download size={13} /> Export CSV
+            </button>
+            <button onClick={() => setShowClear(true)}
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-rose-950/30 border border-rose-900/40 rounded-xl text-rose-400 hover:text-rose-300 hover:border-rose-800/60 transition-all text-xs font-semibold">
+              <RotateCcw size={13} /> Reset Data
             </button>
           </div>
         </div>
 
-        {/* Online Now banner */}
-        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl p-4 flex items-center justify-between text-white">
-          <div className="flex items-center gap-3">
-            <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
-            <div>
-              <span className="text-2xl font-bold">{onlineCount}</span>
-              <span className="ml-2 text-emerald-100 font-medium">visitors online right now</span>
+        {/* ── KPI Cards ────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <StatCard icon={Eye}       label="Page Views"      value={metrics.totalViews}            accentClass="bg-blue-500/15 text-blue-400" />
+          <StatCard icon={Users}     label="Unique Visitors" value={metrics.uniqueVisitors}         accentClass="bg-violet-500/15 text-violet-400" />
+
+          {/* Live Online */}
+          <div className="bg-[#0d1117]/80 border border-emerald-500/20 rounded-2xl p-4 backdrop-blur-sm shadow-lg shadow-emerald-900/10">
+            <div className="flex items-start justify-between mb-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400"><Wifi size={15} /></div>
+              <span className="flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] text-emerald-400 font-bold tracking-widest">LIVE</span>
+              </span>
             </div>
+            <div className="text-2xl font-black text-white tabular-nums">{onlineRows.length}</div>
+            <div className="text-xs text-slate-400 mt-0.5 font-medium">Online Now</div>
           </div>
-          <div className="hidden sm:flex items-center gap-4 text-sm text-emerald-100">
-            {online.slice(0, 3).map((o, i) => (
-              <div key={i} className="flex items-center gap-1">
-                <Activity size={13} />
-                <span className="truncate max-w-[120px]">{o.page_path}</span>
-              </div>
-            ))}
-          </div>
-          <div className="text-xs text-emerald-200">
-            Updated {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </div>
+
+          <StatCard icon={TrendingUp} label="New Visitors"   value={metrics.newVisitors}            accentClass="bg-amber-500/15 text-amber-400" />
+          <StatCard icon={Activity}   label="Bounce Rate"    value={`${metrics.bounceRate}%`}        accentClass="bg-rose-500/15 text-rose-400" sub="Single-page sessions" />
+          <StatCard icon={Clock}      label="Avg. Session"   value={formatDuration(metrics.avgDuration)} accentClass="bg-cyan-500/15 text-cyan-400" />
         </div>
 
-        {/* Summary stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Views', value: totalViews, icon: Eye, color: 'blue', trend: miniTrend },
-            { label: 'Unique Visitors', value: uniqueVisitors, icon: Users, color: 'emerald', trend: miniTrend },
-            { label: 'New Visitors Today', value: uniqueToday, icon: TrendingUp, color: 'amber', trend: [] },
-            { label: 'Online Now', value: onlineCount, icon: Activity, color: 'rose', trend: [] },
-          ].map(({ label, value, icon: Icon, color, trend }) => {
-            const colorMap: Record<string, { bg: string; text: string; chart: string }> = {
-              blue: { bg: 'bg-blue-50 dark:bg-blue-900/20', text: 'text-blue-600 dark:text-blue-400', chart: '#3b82f6' },
-              emerald: { bg: 'bg-emerald-50 dark:bg-emerald-900/20', text: 'text-emerald-600 dark:text-emerald-400', chart: '#10b981' },
-              amber: { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-600 dark:text-amber-400', chart: '#f59e0b' },
-              rose: { bg: 'bg-rose-50 dark:bg-rose-900/20', text: 'text-rose-600 dark:text-rose-400', chart: '#f43f5e' },
-            };
-            const c = colorMap[color];
-            return (
-              <div key={label} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 overflow-hidden relative">
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`p-2 rounded-lg ${c.bg}`}>
-                    <Icon size={18} className={c.text} />
+        {/* ── Traffic Chart ─────────────────────────────────────────────────── */}
+        <SectionCard className="p-6">
+          <SectionHeader icon={TrendingUp} title="Traffic Overview" subtitle="Page views & unique visitors over time" accent="blue"
+            right={
+              <div className="flex items-center gap-4 text-xs text-slate-500">
+                <span className="flex items-center gap-1.5"><span className="w-5 h-0.5 bg-blue-500 rounded-full inline-block" />Views</span>
+                <span className="flex items-center gap-1.5"><span className="w-5 h-0.5 bg-emerald-500 rounded-full inline-block" />Visitors</span>
+              </div>
+            }
+          />
+          <DualLineChart data={chartData} />
+        </SectionCard>
+
+        {/* ── World Map ─────────────────────────────────────────────────────── */}
+        <SectionCard className="p-6">
+          <SectionHeader icon={Globe} title="Visitor World Map" subtitle="Hover a country to see exact visitor count" accent="emerald"
+            right={<span className="text-xs text-slate-500">{countryMapData.size} countries tracked</span>}
+          />
+          <WorldMapEnhanced countryData={countryMapData} />
+        </SectionCard>
+
+        {/* ── Geo Breakdown ─────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SectionCard className="p-6">
+            <SectionHeader icon={MapPin} title="Top Countries" accent="emerald"
+              right={<span className="text-xs text-slate-500">{topCountries.length} countries</span>}
+            />
+            {topCountries.length > 0
+              ? <BarList items={topCountries} accent="emerald" />
+              : <div className="flex items-center justify-center h-40 text-slate-700 text-sm">No location data yet</div>}
+          </SectionCard>
+
+          <SectionCard className="p-6">
+            <SectionHeader icon={MapPin} title="Top Cities" accent="amber"
+              right={<span className="text-xs text-slate-500">{topCities.length} cities</span>}
+            />
+            {topCities.length > 0
+              ? <BarList items={topCities} accent="amber" />
+              : <div className="flex items-center justify-center h-40 text-slate-700 text-sm">No city data yet</div>}
+          </SectionCard>
+        </div>
+
+        {/* ── Content Performance ──────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SectionCard className="p-6">
+            <SectionHeader icon={BarChart2} title="Top Pages" subtitle="All traffic sources" accent="blue"
+              right={<span className="text-xs text-slate-500 tabular-nums">{rows.length.toLocaleString()} total hits</span>}
+            />
+            {topPages.length > 0
+              ? <BarList items={topPages} accent="blue" />
+              : <div className="flex items-center justify-center h-40 text-slate-700 text-sm">No page data yet</div>}
+          </SectionCard>
+
+          <SectionCard className="p-6">
+            <SectionHeader icon={Search} title="Top Pages from Search Engines" subtitle="Organic search traffic only" accent="violet"
+              right={
+                <span className="flex items-center gap-1 text-xs text-violet-400 font-semibold tabular-nums">
+                  <Zap size={11} />
+                  {topFromSearch.reduce((s, i) => s + i.value, 0).toLocaleString()} organic
+                </span>
+              }
+            />
+            {topFromSearch.length > 0 ? (
+              <BarList items={topFromSearch} accent="violet" />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-40 gap-2">
+                <Search size={28} className="text-slate-800" />
+                <span className="text-sm text-slate-600">No organic search traffic yet</span>
+                <span className="text-xs text-slate-700">Visits from Google, Bing etc. will appear here</span>
+              </div>
+            )}
+          </SectionCard>
+        </div>
+
+        {/* ── Search Engine Breakdown ───────────────────────────────────────── */}
+        <SectionCard className="p-6">
+          <SectionHeader icon={Search} title="Search Engine Breakdown" subtitle="Which search engines send you the most traffic" accent="violet"
+            right={
+              <span className="text-xs text-slate-500 tabular-nums">
+                {engineBreakdown.reduce((s, i) => s + i.value, 0).toLocaleString()} organic visits
+              </span>
+            }
+          />
+          {engineBreakdown.length > 0 ? (
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              {engineBreakdown.map((item, i) => {
+                const total = engineBreakdown.reduce((s, x) => s + x.value, 0) || 1;
+                const pct = Math.round((item.value / total) * 100);
+                const engineColors: Record<string, { bg: string; text: string; bar: string }> = {
+                  Google:     { bg: 'bg-blue-500/10',   text: 'text-blue-400',   bar: 'from-blue-600 to-blue-400' },
+                  Bing:       { bg: 'bg-teal-500/10',   text: 'text-teal-400',   bar: 'from-teal-600 to-teal-400' },
+                  Yahoo:      { bg: 'bg-violet-500/10', text: 'text-violet-400', bar: 'from-violet-600 to-violet-400' },
+                  DuckDuckGo: { bg: 'bg-orange-500/10', text: 'text-orange-400', bar: 'from-orange-600 to-orange-400' },
+                  Yandex:     { bg: 'bg-red-500/10',    text: 'text-red-400',    bar: 'from-red-600 to-red-400' },
+                  Baidu:      { bg: 'bg-rose-500/10',   text: 'text-rose-400',   bar: 'from-rose-600 to-rose-400' },
+                  Ecosia:     { bg: 'bg-green-500/10',  text: 'text-green-400',  bar: 'from-green-600 to-green-400' },
+                  Other:      { bg: 'bg-slate-500/10',  text: 'text-slate-400',  bar: 'from-slate-600 to-slate-400' },
+                };
+                const c = engineColors[item.label] || engineColors.Other;
+                return (
+                  <div key={i} className={`rounded-2xl p-4 border border-[#1e2a3a] ${c.bg} hover:border-[#2a3a4a] transition-colors`}>
+                    <div className={`text-lg font-black ${c.text} tabular-nums`}>{item.value.toLocaleString()}</div>
+                    <div className="text-sm font-semibold text-white mt-0.5">{item.label}</div>
+                    <div className="mt-3 h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+                      <div className={`h-full bg-gradient-to-r ${c.bar} rounded-full`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className={`text-xs ${c.text} mt-1.5 font-semibold`}>{pct}% of organic</div>
                   </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-32 gap-2">
+              <Search size={28} className="text-slate-800" />
+              <span className="text-sm text-slate-600">No organic traffic recorded yet</span>
+            </div>
+          )}
+        </SectionCard>
+
+        {/* ── Traffic Sources ───────────────────────────────────────────────── */}
+        <SectionCard className="p-6">
+          <SectionHeader icon={TrendingUp} title="Traffic Sources" subtitle="Where your visitors are coming from" accent="amber"
+            right={<span className="text-xs text-slate-500 tabular-nums">{rows.length.toLocaleString()} total visits</span>}
+          />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {([
+              { key: 'organic'  as TrafficSource, label: 'Organic Search', icon: Search,       accent: 'emerald', desc: 'Google · Bing · Yahoo' },
+              { key: 'direct'   as TrafficSource, label: 'Direct',         icon: ExternalLink, accent: 'blue',    desc: 'URL · Bookmarks' },
+              { key: 'social'   as TrafficSource, label: 'Social Media',   icon: Activity,     accent: 'violet',  desc: 'Facebook · Twitter · IG' },
+              { key: 'referral' as TrafficSource, label: 'Referral',       icon: Link2,        accent: 'amber',   desc: 'Other websites' },
+            ] as const).map(({ key, label, icon: Icon, accent, desc }) => {
+              const pct   = srcPct(key);
+              const count = trafficSources[key];
+              const cfg: Record<string, { bar: string; text: string; bg: string; border: string }> = {
+                emerald: { bar: 'from-emerald-600 to-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+                blue:    { bar: 'from-blue-600 to-blue-400',       text: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20' },
+                violet:  { bar: 'from-violet-600 to-violet-400',   text: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/20' },
+                amber:   { bar: 'from-amber-600 to-amber-400',     text: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/20' },
+              };
+              const c = cfg[accent];
+              return (
+                <div key={key} className={`rounded-2xl p-4 border ${c.border} ${c.bg} hover:border-opacity-40 transition-colors`}>
+                  <div className={`inline-flex p-2 rounded-xl bg-black/20 ${c.text} mb-3`}><Icon size={14} /></div>
+                  <div className={`text-3xl font-black ${c.text} tabular-nums`}>{pct}%</div>
+                  <div className="text-sm font-semibold text-slate-200 mt-0.5">{label}</div>
+                  <div className="text-xs text-slate-600 mb-3 mt-0.5">{desc}</div>
+                  <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+                    <div className={`h-full bg-gradient-to-r ${c.bar} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className={`text-xs ${c.text} mt-1.5 font-semibold tabular-nums`}>{count.toLocaleString()} visits</div>
                 </div>
-                <div className={`text-2xl font-bold ${c.text}`}>{value.toLocaleString()}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</div>
-                {trend.length > 1 && (
-                  <div className="mt-3 -mx-4 -mb-4">
-                    <MiniLineChart points={trend} color={c.chart} height={48} />
+              );
+            })}
+          </div>
+        </SectionCard>
+
+        {/* ── Top Referrer Domains ──────────────────────────────────────────── */}
+        <SectionCard className="p-6">
+          <SectionHeader icon={Link2} title="Top Referrer Domains" subtitle="External websites sending visitors to you" accent="cyan"
+            right={
+              <span className="text-xs text-slate-500 tabular-nums">
+                {topReferrers.reduce((s, i) => s + i.value, 0).toLocaleString()} referral visits
+              </span>
+            }
+          />
+          {topReferrers.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12">
+              <BarList items={topReferrers.slice(0, 5)} accent="cyan" />
+              {topReferrers.length > 5 && <BarList items={topReferrers.slice(5, 10)} accent="cyan" />}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-28 gap-2">
+              <Link2 size={26} className="text-slate-800" />
+              <span className="text-sm text-slate-600">No referral traffic recorded yet</span>
+            </div>
+          )}
+        </SectionCard>
+
+        {/* ── Hourly Traffic Heatmap ────────────────────────────────────────── */}
+        <SectionCard className="p-6">
+          <SectionHeader icon={Grid3X3} title="Traffic Activity Heatmap" subtitle="Hourly page views — last 7 days (hover for details)" accent="amber" />
+          <HourlyHeatmap grid={hourlyGrid} />
+        </SectionCard>
+
+        {/* ── Returning vs New + Pages/Session ─────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SectionCard className="p-6">
+            <SectionHeader icon={RotateCcw} title="Returning vs New Visitors" subtitle="Visitor loyalty breakdown" accent="emerald" />
+            <DonutChart returning={metrics.returningVisitors} newVisitors={metrics.newVisitors} />
+          </SectionCard>
+
+          <SectionCard className="p-6">
+            <SectionHeader icon={ChevronRight} title="Engagement Summary" subtitle="Session quality metrics" accent="blue" />
+            <div className="space-y-5">
+              {[
+                { label: 'Pages per Session', value: metrics.pagesPerSession.toFixed(1), icon: Eye,      color: 'text-blue-400',    desc: 'Avg pages viewed per visit' },
+                { label: 'Avg Session Duration', value: formatDuration(metrics.avgDuration), icon: Clock, color: 'text-cyan-400',    desc: 'Time spent on site' },
+                { label: 'Bounce Rate',       value: `${metrics.bounceRate}%`, icon: Activity, color: 'text-rose-400',    desc: 'Single-page sessions' },
+                { label: 'New Visitor Rate',  value: `${metrics.uniqueVisitors > 0 ? Math.round((metrics.newVisitors / metrics.uniqueVisitors) * 100) : 0}%`,
+                  icon: Users, color: 'text-amber-400', desc: 'First-time visitors' },
+              ].map(({ label, value, icon: Icon, color, desc }) => (
+                <div key={label} className="flex items-center justify-between py-2 border-b border-[#1e2a3a] last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-1.5 rounded-lg bg-white/5 ${color}`}><Icon size={13} /></div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-200">{label}</p>
+                      <p className="text-xs text-slate-600">{desc}</p>
+                    </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
+                  <span className={`text-sm font-bold ${color} tabular-nums`}>{value}</span>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
         </div>
 
-        {/* Main chart */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Traffic Overview</h2>
-            <div className="flex gap-2">
-              {(['views', 'visitors'] as const).map(m => (
-                <button
-                  key={m}
-                  onClick={() => setMetric(m)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${metric === m ? (m === 'views' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white') : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                >
-                  {m === 'views' ? 'Page Views' : 'Visitors'}
+        {/* ── Devices + Browsers/OS ─────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SectionCard className="p-6">
+            <SectionHeader icon={Monitor} title="Devices" subtitle="Breakdown by device type" accent="cyan" />
+            <div className="space-y-4">
+              {([
+                { key: 'desktop', label: 'Desktop', icon: Monitor,    bar: 'from-blue-600 to-blue-400' },
+                { key: 'mobile',  label: 'Mobile',  icon: Smartphone, bar: 'from-emerald-600 to-emerald-400' },
+                { key: 'tablet',  label: 'Tablet',  icon: Tablet,     bar: 'from-violet-600 to-violet-400' },
+              ] as const).map(({ key, label, icon: Icon, bar }) => {
+                const count = deviceData[key] || 0;
+                const pct = Math.round((count / (rows.length || 1)) * 100);
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-slate-800/50 flex items-center justify-center flex-shrink-0">
+                      <Icon size={14} className="text-slate-300" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="text-slate-200 font-semibold">{label}</span>
+                        <span className="text-slate-400 tabular-nums">{pct}%
+                          <span className="text-slate-600 text-xs ml-1">({count.toLocaleString()})</span>
+                        </span>
+                      </div>
+                      <div className="h-2 bg-slate-800/80 rounded-full overflow-hidden">
+                        <div className={`h-full bg-gradient-to-r ${bar} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </SectionCard>
+
+          <SectionCard className="p-6">
+            <SectionHeader icon={Globe} title="Browsers & Operating Systems" accent="amber" />
+            <div className="grid grid-cols-2 gap-x-8">
+              <div>
+                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Browsers</p>
+                <BarList items={browserData} accent="blue" maxItems={5} />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">OS</p>
+                <BarList items={osData} accent="emerald" maxItems={5} />
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+
+        {/* ── Live Visitors ──────────────────────────────────────────────────── */}
+        <SectionCard>
+          <div className="px-6 py-4 border-b border-[#1e2a3a] flex items-center gap-3">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            <h2 className="text-sm font-bold text-white">Live Visitors</h2>
+            <span className="text-xs text-slate-500">Active in last 2 minutes · {onlineRows.length} online</span>
+            <span className="ml-auto text-[10px] text-emerald-400 font-mono">● AUTO-REFRESH 30s</span>
+          </div>
+          {onlineRows.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-[#1e2a3a]">
+                    {['Page', 'Location', 'Device', 'Last Seen'].map((h, i) => (
+                      <th key={h} className={`px-6 py-3 text-[10px] text-slate-600 font-bold uppercase tracking-wider ${i === 3 ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1e2a3a]">
+                  {onlineRows.slice(0, 20).map((v, i) => (
+                    <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+                          <span className="text-xs font-mono text-slate-300 truncate max-w-xs">{v.page_path}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 text-xs text-slate-400">{[v.city, v.country_name].filter(Boolean).join(', ') || '—'}</td>
+                      <td className="px-6 py-3 text-xs text-slate-400 capitalize">{v.device_type || '—'}</td>
+                      <td className="px-6 py-3 text-xs text-slate-500 text-right">{formatRelTime(v.last_seen)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-14 gap-2 text-slate-700">
+              <Wifi size={30} className="opacity-40" />
+              <span className="text-sm">No active visitors right now</span>
+            </div>
+          )}
+        </SectionCard>
+
+        {/* ── Ad Performance ─────────────────────────────────────────────────── */}
+        <SectionCard>
+          <div className="px-6 py-4 border-b border-[#1e2a3a] flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400"><DollarSign size={15} /></div>
+              <div>
+                <h2 className="text-sm font-bold text-white">Ad Performance</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Revenue by slot and platform</p>
+              </div>
+            </div>
+            <div className="flex bg-[#0d1117] border border-[#1e2a3a] rounded-xl p-1">
+              {RANGE_BTNS.map(({ v, label }) => (
+                <button key={v} onClick={() => setAdRange(v)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${adRange === v ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+                  {label}
                 </button>
               ))}
             </div>
           </div>
 
-          {loading ? (
-            <div className="h-48 flex items-center justify-center">
-              <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : (
-            <BarChart points={chartPoints} metric={metric} />
-          )}
-
-          <div className="mt-4 flex items-center gap-6 text-sm text-gray-500 dark:text-gray-400">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-sm bg-blue-500" />
-              <span>Page Views: <strong className="text-gray-900 dark:text-white">{totalViews.toLocaleString()}</strong></span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-sm bg-emerald-500" />
-              <span>Visitors: <strong className="text-gray-900 dark:text-white">{uniqueVisitors.toLocaleString()}</strong></span>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Countries */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Globe size={16} className="text-blue-600 dark:text-blue-400" />
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Top Countries</h2>
-            </div>
-            {countryRows.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No data yet</p>
-            ) : (
-              <div className="space-y-3">
-                {countryRows.map((row) => (
-                  <div key={row.name}>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{row.name}</span>
-                      <span className="text-gray-500 dark:text-gray-400 ml-2 shrink-0">{row.views.toLocaleString()} views</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                        style={{ width: `${(row.views / (countryRows[0]?.views || 1)) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-[#1e2a3a]">
+            {[
+              { icon: Eye,          label: 'Impressions',  value: adTotals.impressions.toLocaleString(), color: 'text-blue-400' },
+              { icon: MousePointer, label: 'Clicks',       value: adTotals.clicks.toLocaleString(),      color: 'text-violet-400' },
+              { icon: BarChart2,    label: 'Avg. CTR',     value: `${adTotals.ctr.toFixed(2)}%`,         color: 'text-emerald-400' },
+              { icon: DollarSign,   label: 'Est. Revenue', value: `$${adTotals.revenue.toFixed(2)}`,     color: 'text-amber-400' },
+            ].map(({ icon: Icon, label, value, color }) => (
+              <div key={label} className="px-6 py-5">
+                <Icon size={14} className={`${color} mb-2`} />
+                <div className={`text-xl font-black text-white tabular-nums`}>{value}</div>
+                <div className="text-xs text-slate-600 mt-0.5">{label}</div>
               </div>
-            )}
+            ))}
           </div>
 
-          {/* Cities */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <MapPin size={16} className="text-emerald-600 dark:text-emerald-400" />
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Top Cities</h2>
-            </div>
-            {cityRows.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No data yet</p>
-            ) : (
-              <div className="space-y-3">
-                {cityRows.map((row) => (
-                  <div key={row.name}>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{row.name}</span>
-                      <span className="text-gray-500 dark:text-gray-400 ml-2 shrink-0">{row.views.toLocaleString()} views</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                        style={{ width: `${(row.views / (cityRows[0]?.views || 1)) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Top Pages */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp size={16} className="text-amber-600 dark:text-amber-400" />
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Top Pages</h2>
-            </div>
-            {pageRows.length === 0 ? (
-              <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-8">No data yet</p>
-            ) : (
-              <div className="space-y-2">
-                {pageRows.map((row, i) => (
-                  <div key={row.path} className="flex items-center gap-3 text-sm">
-                    <span className="w-5 text-gray-400 dark:text-gray-500 text-right text-xs font-mono shrink-0">{i + 1}</span>
-                    <span className="flex-1 font-medium text-gray-800 dark:text-gray-200 truncate">{row.path}</span>
-                    <span className="text-gray-500 dark:text-gray-400 shrink-0">{row.views.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Devices & Browsers */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">Devices & Browsers</h2>
-
-            <div className="mb-5">
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Device Type</p>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { type: 'desktop', icon: Monitor, label: 'Desktop', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-                  { type: 'mobile', icon: Smartphone, label: 'Mobile', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-                  { type: 'tablet', icon: Tablet, label: 'Tablet', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
-                ].map(({ type, icon: Icon, label, color, bg }) => {
-                  const count = (deviceBreakdown as any)[type];
-                  const pct = Math.round((count / totalDev) * 100);
-                  return (
-                    <div key={type} className={`rounded-lg p-3 ${bg} text-center`}>
-                      <Icon size={20} className={`${color} mx-auto mb-1`} />
-                      <div className={`text-lg font-bold ${color}`}>{pct}%</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {totalViews > 0 && (
-                <div className="mt-3 h-2 rounded-full overflow-hidden flex gap-0.5">
-                  <div className="bg-blue-500 transition-all" style={{ width: `${(deviceBreakdown.desktop / totalDev) * 100}%` }} />
-                  <div className="bg-emerald-500 transition-all" style={{ width: `${(deviceBreakdown.mobile / totalDev) * 100}%` }} />
-                  <div className="bg-amber-500 transition-all" style={{ width: `${(deviceBreakdown.tablet / totalDev) * 100}%` }} />
-                </div>
-              )}
-            </div>
-
-            <div>
-              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Browser</p>
-              <div className="space-y-2">
-                {browserRows.map(([name, count]) => (
-                  <div key={name} className="flex items-center gap-2 text-sm">
-                    <span className="w-20 text-gray-700 dark:text-gray-300 font-medium">{name}</span>
-                    <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-400 rounded-full"
-                        style={{ width: `${(count / (browserRows[0]?.[1] || 1)) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-gray-500 dark:text-gray-400 w-8 text-right">{count}</span>
-                  </div>
-                ))}
-                {browserRows.length === 0 && (
-                  <p className="text-sm text-gray-400 dark:text-gray-500">No data yet</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Online visitors table */}
-        {online.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Live Visitors</h2>
-              <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">Updates every 30s</span>
-            </div>
+          {adSlotStats.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100 dark:border-gray-700">
-                    <th className="text-left pb-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Page</th>
-                    <th className="text-left pb-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Location</th>
-                    <th className="text-left pb-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Device</th>
-                    <th className="text-left pb-2 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Last Seen</th>
+                  <tr className="border-y border-[#1e2a3a]">
+                    {['Ad Slot', 'Platform', 'Impressions', 'Clicks', 'CTR', 'eCPM', 'Est. Revenue'].map((h, i) => (
+                      <th key={h} className={`px-6 py-3 text-[10px] text-slate-600 font-bold uppercase tracking-wider ${i >= 2 ? 'text-right' : 'text-left'}`}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                  {online.slice(0, 20).map((o, i) => {
-                    const ago = Math.round((Date.now() - new Date(o.last_seen).getTime()) / 1000);
-                    const DevIcon = o.device_type === 'mobile' ? Smartphone : o.device_type === 'tablet' ? Tablet : Monitor;
-                    return (
-                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                        <td className="py-2 pr-4 font-medium text-gray-800 dark:text-gray-200 max-w-[200px] truncate">{o.page_path}</td>
-                        <td className="py-2 pr-4 text-gray-500 dark:text-gray-400">
-                          {[o.city, o.country_name].filter(Boolean).join(', ') || 'Unknown'}
-                        </td>
-                        <td className="py-2 pr-4">
-                          <DevIcon size={14} className="text-gray-400 dark:text-gray-500" />
-                        </td>
-                        <td className="py-2 text-gray-400 dark:text-gray-500 text-xs">
-                          {ago < 60 ? `${ago}s ago` : `${Math.floor(ago / 60)}m ago`}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                <tbody className="divide-y divide-[#1e2a3a]">
+                  {adSlotStats.map((s, i) => (
+                    <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-3 text-xs font-mono text-slate-300">{s.slot}</td>
+                      <td className="px-6 py-3"><span className="text-xs bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full font-medium capitalize">{s.platform}</span></td>
+                      <td className="px-6 py-3 text-xs text-slate-400 text-right tabular-nums">{s.impressions.toLocaleString()}</td>
+                      <td className="px-6 py-3 text-xs text-slate-400 text-right tabular-nums">{s.clicks.toLocaleString()}</td>
+                      <td className="px-6 py-3 text-xs text-emerald-400 text-right tabular-nums font-semibold">{s.ctr.toFixed(2)}%</td>
+                      <td className="px-6 py-3 text-xs text-blue-400 text-right tabular-nums font-semibold">${s.ecpm.toFixed(2)}</td>
+                      <td className="px-6 py-3 text-xs text-amber-400 text-right tabular-nums font-bold">${s.revenue.toFixed(2)}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-
-        {/* Ad Performance Section */}
-        {(() => {
-          const slotMap = new Map<string, AdSlotStats>();
-          for (const ev of adEvents) {
-            const rates = PLATFORM_RATES[ev.platform] || PLATFORM_RATES.custom;
-            const existing = slotMap.get(ev.slot) || {
-              slot: ev.slot,
-              platform: ev.platform,
-              impressions: 0,
-              clicks: 0,
-              revenue: 0,
-              ctr: 0,
-              ecpm: 0,
-            };
-            if (ev.event_type === 'impression') {
-              existing.impressions++;
-              existing.revenue += ev.revenue > 0 ? ev.revenue : rates.cpm / 1000;
-            } else {
-              existing.clicks++;
-              existing.revenue += ev.revenue > 0 ? ev.revenue : rates.cpc;
-            }
-            slotMap.set(ev.slot, existing);
-          }
-
-          const slotStats: AdSlotStats[] = Array.from(slotMap.values()).map((s) => ({
-            ...s,
-            ctr: s.impressions > 0 ? (s.clicks / s.impressions) * 100 : 0,
-            ecpm: s.impressions > 0 ? (s.revenue / s.impressions) * 1000 : 0,
-          }));
-
-          const totalImpressions = slotStats.reduce((a, s) => a + s.impressions, 0);
-          const totalClicks = slotStats.reduce((a, s) => a + s.clicks, 0);
-          const totalRevenue = slotStats.reduce((a, s) => a + s.revenue, 0);
-          const overallCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
-
-          return (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <DollarSign size={20} className="text-emerald-600" />
-                  Ad Performance
-                </h2>
-                <div className="flex items-center gap-2">
-                  {(Object.keys(RANGE_LABELS) as Range[]).map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => setAdRange(r)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        adRange === r
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }`}
-                    >
-                      {RANGE_LABELS[r]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: 'Total Impressions', value: totalImpressions.toLocaleString(), icon: Eye, color: 'text-sky-600', bg: 'bg-sky-50 dark:bg-sky-900/20' },
-                  { label: 'Total Clicks', value: totalClicks.toLocaleString(), icon: MousePointer, color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-                  { label: 'Avg. CTR', value: `${overallCtr.toFixed(2)}%`, icon: BarChart2, color: 'text-orange-600', bg: 'bg-orange-50 dark:bg-orange-900/20' },
-                  { label: 'Est. Revenue', value: `$${totalRevenue.toFixed(4)}`, icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-                ].map(({ label, value, icon: Icon, color, bg }) => (
-                  <div key={label} className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-sm">
-                    <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center mb-3`}>
-                      <Icon size={18} className={color} />
-                    </div>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white">{value}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
-                  </div>
-                ))}
-              </div>
-
-              {slotStats.length > 0 ? (
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-                  <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-700">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Performance by Ad Slot</h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40">
-                          <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Slot</th>
-                          <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Platform</th>
-                          <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Impressions</th>
-                          <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Clicks</th>
-                          <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">CTR</th>
-                          <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">eCPM</th>
-                          <th className="text-right px-5 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Est. Revenue</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50 dark:divide-gray-700/50">
-                        {slotStats.sort((a, b) => b.revenue - a.revenue).map((s) => (
-                          <tr key={s.slot} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                            <td className="px-5 py-3 font-medium text-gray-800 dark:text-gray-200">{s.slot.replace(/_/g, ' ')}</td>
-                            <td className="px-4 py-3 text-gray-500 dark:text-gray-400 capitalize">{s.platform}</td>
-                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{s.impressions.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{s.clicks.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{s.ctr.toFixed(2)}%</td>
-                            <td className="px-4 py-3 text-right text-gray-700 dark:text-gray-300">${s.ecpm.toFixed(2)}</td>
-                            <td className="px-5 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400">${s.revenue.toFixed(4)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="px-5 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/20">
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      Revenue estimates use platform-specific CPM/CPC rates (AdSense ~$2.50 CPM, Adcash ~$1.80 CPM, Adsterra ~$2.20 CPM). Actual earnings may vary based on geography, niche, and ad quality score. Check your platform dashboard for verified figures.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-10 text-center">
-                  <DollarSign size={36} className="mx-auto mb-3 text-gray-300 dark:text-gray-600" />
-                  <p className="text-gray-500 dark:text-gray-400 font-medium">No ad events recorded yet</p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Configure ads in Settings → Monetization and enable at least one slot to start tracking.</p>
-                </div>
-              )}
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-700">
+              <DollarSign size={28} className="opacity-40" />
+              <span className="text-sm">No ad data for selected period</span>
             </div>
-          );
-        })()}
+          )}
+        </SectionCard>
+
       </div>
+
+      {/* ── Reset Confirmation Modal ──────────────────────────────────────────── */}
+      {showClear && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#0d1117] border border-[#1e2a3a] rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <div className="flex items-start justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-rose-500/15 text-rose-400"><AlertTriangle size={18} /></div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Reset Analytics Data</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">This action cannot be undone</p>
+                </div>
+              </div>
+              <button onClick={() => { setShowClear(false); setClearInput(''); }}
+                className="p-1.5 text-slate-600 hover:text-slate-300 rounded-lg hover:bg-white/5 transition-all">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="bg-rose-950/20 border border-rose-900/30 rounded-xl p-4 mb-5 text-sm text-rose-300">
+              <p className="font-semibold mb-1">You are about to permanently delete:</p>
+              <ul className="space-y-1 text-xs text-rose-400/80 mt-2">
+                <li>· All <strong className="text-rose-300">{rows.length.toLocaleString()}</strong> page view records</li>
+                <li>· All online visitor sessions</li>
+                <li>· All ad event records</li>
+              </ul>
+              <p className="text-xs text-rose-500/70 mt-3">Analytics will restart from zero after reset.</p>
+            </div>
+
+            <p className="text-xs text-slate-500 mb-2">
+              Type <span className="font-mono text-rose-400 bg-rose-950/40 px-1.5 py-0.5 rounded">RESET</span> to confirm:
+            </p>
+            <input
+              type="text" value={clearInput} onChange={e => setClearInput(e.target.value)}
+              placeholder="Type RESET to confirm"
+              className="w-full bg-[#060d18] border border-[#1e2a3a] rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-700 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/20 transition-all mb-4"
+              onKeyDown={e => e.key === 'Enter' && handleClearData()}
+            />
+            <div className="flex gap-3">
+              <button onClick={() => { setShowClear(false); setClearInput(''); }}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-[#1e2a3a] text-slate-400 hover:text-white hover:border-[#2a3a4a] transition-all text-sm font-semibold">
+                Cancel
+              </button>
+              <button
+                onClick={handleClearData}
+                disabled={clearInput.trim().toUpperCase() !== 'RESET' || clearing}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm font-bold flex items-center justify-center gap-2"
+              >
+                {clearing ? (
+                  <><RefreshCw size={13} className="animate-spin" /> Clearing…</>
+                ) : (
+                  <><Trash2 size={13} /> Reset Analytics</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </AdminLayout>
   );
 }
