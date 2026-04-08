@@ -14,7 +14,7 @@ interface GeneratedImage {
 
 interface AIImageGeneratorProps {
   content: string;
-  onInsertContent: (html: string) => void;
+  onInsertContent: (html: string, replace?: boolean) => void;
   onSetFeaturedImage: (url: string) => void;
 }
 

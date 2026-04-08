@@ -883,7 +883,7 @@ async function callGeminiImageModel(
     responseModalities: ['TEXT', 'IMAGE'],
   };
   if (withImageConfig) {
-    generationConfig.imageConfig = { aspectRatio: '16:9', imageSize: '2K' };
+    generationConfig.imageConfig = { aspectRatio: '16:9' };
   }
 
   const body = {
