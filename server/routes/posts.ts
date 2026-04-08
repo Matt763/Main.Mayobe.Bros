@@ -165,12 +165,13 @@ router.post('/', requireAuth, async (req, res) => {
         excerpt: data.excerpt as string | undefined,
         featuredImage: data.featured_image as string | undefined,
         categoryName: cats?.name,
+        categorySlug: cats?.slug,
         author: data.author as string | undefined,
         readingTime: data.reading_time as number | undefined,
       }).catch(e => console.error('[NEWSLETTER] Create dispatch error:', e));
 
       const catSlug = cats?.slug || '';
-      const postUrl = `https://mayobebros.com/post/${catSlug}/${data.slug}`;
+      const postUrl = `${process.env.VITE_SITE_URL || 'https://mayobebros.com'}/post/${catSlug}/${data.slug}`;
       notifySearchEngines({ postUrl, postSlug: data.slug as string })
         .catch(e => console.error('[PING] Create ping error:', e));
     }
@@ -272,6 +273,7 @@ router.put('/:slug', requireAuth, async (req, res) => {
         excerpt: data.excerpt as string | undefined,
         featuredImage: data.featured_image as string | undefined,
         categoryName: cats?.name,
+        categorySlug: cats?.slug,
         author: data.author as string | undefined,
         readingTime: data.reading_time as number | undefined,
       }).catch(e => console.error('[NEWSLETTER] Update dispatch error:', e));

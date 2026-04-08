@@ -3342,4 +3342,39 @@ INSERT INTO payment_gateway_settings (gateway, is_enabled, config) VALUES
   ('mobile_money', false, '{"provider": "mpesa", "mode": "test"}'::jsonb)
 ON CONFLICT (gateway) DO NOTHING;
 
+-- ─── newsletter_send_log ──────────────────────────────────────────────────────
+-- Tracks which posts have had newsletter dispatches so we never double-send.
+-- This table is required by server/utils/newsletterDispatch.ts.
+CREATE TABLE IF NOT EXISTS newsletter_send_log (
+  id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  post_id        uuid,
+  post_slug      text        NOT NULL,
+  status         text        NOT NULL DEFAULT 'pending', -- pending | sent | failed
+  subscriber_count integer,
+  error          text,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_send_log_slug
+  ON newsletter_send_log (post_slug);
+
+ALTER TABLE newsletter_send_log ENABLE ROW LEVEL SECURITY;
+
+-- Only the service-role key (server) may read/write this table.
+CREATE POLICY "Service role full access to send log"
+  ON newsletter_send_log
+  FOR ALL
+  TO authenticated
+  USING (true)
+  WITH CHECK (true);
+
+-- Anon (server with anon key fallback) can also insert/update/select
+CREATE POLICY "Anon server can manage send log"
+  ON newsletter_send_log
+  FOR ALL
+  TO anon
+  USING (true)
+  WITH CHECK (true);
+
 

@@ -896,6 +896,7 @@ export async function sendPostDigestEmail(
     console.error(`[RESEND] Digest email error for ${to}:`, error);
     throw new Error((error as { message?: string }).message || 'Resend error');
   }
+  console.log(`[RESEND] Digest email sent to ${to}`);
 }
 
 // ─── Shared email shell ───────────────────────────────────────────────────────

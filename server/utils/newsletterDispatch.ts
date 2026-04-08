@@ -19,6 +19,7 @@ export async function dispatchPostNewsletter(post: {
   excerpt?: string;
   featuredImage?: string;
   categoryName?: string;
+  categorySlug?: string;
   author?: string;
   readingTime?: number;
 }): Promise<void> {
@@ -70,25 +71,33 @@ export async function dispatchPostNewsletter(post: {
 
     const { data: relatedRows } = await supabase
       .from('posts')
-      .select('title, excerpt, featured_image, slug, categories(name)')
+      .select('title, excerpt, featured_image, slug, categories(name, slug)')
       .eq('status', 'published')
       .neq('slug', post.slug)
       .order('published_at', { ascending: false })
       .limit(3);
 
-    const relatedPosts: RelatedPostData[] = (relatedRows || []).map((r: any) => ({
-      title: r.title,
-      excerpt: r.excerpt || '',
-      featuredImage: r.featured_image || undefined,
-      url: `${siteUrl}/post/${r.slug}`,
-      category: r.categories?.name || 'Article',
-    }));
+    const relatedPosts: RelatedPostData[] = (relatedRows || []).map((r: any) => {
+      const catSlug = r.categories?.slug;
+      const relatedPath = catSlug ? `/post/${catSlug}/${r.slug}` : `/post/${r.slug}`;
+      return {
+        title: r.title,
+        excerpt: r.excerpt || '',
+        featuredImage: r.featured_image || undefined,
+        url: `${siteUrl}${relatedPath}`,
+        category: r.categories?.name || 'Article',
+      };
+    });
+
+    const postPath = post.categorySlug
+      ? `/post/${post.categorySlug}/${post.slug}`
+      : `/post/${post.slug}`;
 
     const postData: DigestPostData = {
       title: post.title,
       excerpt: post.excerpt || 'Read the latest article from Mayobe Bros.',
       featuredImage: post.featuredImage,
-      url: `${siteUrl}/post/${post.slug}`,
+      url: `${siteUrl}${postPath}`,
       category: post.categoryName || 'Article',
       author: post.author || 'Mayobe Bros',
       readingTime: post.readingTime,
