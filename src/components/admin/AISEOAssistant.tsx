@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  Sparkles, Search, FileText, Tag, Link2, BarChart2, Loader2,
+  Sparkles, Search, FileText, Tag, BarChart2, Loader2,
   ChevronDown, ChevronUp, CheckCircle2, AlertCircle, TrendingUp,
-  Key, X, RefreshCw, ExternalLink,
+  Key, X, RefreshCw, Zap, Bot,
 } from 'lucide-react';
 
 interface AISEOAssistantProps {
@@ -16,33 +16,23 @@ interface AISEOAssistantProps {
   onSetMetaDescription: (v: string) => void;
   onSetMetaKeywords: (v: string) => void;
   onSetExcerpt: (v: string) => void;
-  onSetTitle: (v: string) => void;
-  onInsertLinks: (html: string) => void;
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-type ActiveTab = 'generate' | 'links' | 'analyze';
+type ApiProvider = 'claude' | 'openai';
+type ActiveTab = 'generate' | 'analyze';
 
 interface SeoScore {
   overall: number;
-  titleScore: number;
-  descScore: number;
-  keywordScore: number;
-  contentLength: number;
-  headingScore: number;
-  internalLinks: number;
-  imageAlt: number;
   details: { label: string; pass: boolean; info: string }[];
   suggestions: string[];
+  wordCount: number;
 }
 
-interface LinkSuggestion {
-  anchor: string;
-  postTitle: string;
-  slug: string;
-  reason: string;
+interface SeoAutoResult {
+  seoTitle: string;
+  metaDescription: string;
+  keywords: string[];
+  excerpt: string;
 }
 
 function computeSeoScore(
@@ -88,47 +78,35 @@ function computeSeoScore(
     wordCount >= 500 ? 30 : 0;
 
   const headingScore = h2Count >= 3 ? 100 : h2Count >= 2 ? 75 : h2Count >= 1 ? 50 : 0;
-
   const altScore = imgCount === 0 ? 80 : imgAltCount === imgCount ? 100 : Math.round((imgAltCount / imgCount) * 100);
-
   const internalLinkScore = internalLinkCount >= 3 ? 100 : internalLinkCount >= 1 ? 60 : 0;
 
   const overall = Math.round(
-    titleScore * 0.2 +
-    descScore * 0.15 +
-    keywordScore * 0.15 +
-    contentLengthScore * 0.25 +
-    headingScore * 0.1 +
-    altScore * 0.05 +
-    internalLinkScore * 0.1
+    titleScore * 0.2 + descScore * 0.15 + keywordScore * 0.15 +
+    contentLengthScore * 0.25 + headingScore * 0.1 + altScore * 0.05 + internalLinkScore * 0.1
   );
 
   const suggestions: string[] = [];
-  if (titleLen < 50 || titleLen > 60) suggestions.push(`Meta title should be 50–60 characters (currently ${titleLen})`);
-  if (descLen < 150 || descLen > 160) suggestions.push(`Meta description should be 150–160 characters (currently ${descLen})`);
-  if (keywords.length < 5) suggestions.push('Add at least 5 keywords to improve keyword coverage');
-  if (wordCount < 4000) suggestions.push(`Content is ${wordCount} words. Aim for 4,000–5,000 words for AdSense approval and top SEO ranking`);
-  if (h2Count < 2) suggestions.push('Add at least 2 H2 headings to improve content structure');
-  if (imgCount > 0 && imgAltCount < imgCount) suggestions.push(`${imgCount - imgAltCount} image(s) missing alt text`);
-  if (internalLinkCount === 0) suggestions.push('Add internal links to improve SEO and navigation');
+  if (titleLen < 50 || titleLen > 60) suggestions.push(`Meta title: ${titleLen} chars. Aim for 50–60.`);
+  if (descLen < 150 || descLen > 160) suggestions.push(`Meta description: ${descLen} chars. Aim for 150–160.`);
+  if (keywords.length < 5) suggestions.push('Add at least 5 keywords.');
+  if (wordCount < 4000) suggestions.push(`Content is ${wordCount} words. Aim for 4,000–5,000.`);
+  if (h2Count < 2) suggestions.push('Add at least 2 H2 headings.');
+  if (imgCount > 0 && imgAltCount < imgCount) suggestions.push(`${imgCount - imgAltCount} image(s) missing alt text.`);
+  if (internalLinkCount === 0) suggestions.push('Add internal links.');
 
   const details = [
-    { label: 'Meta title length (50–60 chars)', pass: titleLen >= 50 && titleLen <= 60, info: `${titleLen} chars` },
-    { label: 'Meta description (150–160 chars)', pass: descLen >= 150 && descLen <= 160, info: `${descLen} chars` },
-    { label: 'Keywords defined', pass: keywords.length >= 3, info: `${keywords.length} keywords` },
-    { label: 'Content length (4,000+ words)', pass: wordCount >= 4000, info: `${wordCount} words` },
-    { label: 'H2 headings used', pass: h2Count >= 2, info: `${h2Count} H2s` },
-    { label: 'H3 subheadings used', pass: h3Count >= 1, info: `${h3Count} H3s` },
+    { label: 'Meta title (50–60 chars)', pass: titleLen >= 50 && titleLen <= 60, info: `${titleLen} chars` },
+    { label: 'Meta description (150–160)', pass: descLen >= 150 && descLen <= 160, info: `${descLen} chars` },
+    { label: 'Keywords (5+)', pass: keywords.length >= 5, info: `${keywords.length} keywords` },
+    { label: 'Content length (4,000+ words)', pass: wordCount >= 4000, info: `${wordCount.toLocaleString()} words` },
+    { label: 'H2 headings (2+)', pass: h2Count >= 2, info: `${h2Count} H2s` },
+    { label: 'H3 subheadings', pass: h3Count >= 1, info: `${h3Count} H3s` },
     { label: 'Images have alt text', pass: imgCount === 0 || imgAltCount === imgCount, info: imgCount === 0 ? 'No images' : `${imgAltCount}/${imgCount}` },
-    { label: 'Internal links present', pass: internalLinkCount >= 1, info: `${internalLinkCount} links` },
+    { label: 'Internal links', pass: internalLinkCount >= 1, info: `${internalLinkCount} links` },
   ];
 
-  return {
-    overall, titleScore, descScore, keywordScore,
-    contentLength: wordCount, headingScore,
-    internalLinks: internalLinkCount, imageAlt: altScore,
-    details, suggestions,
-  };
+  return { overall, details, suggestions, wordCount };
 }
 
 function ScoreRing({ score, size = 72 }: { score: number; size?: number }) {
@@ -140,10 +118,8 @@ function ScoreRing({ score, size = 72 }: { score: number; size?: number }) {
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={5} className="dark:stroke-gray-700" />
       <circle
-        cx={size/2} cy={size/2} r={r}
-        fill="none" stroke={color} strokeWidth={5}
-        strokeDasharray={`${dash} ${circ}`}
-        strokeLinecap="round"
+        cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={5}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
         transform={`rotate(-90 ${size/2} ${size/2})`}
         style={{ transition: 'stroke-dasharray 0.5s ease' }}
       />
@@ -156,23 +132,24 @@ export default function AISEOAssistant({
   title, content, excerpt,
   metaTitle, metaDescription, metaKeywords,
   onSetMetaTitle, onSetMetaDescription, onSetMetaKeywords,
-  onSetExcerpt, onSetTitle, onInsertLinks,
+  onSetExcerpt,
 }: AISEOAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('generate');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_api_key') || '');
+
+  // API provider & key management
+  const [provider, setProvider] = useState<ApiProvider>(() =>
+    (localStorage.getItem('seo_ai_provider') as ApiProvider) || 'claude'
+  );
+  const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem('openai_api_key') || '');
   const [showKeyInput, setShowKeyInput] = useState(false);
 
-  const [loadingTitle, setLoadingTitle] = useState(false);
-  const [loadingDesc, setLoadingDesc] = useState(false);
-  const [loadingKeywords, setLoadingKeywords] = useState(false);
-  const [loadingExcerpt, setLoadingExcerpt] = useState(false);
-  const [loadingLinks, setLoadingLinks] = useState(false);
+  // Generate-all state
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<SeoAutoResult | null>(null);
 
-  const [linkSuggestions, setLinkSuggestions] = useState<LinkSuggestion[]>([]);
-  const [selectedLinks, setSelectedLinks] = useState<Set<number>>(new Set());
-  const [linkError, setLinkError] = useState<string | null>(null);
-
+  // Analyze tab state
   const [seoScore, setSeoScore] = useState<SeoScore | null>(null);
   const analyzeDebounce = useRef<NodeJS.Timeout | null>(null);
 
@@ -185,175 +162,66 @@ export default function AISEOAssistant({
     return () => { if (analyzeDebounce.current) clearTimeout(analyzeDebounce.current); };
   }, [isOpen, activeTab, title, content, metaTitle, metaDescription, metaKeywords]);
 
-  const callAI = async (action: string, extra: Record<string, string> = {}) => {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-assistant`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'X-OpenAI-Key': apiKey,
-      },
-      body: JSON.stringify({
-        action,
-        title,
-        content,
-        excerpt,
-        metaDescription,
-        metaKeywords,
-        ...extra,
-      }),
-    });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    return data.result as string;
+  const saveProvider = (p: ApiProvider) => {
+    setProvider(p);
+    localStorage.setItem('seo_ai_provider', p);
   };
 
-  const generateSeoTitle = async () => {
-    if (!apiKey) { setShowKeyInput(true); return; }
-    setLoadingTitle(true);
-    try {
-      const result = await callAI('generate_seo_title');
-      const clean = result.replace(/^["']|["']$/g, '').trim();
-      onSetMetaTitle(clean.slice(0, 70));
-    } catch (e: any) {
-      alert(e.message);
-    } finally { setLoadingTitle(false); }
+  const saveOpenaiKey = () => {
+    localStorage.setItem('openai_api_key', openaiKey);
+    setShowKeyInput(false);
   };
 
-  const generateMetaDesc = async () => {
-    if (!apiKey) { setShowKeyInput(true); return; }
-    setLoadingDesc(true);
-    try {
-      const result = await callAI('generate_meta_description');
-      const clean = result.replace(/^["']|["']$/g, '').trim();
-      onSetMetaDescription(clean.slice(0, 160));
-    } catch (e: any) {
-      alert(e.message);
-    } finally { setLoadingDesc(false); }
-  };
-
-  const generateKeywords = async () => {
-    if (!apiKey) { setShowKeyInput(true); return; }
-    setLoadingKeywords(true);
-    try {
-      const result = await callAI('generate_keywords');
-      let keywords: string[] = [];
-      try { keywords = JSON.parse(result); } catch { keywords = result.split(',').map((k: string) => k.trim()); }
-      onSetMetaKeywords(keywords.slice(0, 15).join(', '));
-    } catch (e: any) {
-      alert(e.message);
-    } finally { setLoadingKeywords(false); }
-  };
-
-  const generateExcerpt = async () => {
-    if (!apiKey) { setShowKeyInput(true); return; }
-    setLoadingExcerpt(true);
-    try {
-      const result = await callAI('generate_excerpt');
-      onSetExcerpt(result.replace(/^["']|["']$/g, '').trim());
-    } catch (e: any) {
-      alert(e.message);
-    } finally { setLoadingExcerpt(false); }
-  };
-
-  const checkInternalLinks = async () => {
-    if (!apiKey) { setShowKeyInput(true); return; }
-    if (!content.trim() && !title.trim()) {
-      setLinkError('Please add some content or a title first.');
+  const generateAll = async () => {
+    const wordCount = content.replace(/<[^>]+>/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+    if (wordCount < 100) {
+      setGenError('Write at least 100 words before generating SEO metadata.');
       return;
     }
-    setLoadingLinks(true);
-    setLinkError(null);
-    setLinkSuggestions([]);
-    setSelectedLinks(new Set());
+    if (provider === 'openai' && !openaiKey) {
+      setShowKeyInput(true);
+      return;
+    }
+
+    setGenerating(true);
+    setGenError(null);
     try {
-      const { supabase } = await import('../../lib/supabase');
-      const { data: posts } = await supabase.from('posts').select('title, slug, excerpt').eq('status', 'published').limit(100);
-      const postList = (posts || []).map((p: any) => p.title);
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-assistant`, {
+      const res = await fetch('/api/editor-ai/seo-auto', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'X-OpenAI-Key': apiKey,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'suggest_internal_links',
-          title,
-          content,
-          outline: title,
-          existingPosts: postList,
+          title, content,
+          apiProvider: provider,
+          openaiKey: provider === 'openai' ? openaiKey : undefined,
         }),
       });
-      const linkData = await res.json();
-      if (linkData.error) throw new Error(linkData.error);
-      const result = linkData.result as string;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Generation failed');
 
-      let parsed: any;
-      try { parsed = JSON.parse(result); } catch { throw new Error('Could not parse link suggestions'); }
+      // Auto-populate all fields
+      if (data.seoTitle)        onSetMetaTitle(data.seoTitle.slice(0, 70));
+      if (data.metaDescription) onSetMetaDescription(data.metaDescription.slice(0, 160));
+      if (data.keywords?.length) onSetMetaKeywords(data.keywords.slice(0, 15).join(', '));
+      if (data.excerpt)          onSetExcerpt(data.excerpt);
 
-      const recs = parsed.recommendations || [];
-      const mapped: LinkSuggestion[] = recs.map((r: any) => {
-        const matchedPost = (posts || []).find((p: any) =>
-          p.title?.toLowerCase() === r.postTitle?.toLowerCase()
-        );
-        return {
-          anchor: r.anchorText || r.postTitle,
-          postTitle: r.postTitle,
-          slug: matchedPost?.slug || slugify(r.postTitle),
-          reason: r.reason,
-        };
-      });
-      setLinkSuggestions(mapped);
-    } catch (e: any) {
-      setLinkError(e.message);
-    } finally { setLoadingLinks(false); }
-  };
-
-  const insertSelectedLinks = () => {
-    const toInsert = linkSuggestions.filter((_, i) => selectedLinks.has(i));
-    if (toInsert.length === 0) return;
-
-    let updatedContent = content;
-    let insertedCount = 0;
-
-    for (const link of toInsert) {
-      const { result, inserted } = insertLinkInContent(updatedContent, link.anchor, link.slug, link.postTitle);
-      if (inserted) {
-        updatedContent = result;
-        insertedCount++;
-      }
+      setLastResult(data);
+    } catch (err: any) {
+      setGenError(err.message);
+    } finally {
+      setGenerating(false);
     }
-
-    onInsertLinks(updatedContent);
-    setSelectedLinks(new Set());
-
-    if (insertedCount < toInsert.length) {
-      const missed = toInsert.length - insertedCount;
-      setLinkError(
-        `${insertedCount} link(s) inserted within the content. ${missed} anchor text(s) not found verbatim — add those phrases to your article then try again.`
-      );
-    } else {
-      setLinkError(null);
-    }
-  };
-
-  const toggleLink = (i: number) => {
-    setSelectedLinks(prev => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i); else next.add(i);
-      return next;
-    });
   };
 
   const refreshAnalysis = () => {
     setSeoScore(computeSeoScore(title, content, metaTitle, metaDescription, metaKeywords));
   };
 
-  const scoreColor = (s: number) => s >= 75 ? 'text-green-600' : s >= 50 ? 'text-amber-600' : 'text-red-500';
+  const scoreColor = (s: number) => s >= 75 ? 'text-green-600 dark:text-green-400' : s >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-500';
+  const hasKey = provider === 'claude' || !!openaiKey;
 
   return (
     <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-900 rounded-xl border border-emerald-100 dark:border-teal-900/50 shadow-sm overflow-hidden">
+      {/* Header toggle */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -365,7 +233,7 @@ export default function AISEOAssistant({
           </div>
           <div>
             <h3 className="text-sm font-bold text-gray-900 dark:text-white">AI SEO Assistant</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Generate titles, descriptions, keywords & links</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Auto-generate titles, descriptions, keywords & excerpt</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -375,41 +243,81 @@ export default function AISEOAssistant({
             className="p-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-gray-700 transition-colors"
             title="Configure API key"
           >
-            <Key size={14} className={apiKey ? 'text-green-500' : 'text-gray-400'} />
+            <Key size={14} className={hasKey ? 'text-green-500' : 'text-gray-400'} />
           </button>
           {isOpen ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
         </div>
       </button>
 
+      {/* Key / provider settings */}
       {showKeyInput && (
-        <div className="px-4 pb-3 border-t border-emerald-100 dark:border-gray-700">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 mb-2">OpenAI API key — stored in your browser only.</p>
+        <div className="px-4 pb-4 border-t border-emerald-100 dark:border-gray-700 pt-3 space-y-3">
+          {/* Provider selector */}
           <div className="flex gap-2">
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
-              className="flex-1 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
             <button
               type="button"
-              onClick={() => { localStorage.setItem('openai_api_key', apiKey); setShowKeyInput(false); }}
-              className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
-            >Save</button>
-            <button type="button" onClick={() => setShowKeyInput(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-              <X size={14} className="text-gray-500" />
+              onClick={() => saveProvider('claude')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors border ${
+                provider === 'claude'
+                  ? 'bg-violet-600 border-violet-600 text-white'
+                  : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-violet-400'
+              }`}
+            >
+              <Bot size={12} /> Claude
+            </button>
+            <button
+              type="button"
+              onClick={() => saveProvider('openai')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-colors border ${
+                provider === 'openai'
+                  ? 'bg-green-600 border-green-600 text-white'
+                  : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-green-400'
+              }`}
+            >
+              <Sparkles size={12} /> OpenAI
             </button>
           </div>
+
+          {provider === 'openai' && (
+            <div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">OpenAI API key — stored in your browser only.</p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={openaiKey}
+                  onChange={(e) => setOpenaiKey(e.target.value)}
+                  placeholder="sk-..."
+                  className="flex-1 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+                <button
+                  type="button"
+                  onClick={saveOpenaiKey}
+                  className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700 transition-colors"
+                >Save</button>
+                <button type="button" onClick={() => setShowKeyInput(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                  <X size={14} className="text-gray-500" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {provider === 'claude' && (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">Claude uses the server-side API key. No key required.</p>
+              <button type="button" onClick={() => setShowKeyInput(false)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                <X size={14} className="text-gray-500" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {isOpen && (
         <div className="border-t border-emerald-100 dark:border-gray-700">
+          {/* Tabs */}
           <div className="flex border-b border-emerald-100 dark:border-gray-700">
             {([
-              { id: 'generate', label: 'Generate', icon: Sparkles },
-              { id: 'links', label: 'Links', icon: Link2 },
+              { id: 'generate', label: 'Generate', icon: Zap },
               { id: 'analyze', label: 'Analyze', icon: BarChart2 },
             ] as const).map(({ id, label, icon: Icon }) => (
               <button
@@ -428,122 +336,71 @@ export default function AISEOAssistant({
             ))}
           </div>
 
+          {/* GENERATE TAB */}
           {activeTab === 'generate' && (
-            <div className="p-4 space-y-3">
-              <GenerateRow
-                icon={<FileText size={14} />}
-                label="SEO Title"
-                preview={metaTitle}
-                maxChars={60}
-                loading={loadingTitle}
-                onGenerate={generateSeoTitle}
-                color="blue"
-              />
-              <GenerateRow
-                icon={<Search size={14} />}
-                label="Meta Description"
-                preview={metaDescription}
-                maxChars={160}
-                loading={loadingDesc}
-                onGenerate={generateMetaDesc}
-                color="teal"
-              />
-              <GenerateRow
-                icon={<Tag size={14} />}
-                label="Keywords"
-                preview={metaKeywords}
-                loading={loadingKeywords}
-                onGenerate={generateKeywords}
-                color="amber"
-              />
-              <GenerateRow
-                icon={<FileText size={14} />}
-                label="Post Excerpt"
-                preview={excerpt}
-                loading={loadingExcerpt}
-                onGenerate={generateExcerpt}
-                color="emerald"
-              />
-              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/40 mt-1">
-                <p className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold mb-1">Requirements</p>
+            <div className="p-4 space-y-4">
+              {/* Provider badge */}
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Generates SEO title, meta description, keywords, and excerpt from your full article.
+                </p>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  provider === 'claude'
+                    ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400'
+                    : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                }`}>
+                  {provider === 'claude' ? 'Claude' : 'OpenAI'}
+                </span>
+              </div>
+
+              {/* Generate All button */}
+              <button
+                type="button"
+                onClick={generateAll}
+                disabled={generating}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-semibold text-sm transition-all disabled:opacity-60 shadow-md shadow-emerald-200 dark:shadow-emerald-900/30"
+              >
+                {generating
+                  ? <><Loader2 size={15} className="animate-spin" /> Generating all fields…</>
+                  : <><Sparkles size={15} /> Generate All SEO Fields</>
+                }
+              </button>
+
+              {genError && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
+                  <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-700 dark:text-red-400">{genError}</p>
+                </div>
+              )}
+
+              {/* Live field previews */}
+              <div className="space-y-2.5">
+                <FieldPreview icon={<FileText size={12} />} label="SEO Title" value={metaTitle} maxChars={60} color="blue" />
+                <FieldPreview icon={<Search size={12} />} label="Meta Description" value={metaDescription} maxChars={160} color="teal" />
+                <FieldPreview icon={<Tag size={12} />} label="Keywords" value={metaKeywords} color="amber" />
+                <FieldPreview icon={<FileText size={12} />} label="Excerpt" value={excerpt} color="emerald" />
+              </div>
+
+              {lastResult && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                  <CheckCircle2 size={14} className="text-green-500 shrink-0" />
+                  <p className="text-xs text-green-700 dark:text-green-400 font-medium">All fields auto-populated successfully.</p>
+                </div>
+              )}
+
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 border border-emerald-100 dark:border-emerald-800/40">
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold mb-1">AdSense Rules Applied</p>
                 <ul className="text-xs text-emerald-600 dark:text-emerald-400 space-y-0.5">
                   <li>• Title: 50–60 chars with primary keyword</li>
                   <li>• Description: 150–160 chars, click-optimized</li>
-                  <li>• Keywords: 5–15 primary + long-tail</li>
-                  <li>• All content AdSense-policy compliant</li>
+                  <li>• Keywords: 5–15 primary + long-tail terms</li>
+                  <li>• Excerpt: 2–3 sentences, human-written tone</li>
                 </ul>
               </div>
             </div>
           )}
 
-          {activeTab === 'links' && (
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                Scan your article for internal linking opportunities using existing published posts.
-              </p>
-
-              <button
-                type="button"
-                onClick={checkInternalLinks}
-                disabled={loadingLinks}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-semibold text-sm transition-all disabled:opacity-60 shadow-md shadow-emerald-200 dark:shadow-emerald-900/30"
-              >
-                {loadingLinks ? <><Loader2 size={15} className="animate-spin" /> Scanning...</> : <><Link2 size={15} /> Check Links</>}
-              </button>
-
-              {linkError && (
-                <div className="flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-                  <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-red-700 dark:text-red-400">{linkError}</p>
-                </div>
-              )}
-
-              {linkSuggestions.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">{linkSuggestions.length} suggestions found — select to insert:</p>
-                  <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
-                    {linkSuggestions.map((s, i) => (
-                      <label key={i} className={`flex items-start gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-colors ${selectedLinks.has(i) ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-emerald-200'}`}>
-                        <input
-                          type="checkbox"
-                          checked={selectedLinks.has(i)}
-                          onChange={() => toggleLink(i)}
-                          className="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 flex-shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate">"{s.anchor}"</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate flex items-center gap-1 mt-0.5">
-                            <ExternalLink size={10} /> {s.postTitle}
-                          </p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 line-clamp-1">{s.reason}</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={insertSelectedLinks}
-                    disabled={selectedLinks.size === 0}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Link2 size={15} />
-                    Insert {selectedLinks.size > 0 ? `${selectedLinks.size} ` : ''}Links
-                  </button>
-                </div>
-              )}
-
-              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 mt-1">
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold mb-1">Rules</p>
-                <ul className="text-xs text-gray-400 dark:text-gray-500 space-y-0.5">
-                  <li>• Minimum 40 internal links per article (SEO best practice)</li>
-                  <li>• Links auto-inserted at the anchor word in your content</li>
-                  <li>• Anchor text must exist verbatim in your article</li>
-                </ul>
-              </div>
-            </div>
-          )}
-
+          {/* ANALYZE TAB */}
           {activeTab === 'analyze' && (
             <div className="p-4 space-y-4">
               <div className="flex items-center justify-between">
@@ -562,7 +419,7 @@ export default function AISEOAssistant({
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {seoScore.overall >= 75 ? 'Good SEO' : seoScore.overall >= 50 ? 'Needs work' : 'Poor SEO'}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{seoScore.contentLength} words</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{seoScore.wordCount.toLocaleString()} words</p>
                     </div>
                   </div>
 
@@ -571,31 +428,29 @@ export default function AISEOAssistant({
                       <div key={i} className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
                           {d.pass
-                            ? <CheckCircle2 size={13} className="text-green-500 flex-shrink-0" />
-                            : <AlertCircle size={13} className="text-red-400 flex-shrink-0" />}
+                            ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
+                            : <AlertCircle size={13} className="text-red-400 shrink-0" />}
                           <span className="text-xs text-gray-600 dark:text-gray-400 truncate">{d.label}</span>
                         </div>
-                        <span className={`text-xs font-medium flex-shrink-0 ${d.pass ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{d.info}</span>
+                        <span className={`text-xs font-medium shrink-0 ${d.pass ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>{d.info}</span>
                       </div>
                     ))}
                   </div>
 
-                  {seoScore.suggestions.length > 0 && (
-                    <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3 border border-amber-200 dark:border-amber-800/40">
+                  {seoScore.suggestions.length > 0 ? (
+                    <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 border border-amber-200 dark:border-amber-800/40">
                       <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2">Improvements</p>
                       <ul className="space-y-1">
                         {seoScore.suggestions.map((s, i) => (
                           <li key={i} className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
-                            <span className="flex-shrink-0 mt-0.5">•</span>{s}
+                            <span className="shrink-0 mt-0.5">•</span>{s}
                           </li>
                         ))}
                       </ul>
                     </div>
-                  )}
-
-                  {seoScore.suggestions.length === 0 && (
-                    <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                      <CheckCircle2 size={15} className="text-green-500 flex-shrink-0" />
+                  ) : (
+                    <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-200 dark:border-green-800">
+                      <CheckCircle2 size={15} className="text-green-500 shrink-0" />
                       <p className="text-xs text-green-700 dark:text-green-400 font-medium">All SEO checks passed!</p>
                     </div>
                   )}
@@ -613,82 +468,38 @@ export default function AISEOAssistant({
   );
 }
 
-function GenerateRow({
-  icon, label, preview, maxChars, loading, onGenerate, color,
+function FieldPreview({
+  icon, label, value, maxChars, color,
 }: {
   icon: React.ReactNode;
   label: string;
-  preview: string;
+  value: string;
   maxChars?: number;
-  loading: boolean;
-  onGenerate: () => void;
   color: string;
 }) {
-  const colorMap: Record<string, string> = {
-    blue: 'bg-blue-600 hover:bg-blue-700',
-    teal: 'bg-teal-600 hover:bg-teal-700',
-    amber: 'bg-amber-600 hover:bg-amber-700',
-    emerald: 'bg-emerald-600 hover:bg-emerald-700',
+  const dotColor: Record<string, string> = {
+    blue: 'bg-blue-500', teal: 'bg-teal-500', amber: 'bg-amber-500', emerald: 'bg-emerald-500',
   };
-
   return (
-    <div className="bg-white dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-gray-700 p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-          <span className="text-gray-400">{icon}</span>
-          <span className="text-xs font-semibold">{label}</span>
-          {preview && maxChars && (
-            <span className={`text-xs ${preview.length > maxChars ? 'text-red-500' : 'text-gray-400'}`}>
-              {preview.length}/{maxChars}
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={onGenerate}
-          disabled={loading}
-          className={`flex items-center gap-1.5 px-3 py-1.5 ${colorMap[color] || colorMap.blue} text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed`}
-        >
-          {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-          {loading ? 'Generating…' : 'Generate'}
-        </button>
+    <div className="bg-white dark:bg-gray-800/70 rounded-xl border border-gray-100 dark:border-gray-700 p-2.5">
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className={`w-2 h-2 rounded-full ${dotColor[color] || 'bg-gray-400'}`} />
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1">
+          <span className="text-gray-400">{icon}</span> {label}
+        </span>
+        {value && maxChars && (
+          <span className={`ml-auto text-xs ${value.length > maxChars ? 'text-red-500' : 'text-gray-400'}`}>
+            {value.length}/{maxChars}
+          </span>
+        )}
       </div>
-      {preview && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-2 mt-1">
-          {preview}
+      {value ? (
+        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2 py-1.5">
+          {value}
         </p>
+      ) : (
+        <p className="text-xs text-gray-300 dark:text-gray-600 italic px-2 py-1.5">Not yet generated</p>
       )}
     </div>
   );
-}
-
-function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
-
-/** Replaces the first occurrence of anchor text in a non-tag text node with an <a> link. */
-function insertLinkInContent(
-  content: string,
-  anchor: string,
-  slug: string,
-  postTitle: string,
-): { result: string; inserted: boolean } {
-  const linkHtml = `<a href="/${slug}" title="${postTitle}">${anchor}</a>`;
-  // Split into [text, <tag>, text, <tag>, ...] segments
-  const parts = content.split(/(<[^>]+>)/);
-  let inserted = false;
-
-  const result = parts.map(part => {
-    if (inserted || part.startsWith('<')) return part;
-    const lowerPart = part.toLowerCase();
-    const lowerAnchor = anchor.toLowerCase();
-    const idx = lowerPart.indexOf(lowerAnchor);
-    if (idx !== -1) {
-      inserted = true;
-      return part.slice(0, idx) + linkHtml + part.slice(idx + anchor.length);
-    }
-    return part;
-  });
-
-  return { result: result.join(''), inserted };
 }

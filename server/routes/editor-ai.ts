@@ -784,4 +784,239 @@ Text: ${text}`;
   }
 });
 
+// ── SEO AUTO-GENERATE (all fields at once) ───────────────────────────────────
+
+router.post('/seo-auto', async (req: Request, res: Response) => {
+  try {
+    const { title, content, apiProvider = 'claude' } = req.body as {
+      title: string; content: string; apiProvider?: string;
+    };
+    if (!content && !title) return res.status(400).json({ error: 'Title or content required' });
+
+    const plainText = (content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const wordCount = plainText.split(/\s+/).filter(Boolean).length;
+    const h2s = (content || '').match(/<h2[^>]*>(.*?)<\/h2>/gi) || [];
+
+    const systemPrompt = `You are an expert SEO content strategist for an African news and lifestyle website (mayobebros.com). You write precise, compelling meta content optimized for Google search. Return ONLY valid JSON — no extra text, no markdown.`;
+
+    const prompt = `Generate all SEO metadata for this article. Return ONLY this JSON:
+{
+  "seoTitle": "Compelling SEO title 50-60 chars with primary keyword near start",
+  "metaDescription": "Compelling meta description exactly 150-160 characters. Include primary keyword. End with a value proposition or call-to-action.",
+  "keywords": "keyword1, keyword2, keyword3, keyword4, keyword5, keyword6, keyword7, keyword8, keyword9, keyword10",
+  "excerpt": "Compelling article excerpt/teaser 150-200 words that hooks the reader and summarizes the article value without giving everything away. Write in active voice."
+}
+
+Rules:
+- SEO Title: 50-60 chars, primary keyword within first 3 words if possible
+- Meta Description: EXACTLY 150-160 chars (count carefully)
+- Keywords: 10-15 comma-separated, mix of short-tail and long-tail, Africa/Kenya context where relevant
+- Excerpt: 150-200 words, hooks reader, ends with implied promise of value
+
+Article Title: ${title || 'Not set'}
+Word Count: ${wordCount}
+H2 Headings: ${h2s.map(h => h.replace(/<[^>]+>/g, '')).slice(0, 8).join(' | ') || 'None'}
+Content: ${plainText.substring(0, 3000)}`;
+
+    let raw: string;
+    if (apiProvider === 'openai') {
+      raw = await callOpenAI(prompt, systemPrompt, 2000);
+    } else {
+      raw = await callAI(prompt, systemPrompt, 2000);
+    }
+    const parsed = extractJson(raw);
+    return res.json(parsed);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GEMINI IMAGE GENERATION ───────────────────────────────────────────────────
+
+const IMAGE_STYLE_SUFFIX = [
+  'hyper-realistic photograph',
+  '8K UHD ultra-high resolution',
+  'shot with Canon EOS R5, 85mm f/1.8 prime lens',
+  'ultra-sharp focus on subject',
+  'professional photography lighting',
+  'no AI smoothing, no digital artifacts',
+  'rich color grading, high dynamic range',
+  'magazine-quality photo',
+  '16:9 widescreen composition',
+].join(', ');
+
+router.post('/generate-image', async (req: Request, res: Response) => {
+  try {
+    const { prompt, geminiApiKey } = req.body as { prompt: string; geminiApiKey: string };
+    if (!prompt) return res.status(400).json({ error: 'Prompt required' });
+
+    const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required. Add GEMINI_API_KEY to env or enter it in the panel.' });
+
+    const fullPrompt = `${prompt.trim()}, ${IMAGE_STYLE_SUFFIX}`;
+
+    // Try Imagen 3 first (best quality), fall back to Gemini 2.0 Flash image generation
+    const imagen3Url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+    const imgRes = await fetch(imagen3Url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        instances: [{ prompt: fullPrompt }],
+        parameters: {
+          sampleCount: 1,
+          aspectRatio: '16:9',
+          safetyFilterLevel: 'block_few',
+          personGeneration: 'allow_adult',
+        },
+      }),
+    });
+
+    if (!imgRes.ok) {
+      const errBody = await imgRes.json().catch(() => ({})) as any;
+      throw new Error(errBody?.error?.message || `Imagen API error ${imgRes.status}`);
+    }
+
+    const imgData = await imgRes.json() as any;
+    const prediction = imgData?.predictions?.[0];
+    if (!prediction?.bytesBase64Encoded) throw new Error('No image returned from Imagen API');
+
+    return res.json({
+      imageBase64: prediction.bytesBase64Encoded,
+      mimeType: prediction.mimeType || 'image/png',
+      prompt: fullPrompt,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GEMINI IMAGE TRANSFORM ────────────────────────────────────────────────────
+
+router.post('/transform-image', async (req: Request, res: Response) => {
+  try {
+    const { imageBase64, imageUrl, instructions, geminiApiKey } = req.body as {
+      imageBase64?: string; imageUrl?: string; instructions: string; geminiApiKey: string;
+    };
+    if (!instructions) return res.status(400).json({ error: 'Instructions required' });
+    if (!imageBase64 && !imageUrl) return res.status(400).json({ error: 'Image source required' });
+
+    const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required' });
+
+    let base64Data = imageBase64;
+    let mimeType = 'image/jpeg';
+
+    // If URL provided, fetch the image
+    if (imageUrl && !imageBase64) {
+      const fetchRes = await fetch(imageUrl);
+      if (!fetchRes.ok) throw new Error(`Could not fetch image from URL: ${fetchRes.status}`);
+      const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
+      mimeType = contentType.split(';')[0];
+      const arrayBuffer = await fetchRes.arrayBuffer();
+      base64Data = Buffer.from(arrayBuffer).toString('base64');
+    }
+
+    const transformPrompt = `Transform and edit this image following these instructions: ${instructions}
+
+Apply these quality standards:
+- ${IMAGE_STYLE_SUFFIX}
+- Maintain 16:9 aspect ratio
+- Enhance to 8K UHD quality
+- Professional photo editing result`;
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`;
+
+    const body = {
+      contents: [{
+        parts: [
+          { inlineData: { mimeType, data: base64Data } },
+          { text: transformPrompt },
+        ],
+      }],
+      generationConfig: {
+        responseModalities: ['IMAGE', 'TEXT'],
+      },
+    };
+
+    const transformRes = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!transformRes.ok) {
+      const errBody = await transformRes.json().catch(() => ({})) as any;
+      throw new Error(errBody?.error?.message || `Gemini transform error ${transformRes.status}`);
+    }
+
+    const transformData = await transformRes.json() as any;
+    const parts = transformData?.candidates?.[0]?.content?.parts || [];
+    const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
+    if (!imagePart) throw new Error('No image returned from Gemini transform');
+
+    return res.json({
+      imageBase64: imagePart.inlineData.data,
+      mimeType: imagePart.inlineData.mimeType || 'image/png',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── BULK H2 IMAGE GENERATION ──────────────────────────────────────────────────
+
+router.post('/bulk-images', async (req: Request, res: Response) => {
+  try {
+    const { headings, articleTitle, geminiApiKey } = req.body as {
+      headings: string[];
+      articleTitle: string;
+      geminiApiKey: string;
+    };
+    if (!headings || headings.length === 0) return res.status(400).json({ error: 'Headings required' });
+
+    const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required' });
+
+    // Generate one image per heading sequentially (to avoid rate limits)
+    const results: { heading: string; imageBase64: string; mimeType: string; prompt: string }[] = [];
+
+    for (const heading of headings.slice(0, 12)) {
+      try {
+        const imagePrompt = `Editorial photograph for article section: "${heading}" in context of "${articleTitle}". Professional news/lifestyle magazine photo, African context where relevant, ${IMAGE_STYLE_SUFFIX}`;
+
+        const imgRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instances: [{ prompt: imagePrompt }],
+            parameters: { sampleCount: 1, aspectRatio: '16:9', safetyFilterLevel: 'block_few' },
+          }),
+        });
+
+        if (imgRes.ok) {
+          const data = await imgRes.json() as any;
+          const pred = data?.predictions?.[0];
+          if (pred?.bytesBase64Encoded) {
+            results.push({
+              heading,
+              imageBase64: pred.bytesBase64Encoded,
+              mimeType: pred.mimeType || 'image/png',
+              prompt: imagePrompt,
+            });
+          }
+        }
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch {
+        // Skip failed headings, continue with others
+      }
+    }
+
+    return res.json({ images: results, generated: results.length, total: headings.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

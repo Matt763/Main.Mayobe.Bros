@@ -11,6 +11,8 @@ import Toast from '../../components/admin/Toast';
 import WritingToolkit from '../../components/admin/toolkit/WritingToolkit';
 import WritingStatsBar from '../../components/admin/toolkit/WritingStatsBar';
 import AIRewriteFloater from '../../components/admin/toolkit/AIRewriteFloater';
+import AISEOAssistant from '../../components/admin/AISEOAssistant';
+import AIImageGenerator from '../../components/admin/AIImageGenerator';
 import {
   Save, ArrowLeft, Image as ImageIcon, Calendar, User, Tag, Folder,
   Star, Globe, Send, AlertTriangle, X, CheckCircle2, FileText, Clock,
@@ -668,6 +670,25 @@ img{max-width:100%;border-radius:6px;display:block;margin:1em auto}
                   onRestoreVersion={handleRestoreVersion}
                 />
               </div>
+
+              <AISEOAssistant
+                title={title}
+                content={content}
+                excerpt={excerpt}
+                metaTitle={metaTitle}
+                metaDescription={metaDescription}
+                metaKeywords={metaKeywords}
+                onSetMetaTitle={setMetaTitle}
+                onSetMetaDescription={setMetaDescription}
+                onSetMetaKeywords={setMetaKeywords}
+                onSetExcerpt={setExcerpt}
+              />
+
+              <AIImageGenerator
+                content={content}
+                onInsertContent={handleInsertContent}
+                onSetFeaturedImage={setFeaturedImage}
+              />
 
               {isCEO && (
                 <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-amber-100 dark:border-amber-900/30 p-4">

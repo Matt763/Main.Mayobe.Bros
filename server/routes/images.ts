@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import sharp from 'sharp';
 import { requireAuth } from '../middleware/auth.js';
 import { getSupabaseClient } from '../utils/supabase.js';
 
@@ -73,6 +74,64 @@ router.post('/upload', requireAuth, upload.single('image'), async (req, res) => 
     });
   } catch (error) {
     console.error('Error uploading image:', error);
+    res.status(500).json({ error: 'Failed to upload image' });
+  }
+});
+
+// Upload a base64-encoded image (e.g. from AI generation), compress to WebP via sharp
+router.post('/upload-base64', requireAuth, async (req, res) => {
+  try {
+    const { base64, mimeType = 'image/png', label = 'ai-generated' } = req.body;
+    if (!base64) return res.status(400).json({ error: 'base64 field is required' });
+
+    const inputBuffer = Buffer.from(base64, 'base64');
+    const webpBuffer = await sharp(inputBuffer)
+      .webp({ quality: 90 })
+      .toBuffer();
+
+    const supabase = getSupabaseClient();
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const filename = `${label}-${uniqueSuffix}.webp`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('media')
+      .upload(filename, webpBuffer, {
+        contentType: 'image/webp',
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error('Supabase storage upload error:', uploadError);
+      return res.status(500).json({ error: 'Failed to upload image to storage' });
+    }
+
+    const { data: urlData } = supabase.storage.from('media').getPublicUrl(filename);
+    const publicUrl = urlData.publicUrl;
+
+    const { data: mediaRecord, error: dbError } = await supabase
+      .from('media_library')
+      .insert({
+        filename,
+        original_filename: filename,
+        file_path: filename,
+        file_url: publicUrl,
+        file_type: 'image/webp',
+        file_size: webpBuffer.length,
+        source: 'ai-generated',
+      })
+      .select()
+      .single();
+
+    if (dbError) console.error('DB insert error:', dbError);
+
+    res.json({
+      url: publicUrl,
+      fileUrl: publicUrl,
+      filename,
+      id: mediaRecord?.id,
+    });
+  } catch (error) {
+    console.error('Error uploading base64 image:', error);
     res.status(500).json({ error: 'Failed to upload image' });
   }
 });
