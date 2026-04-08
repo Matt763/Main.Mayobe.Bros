@@ -23,6 +23,7 @@ interface AnalysisResult {
   hasMetaKeywords: boolean;
   hasImages: boolean;
   hasFeaturedImage: boolean;
+  internalLinks: number;
 }
 
 interface HeadingCheck {
@@ -76,20 +77,27 @@ function analyzeContent(title: string, content: string, excerpt: string, metaDes
     keywordHits = 5;
   }
 
+  const internalLinks = (content.match(/href="\//gi) || []).length;
+
   let seoScore = 0;
-  if (title.length >= 30 && title.length <= 70) seoScore += 15;
-  else if (title.length > 0) seoScore += 8;
-  if (wordCount >= 700) seoScore += 20;
-  else if (wordCount >= 300) seoScore += 10;
-  if (headingStructure.hasH2) seoScore += 15;
+  if (title.length >= 30 && title.length <= 70) seoScore += 12;
+  else if (title.length > 0) seoScore += 5;
+  if (wordCount >= 4000) seoScore += 25;
+  else if (wordCount >= 2000) seoScore += 15;
+  else if (wordCount >= 700) seoScore += 8;
+  if (headingStructure.h2Count >= 6) seoScore += 15;
+  else if (headingStructure.hasH2) seoScore += 8;
   if (headingStructure.hasH3) seoScore += 8;
-  if (hasMetaDescription && metaDescription.length >= 120 && metaDescription.length <= 160) seoScore += 15;
-  else if (hasMetaDescription) seoScore += 8;
-  if (hasMetaKeywords && keywords.length >= 3) seoScore += 10;
-  else if (hasMetaKeywords) seoScore += 5;
-  if (keywordHits > 5) seoScore += 10;
-  else if (keywordHits > 2) seoScore += 5;
-  if (hasImages) seoScore += 7;
+  if (headingStructure.hasH4) seoScore += 5;
+  if (hasMetaDescription && metaDescription.length >= 120 && metaDescription.length <= 160) seoScore += 12;
+  else if (hasMetaDescription) seoScore += 6;
+  if (hasMetaKeywords && keywords.length >= 5) seoScore += 10;
+  else if (hasMetaKeywords && keywords.length >= 3) seoScore += 5;
+  if (keywordHits > 5) seoScore += 8;
+  else if (keywordHits > 2) seoScore += 4;
+  if (hasImages) seoScore += 5;
+  if (internalLinks >= 40) seoScore += 10;
+  else if (internalLinks >= 10) seoScore += 5;
   seoScore = Math.min(100, seoScore);
 
   let readabilityScore = 100;
@@ -109,11 +117,13 @@ function analyzeContent(title: string, content: string, excerpt: string, metaDes
 
   const suggestions: Suggestion[] = [];
 
-  if (wordCount < 300) suggestions.push({ type: 'error', message: `Content too short (${wordCount} words). Aim for at least 700 words.` });
-  else if (wordCount < 700) suggestions.push({ type: 'warning', message: `Article is ${wordCount} words. Google AdSense prefers 700+ words.` });
+  if (wordCount < 500) suggestions.push({ type: 'error', message: `Content too short (${wordCount} words). AdSense requires substantial content — aim for 4,000–5,000 words.` });
+  else if (wordCount < 2000) suggestions.push({ type: 'warning', message: `Article is ${wordCount} words. For AdSense approval and top rankings, aim for 4,000–5,000 words.` });
+  else if (wordCount < 4000) suggestions.push({ type: 'warning', message: `Article is ${wordCount} words. Expand to 4,000–5,000 words for maximum SEO value and AdSense revenue.` });
 
-  if (!headingStructure.hasH2) suggestions.push({ type: 'error', message: 'Add H2 headings to structure your content for better SEO.' });
-  if (!headingStructure.hasH3 && wordCount > 500) suggestions.push({ type: 'warning', message: 'Add H3 subheadings to improve readability and structure.' });
+  if (!headingStructure.hasH2) suggestions.push({ type: 'error', message: 'Add H2 headings to structure content for SEO.' });
+  else if (headingStructure.h2Count < 5) suggestions.push({ type: 'warning', message: `Only ${headingStructure.h2Count} H2 headings found. Long-form articles (4,000+ words) should have 8–12 H2 sections.` });
+  if (!headingStructure.hasH3 && wordCount > 500) suggestions.push({ type: 'warning', message: 'Add H3 subheadings inside each section to improve readability and Google ranking.' });
 
   if (!hasMetaDescription) suggestions.push({ type: 'error', message: 'Missing meta description. Add one (120–160 characters) for better SEO.' });
   else if (metaDescription.length < 120) suggestions.push({ type: 'warning', message: `Meta description is short (${metaDescription.length} chars). Aim for 120–160 characters.` });
@@ -147,6 +157,7 @@ function analyzeContent(title: string, content: string, excerpt: string, metaDes
     hasMetaKeywords,
     hasImages,
     hasFeaturedImage: false,
+    internalLinks,
   };
 }
 
@@ -154,12 +165,56 @@ function checkAdSenseCompliance(content: string, title: string, wordCount: numbe
   const problems: string[] = [];
   const text = (content + ' ' + title).toLowerCase();
 
-  const prohibited = ['casino', 'gambling', 'pornography', 'adult content', 'xxx', 'hack', 'crack software', 'illegal drugs'];
-  prohibited.forEach(term => {
-    if (text.includes(term)) problems.push(`Content may violate AdSense policies: contains "${term}".`);
+  // Google AdSense prohibited content categories
+  const prohibited: { term: string; policy: string }[] = [
+    { term: 'casino', policy: 'Gambling & Betting' },
+    { term: 'online casino', policy: 'Gambling & Betting' },
+    { term: 'sports betting', policy: 'Gambling & Betting' },
+    { term: 'gambling', policy: 'Gambling & Betting' },
+    { term: 'pornography', policy: 'Adult Content' },
+    { term: 'adult content', policy: 'Adult Content' },
+    { term: 'xxx', policy: 'Adult Content' },
+    { term: 'escort service', policy: 'Adult Content' },
+    { term: 'crack software', policy: 'Piracy & Copyright' },
+    { term: 'warez', policy: 'Piracy & Copyright' },
+    { term: 'keygen', policy: 'Piracy & Copyright' },
+    { term: 'serial key generator', policy: 'Piracy & Copyright' },
+    { term: 'illegal drugs', policy: 'Drug-Related Content' },
+    { term: 'buy cocaine', policy: 'Drug-Related Content' },
+    { term: 'buy heroin', policy: 'Drug-Related Content' },
+    { term: 'get rich quick', policy: 'Deceptive Content' },
+    { term: 'make money fast', policy: 'Deceptive Content' },
+    { term: 'you have been selected', policy: 'Misleading Advertising' },
+    { term: 'click here to win', policy: 'Misleading Advertising' },
+    { term: 'guaranteed income', policy: 'Deceptive Claims' },
+    { term: 'miracle cure', policy: 'Misleading Health Claims' },
+    { term: 'hack facebook', policy: 'Enabling Dishonest Behavior' },
+    { term: 'hack instagram', policy: 'Enabling Dishonest Behavior' },
+    { term: 'how to hack', policy: 'Enabling Dishonest Behavior' },
+  ];
+
+  prohibited.forEach(({ term, policy }) => {
+    if (text.includes(term)) {
+      problems.push(`AdSense Policy Violation (${policy}): remove or rewrite content containing "${term}".`);
+    }
   });
 
-  if (wordCount > 0 && wordCount < 150) problems.push('Very short content may not meet AdSense quality requirements.');
+  // Quality checks
+  if (wordCount > 0 && wordCount < 600) {
+    problems.push('Content too short for AdSense approval. Google requires substantial, original content (600–800 words minimum; 4,000+ words recommended for monetization).');
+  }
+
+  // Basic keyword stuffing detection
+  const words = text.split(/\s+/).filter(Boolean);
+  const wordFreq: Record<string, number> = {};
+  words.forEach(w => {
+    const clean = w.replace(/[^a-z]/g, '');
+    if (clean.length > 4) wordFreq[clean] = (wordFreq[clean] || 0) + 1;
+  });
+  const topEntry = Object.entries(wordFreq).sort((a, b) => b[1] - a[1])[0];
+  if (topEntry && words.length > 100 && topEntry[1] / words.length > 0.04) {
+    problems.push(`Possible keyword stuffing: "${topEntry[0]}" appears ${topEntry[1]} times. AdSense penalizes keyword-stuffed content — use synonyms and vary your language.`);
+  }
 
   return problems;
 }
@@ -273,20 +328,20 @@ export default function AIPostAnalyzer({ title, content, excerpt, metaDescriptio
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <StatCard label="Word Count" value={analysis.wordCount} target={700} unit="words" />
-                <StatCard label="Paragraphs" value={analysis.paragraphCount} target={5} unit="sections" />
-                <StatCard label="H2 Headings" value={analysis.headingStructure.h2Count} target={2} unit="headings" />
-                <StatCard label="H3 Headings" value={analysis.headingStructure.h3Count} target={2} unit="subheadings" />
+                <StatCard label="Word Count" value={analysis.wordCount} target={4000} unit="words" />
+                <StatCard label="Paragraphs" value={analysis.paragraphCount} target={15} unit="sections" />
+                <StatCard label="H2 Headings" value={analysis.headingStructure.h2Count} target={8} unit="headings" />
+                <StatCard label="H3 Headings" value={analysis.headingStructure.h3Count} target={6} unit="subheadings" />
               </div>
 
               <div className="space-y-2">
-                <CheckRow label="H2 Headings" passed={analysis.headingStructure.hasH2} info={`${analysis.headingStructure.h2Count} found`} />
-                <CheckRow label="H3 Subheadings" passed={analysis.headingStructure.hasH3} info={`${analysis.headingStructure.h3Count} found`} />
+                <CheckRow label="H2 Headings (8+)" passed={analysis.headingStructure.h2Count >= 8} info={`${analysis.headingStructure.h2Count} found`} />
+                <CheckRow label="H3 Subheadings (4+)" passed={analysis.headingStructure.h3Count >= 4} info={`${analysis.headingStructure.h3Count} found`} />
                 <CheckRow label="Meta Description" passed={analysis.hasMetaDescription} info={analysis.hasMetaDescription ? 'Added' : 'Missing'} />
                 <CheckRow label="Keywords Set" passed={analysis.hasMetaKeywords} info={analysis.hasMetaKeywords ? 'Added' : 'Missing'} />
                 <CheckRow label="Images" passed={analysis.hasImages} info={analysis.hasImages ? 'Found' : 'None'} />
-                <CheckRow label="700+ Words" passed={analysis.wordCount >= 700} info={`${analysis.wordCount} words`} />
-                <CheckRow label="AdSense Safe" passed={analysis.adSenseCompliant} info={analysis.adSenseCompliant ? 'Passed' : 'Issues found'} />
+                <CheckRow label="4,000+ Words" passed={analysis.wordCount >= 4000} info={`${analysis.wordCount} words`} />
+                <CheckRow label="AdSense Compliant" passed={analysis.adSenseCompliant} info={analysis.adSenseCompliant ? 'Passed' : 'Issues found'} />
               </div>
 
               {analysis.suggestions.length > 0 && (

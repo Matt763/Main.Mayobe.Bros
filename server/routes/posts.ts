@@ -4,6 +4,7 @@ import { getSupabaseClient } from '../utils/supabase.js';
 import { dispatchPostNewsletter } from '../utils/newsletterDispatch.js';
 import { notifySearchEngines } from '../utils/searchPing.js';
 import { logActivity } from '../utils/activityLogger.js';
+import { invalidateSitemapCache } from '../utils/sitemapCache.js';
 
 const router = Router();
 
@@ -154,6 +155,8 @@ router.post('/', requireAuth, async (req, res) => {
     });
 
     if (data.status === 'published') {
+      invalidateSitemapCache(['posts', 'image', 'video', 'index']);
+
       const cats = data.categories as Record<string, string> | null;
       dispatchPostNewsletter({
         id: data.id as string,
@@ -253,6 +256,11 @@ router.put('/:slug', requireAuth, async (req, res) => {
       description: `${editorName} ${updateAction} the post "${data.title}".`,
     });
 
+    // Invalidate sitemap cache whenever a published post changes (create, edit, or status change).
+    if (wasPublished || data.status === 'published') {
+      invalidateSitemapCache(['posts', 'image', 'video', 'index']);
+    }
+
     // Only dispatch newsletter when a post newly becomes published (draft → published).
     // Editing an already-published post should NOT re-trigger the newsletter.
     if (!wasPublished && data.status === 'published') {
@@ -311,6 +319,7 @@ router.delete('/:slug', requireAuth, async (req, res) => {
       .eq('slug', req.params.slug);
 
     if (error) throw error;
+    invalidateSitemapCache(['posts', 'image', 'video', 'index']);
     res.json({ message: 'Post deleted successfully' });
   } catch (error) {
     console.error('Error deleting post:', error);

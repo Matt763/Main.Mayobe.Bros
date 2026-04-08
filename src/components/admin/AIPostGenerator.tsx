@@ -164,9 +164,10 @@ export default function AIPostGenerator({ onInsertContent, onSetTitle, title }: 
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-100 dark:border-blue-800/40">
             <p className="text-xs text-blue-700 dark:text-blue-300 font-semibold mb-1">Generation rules:</p>
             <ul className="text-xs text-blue-600 dark:text-blue-400 space-y-0.5">
-              <li>• Minimum 700 words with structured headings</li>
-              <li>• H2, H3, H4 sections + introduction & conclusion</li>
-              <li>• SEO-optimized & AdSense policy compliant</li>
+              <li>• 4,000–5,000 words with deep, expert coverage</li>
+              <li>• 8–12 H2 sections + H3/H4 subheadings, FAQ & conclusion</li>
+              <li>• Google AdSense compliant + EEAT signals built in</li>
+              <li>• SEO-optimized with natural keyword distribution</li>
             </ul>
           </div>
 
@@ -205,7 +206,7 @@ export default function AIPostGenerator({ onInsertContent, onSetTitle, title }: 
 
           {loading && (
             <div className="text-center">
-              <p className="text-xs text-gray-500 dark:text-gray-400">Writing a 700+ word article with headings, sections and SEO optimization...</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Writing a 4,000–5,000 word article with expert insights, AdSense compliance, EEAT signals and full SEO optimization…</p>
               <div className="mt-2 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full animate-pulse" style={{ width: '70%' }} />
               </div>

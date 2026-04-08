@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Map, ChevronRight, Folder, Tag, FileText, Info } from 'lucide-react';
+import { ArrowLeft, Map, ChevronRight, Folder, Tag, FileText, Info, ExternalLink, Globe } from 'lucide-react';
 import { api } from '../lib/api';
 
 interface Category { id: string; name: string; slug: string; }
 interface Label { id: string; name: string; slug: string; categoryId: string; }
 interface Post { id: string; title: string; slug: string; categorySlug: string; labelSlug?: string; published: boolean; }
+
+const XML_SITEMAPS = [
+  { label: 'Sitemap Index',       href: '/sitemap.xml',              desc: 'Master index of all sitemaps' },
+  { label: 'Pages Sitemap',       href: '/authoritative-sitemap.xml', desc: 'Homepage, about, policies' },
+  { label: 'Posts Sitemap',       href: '/posts-sitemap1.xml',        desc: 'All published articles' },
+  { label: 'Categories Sitemap',  href: '/category-sitemap1.xml',     desc: 'Categories & topic labels' },
+  { label: 'Image Sitemap',       href: '/image-sitemap1.xml',        desc: 'All post images' },
+  { label: 'Video Sitemap',       href: '/video-sitemap1.xml',        desc: 'Embedded videos' },
+];
 
 export default function SitemapPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -44,16 +53,16 @@ export default function SitemapPage() {
   }, {});
 
   const staticPages = [
-    { label: 'Home', to: '/' },
-    { label: 'Popular Posts', to: '/popular' },
-    { label: 'About Us', to: '/about' },
-    { label: 'Contact Us', to: '/contact' },
-    { label: 'Advertise With Us', to: '/advertise' },
-    { label: 'Privacy Policy', to: '/privacy-policy' },
-    { label: 'Terms of Service', to: '/terms-of-service' },
-    { label: 'Cookie Policy', to: '/cookie-policy' },
-    { label: 'Cache Policy', to: '/cache-policy' },
-    { label: 'RSS Feed', to: '/rss' },
+    { label: 'Home',                 to: '/' },
+    { label: 'Popular Posts',        to: '/popular' },
+    { label: 'About Us',             to: '/about' },
+    { label: 'Contact Us',           to: '/contact' },
+    { label: 'Advertise With Us',    to: '/advertise' },
+    { label: 'Privacy Policy',       to: '/privacy-policy' },
+    { label: 'Terms of Service',     to: '/terms-of-service' },
+    { label: 'Cookie Policy',        to: '/cookie-policy' },
+    { label: 'Cache Policy',         to: '/cache-policy' },
+    { label: 'RSS Feed',             to: '/rss' },
   ];
 
   return (
@@ -75,6 +84,34 @@ export default function SitemapPage() {
       </div>
 
       <div className="container mx-auto px-4 sm:px-6 max-w-5xl py-12 sm:py-16">
+        {/* XML Sitemaps for Search Engines */}
+        <section className="mb-12">
+          <div className="flex items-center gap-2.5 mb-5">
+            <div className="w-8 h-8 bg-green-50 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+              <Globe size={16} className="text-green-600 dark:text-green-400" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">XML Sitemaps</h2>
+            <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">for search engines</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {XML_SITEMAPS.map(({ label, href, desc }) => (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 px-4 py-3 bg-green-50 dark:bg-green-900/10 hover:bg-green-100 dark:hover:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-900 hover:border-green-300 dark:hover:border-green-700 group transition-all"
+              >
+                <ExternalLink size={14} className="text-green-500 group-hover:text-green-600 transition-colors flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-sm font-medium text-gray-800 dark:text-gray-200 group-hover:text-green-700 dark:group-hover:text-green-400 transition-colors">{label}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">{desc}</div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />

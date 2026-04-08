@@ -54,7 +54,7 @@ export default function Footer() {
 
   if (isAdmin) return null;
 
-  const quickLinks = [
+  const quickLinks: { label: string; to: string; external?: boolean }[] = [
     { label: 'Home', to: '/' },
     { label: 'Popular Posts', to: '/popular' },
     { label: 'About Us', to: '/about' },
@@ -67,6 +67,7 @@ export default function Footer() {
     { label: 'Fact Checking Policy', to: '/fact-checking-policy' },
     { label: 'Cache Policy', to: '/cache-policy' },
     { label: 'Sitemap', to: '/sitemap' },
+    { label: 'XML Sitemap', to: '/sitemap.xml', external: true },
     { label: 'RSS Feed', to: '/rss' },
   ];
 
@@ -124,15 +125,27 @@ export default function Footer() {
               Quick Links
             </h4>
             <ul className="grid grid-cols-1 gap-2.5">
-              {quickLinks.map(({ label, to }) => (
+              {quickLinks.map(({ label, to, external }) => (
                 <li key={to}>
-                  <Link
-                    to={to}
-                    className="group flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
-                  >
-                    <ArrowRight size={13} className="text-blue-500 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0" />
-                    {label}
-                  </Link>
+                  {external ? (
+                    <a
+                      href={to}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      <ArrowRight size={13} className="text-blue-500 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0" />
+                      {label}
+                    </a>
+                  ) : (
+                    <Link
+                      to={to}
+                      className="group flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+                    >
+                      <ArrowRight size={13} className="text-blue-500 opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0 transition-all duration-200 flex-shrink-0" />
+                      {label}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,9 +7,9 @@ import AdminLayout from '../../components/admin/AdminLayout';
 import RichTextEditor from '../../components/admin/RichTextEditor';
 import ImagePicker from '../../components/admin/ImagePicker';
 import Toast from '../../components/admin/Toast';
-import AIPostGenerator from '../../components/admin/AIPostGenerator';
-import AIPostAnalyzer from '../../components/admin/AIPostAnalyzer';
-import AISEOAssistant from '../../components/admin/AISEOAssistant';
+import WritingToolkit from '../../components/admin/toolkit/WritingToolkit';
+import WritingStatsBar from '../../components/admin/toolkit/WritingStatsBar';
+import AIRewriteFloater from '../../components/admin/toolkit/AIRewriteFloater';
 import {
   Save, ArrowLeft, Image as ImageIcon, Calendar, User, Tag, Folder,
   Star, Globe, Send, AlertTriangle, X, CheckCircle2, FileText, Clock,
@@ -30,7 +30,8 @@ export default function PostEditorPage() {
   const isEditing = !!id;
   const { user } = useAuth();
   const { isCEO, isAdmin } = useRole();
-  const autoSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveRef      = useRef<NodeJS.Timeout | null>(null);
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [currentSlug, setCurrentSlug] = useState('');
   const [title, setTitle] = useState('');
@@ -66,6 +67,27 @@ export default function PostEditorPage() {
 
   const wordCount = countWords(content);
   const readingTime = Math.max(1, Math.round(wordCount / 200));
+
+  // ── Toolkit callbacks ─────────────────────────────────────────────────────
+  const handleInsertContent = useCallback((html: string, replace?: boolean) => {
+    if (replace) {
+      setContent(html);
+    } else {
+      setContent(prev => prev + html);
+    }
+  }, []);
+
+  const handleExportDesignImage = useCallback((dataUrl: string) => {
+    setFeaturedImage(dataUrl);
+    setToast({ message: 'Design exported as featured image!', type: 'success' });
+  }, []);
+
+  const handleRestoreVersion = useCallback((version: { title: string; content: string; excerpt: string }) => {
+    setTitle(version.title);
+    setContent(version.content);
+    setExcerpt(version.excerpt);
+    setToast({ message: 'Version restored successfully', type: 'success' });
+  }, []);
 
   useEffect(() => {
     loadCategories();
@@ -333,6 +355,8 @@ export default function PostEditorPage() {
         <div className={`grid gap-6 transition-all ${sidebarOpen ? 'grid-cols-1 xl:grid-cols-[1fr_360px]' : 'grid-cols-1'}`}>
           <div className="min-w-0 space-y-0">
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <WritingStatsBar content={content} title={title} />
+
               <div className="px-8 pt-8 pb-4 border-b border-gray-100 dark:border-gray-800">
                 {featuredImage && (
                   <div className="relative mb-6 group rounded-xl overflow-hidden cursor-pointer" onClick={() => openImagePicker('featured')}>
@@ -369,7 +393,7 @@ export default function PostEditorPage() {
                 </div>
               </div>
 
-              <div className="px-0">
+              <div className="px-0" ref={editorContainerRef}>
                 <RichTextEditor
                   value={content}
                   onChange={setContent}
@@ -567,33 +591,21 @@ export default function PostEditorPage() {
                 )}
               </div>
 
-              <AIPostGenerator
-                title={title}
-                onInsertContent={(html) => setContent(prev => prev + html)}
-                onSetTitle={setTitle}
-              />
-
-              <AISEOAssistant
+              <WritingToolkit
                 title={title}
                 content={content}
                 excerpt={excerpt}
                 metaTitle={metaTitle}
                 metaDescription={metaDescription}
                 metaKeywords={metaKeywords}
+                postId={id}
+                onInsertContent={handleInsertContent}
+                onSetTitle={setTitle}
                 onSetMetaTitle={setMetaTitle}
                 onSetMetaDescription={setMetaDescription}
                 onSetMetaKeywords={setMetaKeywords}
-                onSetExcerpt={setExcerpt}
-                onSetTitle={setTitle}
-                onInsertLinks={(html) => setContent(prev => prev + '\n' + html)}
-              />
-
-              <AIPostAnalyzer
-                title={title}
-                content={content}
-                excerpt={excerpt}
-                metaDescription={metaDescription}
-                metaKeywords={metaKeywords}
+                onExportDesignImage={handleExportDesignImage}
+                onRestoreVersion={handleRestoreVersion}
               />
 
               {isCEO && (
@@ -687,6 +699,14 @@ export default function PostEditorPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <AIRewriteFloater
+        editorContainerRef={editorContainerRef}
+        onReplace={(newText) => {
+          // The floater handles execCommand in-place; this is a no-op fallback
+          void newText;
+        }}
+      />
     </AdminLayout>
   );
 }

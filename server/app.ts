@@ -22,6 +22,7 @@ import secretCodeRoutes from './routes/secretCodes.js';
 import premiumRoutes from './routes/premium.js';
 import socialAutomationRoutes from './routes/socialAutomation.js';
 import itangoRoutes from './routes/itango.js';
+import editorAiRoutes from './routes/editor-ai.js';
 import { securityMonitor, getSecurityLog, unblockIP, getBlockedIPs } from './middleware/securityMonitor.js';
 
 const allowedOrigins = [
@@ -113,7 +114,7 @@ app.use('/api/reviews', reviewsRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/newsletter', newsletterRoutes);
-app.use('/sitemap.xml', sitemapRoutes);
+app.use(sitemapRoutes);
 app.use('/feed.xml', feedRoutes);
 app.use('/api/indexing', indexingRoutes);
 app.use('/api/trending', trendingRoutes);
@@ -121,6 +122,7 @@ app.use('/api/secret-codes', secretCodeRoutes);
 app.use('/api/premium', premiumRoutes);
 app.use('/api/social', socialAutomationRoutes);
 app.use('/api/itango', itangoRoutes);
+app.use('/api/editor-ai', editorAiRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Mayobe Bros API Running' });

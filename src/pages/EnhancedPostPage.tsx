@@ -664,8 +664,15 @@ export default function EnhancedPostPage() {
 
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 mb-6 md:mb-8 transition-colors">
               <div
-                className="article-content prose prose-sm sm:prose-base md:prose-lg max-w-none text-gray-700 dark:text-gray-300 [&_h1]:text-gray-900 [&_h1]:dark:text-white [&_h2]:text-gray-900 [&_h2]:dark:text-white [&_h3]:text-gray-900 [&_h3]:dark:text-white [&_a]:text-blue-600 [&_a]:dark:text-blue-400 [&_img]:rounded-xl [&_img]:w-full [&_blockquote]:border-l-4 [&_blockquote]:border-blue-500 [&_blockquote]:pl-4 [&_blockquote]:italic [&_pre]:bg-gray-900 [&_pre]:rounded-lg [&_code]:text-blue-600 [&_code]:dark:text-blue-400"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.content) }}
+                className="article-content max-w-none text-gray-700 dark:text-gray-300"
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(post.content, {
+                    ADD_TAGS: ['figure', 'figcaption', 'sub', 'sup'],
+                    ADD_ATTR: ['class', 'target', 'rel', 'contenteditable', 'title'],
+                    ALLOW_DATA_ATTR: true,
+                    FORCE_BODY: true,
+                  }),
+                }}
               />
               <AdSlotRenderer slot="in_article" className="my-6 overflow-hidden rounded-xl" />
 

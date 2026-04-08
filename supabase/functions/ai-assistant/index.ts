@@ -46,7 +46,8 @@ type Action =
   | "eeat_analysis"
   | "spam_check"
   | "quality_score"
-  | "eeat_enhance";
+  | "eeat_enhance"
+  | "generate_evergreen_headline";
 
 interface RequestBody {
   action: Action;
@@ -66,7 +67,7 @@ interface RequestBody {
 }
 
 function buildSystemPrompt(): string {
-  return "You are an expert editorial board member, SEO specialist, and content strategist for a popular blog called Mayobe Bros. You evaluate articles with high professional standards, providing detailed, actionable feedback to improve quality, readability, SEO, and reader engagement. Your assessments are honest, specific, and constructive.";
+  return `You are a senior editorial board member, SEO specialist, and content strategist for Mayobe Bros, a respected East African blog covering education, business, technology, gaming, lifestyle, and news. You specialize in creating content that fully meets Google's EEAT standards (Experience, Expertise, Authoritativeness, Trustworthiness) and strictly complies with all Google AdSense monetization policies. Your content is original, deeply valuable, well-structured, factually accurate, and optimized for both human readers and top search engine rankings. You never produce thin content, keyword-stuffed copy, misleading claims, or anything that violates AdSense prohibited content policies (no adult content, no gambling, no hacking/cracking, no deceptive advertising, no dangerous content).`;
 }
 
 function buildUserPrompt(action: Action, body: RequestBody): string {
@@ -429,28 +430,52 @@ Requirements:
 Format in clean HTML using only <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em> tags. Do not include <html>, <body>, or <head> tags.`;
 
     case "generate_full_post":
-      return `Write a complete, publication-ready blog article about: "${subject}".
+      return `Write a complete, publication-ready long-form blog article about: "${subject}".
 
-Requirements:
-- Start with a # H1 title on the first line (e.g., # Your Article Title Here)
-- Compelling 2-3 sentence introduction that immediately hooks the reader
-- Minimum 700 words total
-- 4-6 main sections with ## H2 headings
-- Use ### H3 subheadings and #### H4 for deeper structure where appropriate
-- Each section 150-250 words with real value, examples, and actionable insights
-- Bullet points and numbered lists where they improve readability
-- A strong conclusion with a clear call to action
-- Google AdSense policy compliant (no prohibited content, no misleading claims)
-- SEO-optimized: naturally include related keywords, clear structure
+WORD COUNT REQUIREMENT: 4,000 to 5,000 words minimum. This is a HARD REQUIREMENT — do not stop early.
 
-Format in Markdown (not HTML). Use:
-- # for H1 title (first line only)
+STRUCTURE REQUIREMENTS:
+- Start with a # H1 title on the very first line
+- Compelling 3-4 sentence introduction that hooks the reader and states the value of this article
+- 8-12 main sections with ## H2 headings (each section 350-500 words)
+- Use ### H3 subheadings and #### H4 for deeper breakdown within each section
+- Mix of paragraphs, bullet points, numbered lists, and bold callouts for scannability
+- Real-world examples, case studies, statistics, and expert-level insights in every section
+- A thorough FAQ section at the end (minimum 5 questions with detailed answers)
+- A strong conclusion (200+ words) with clear, actionable takeaways and a call to action
+
+GOOGLE ADSENSE COMPLIANCE (MANDATORY):
+- No adult, sexual, or suggestive content whatsoever
+- No gambling, casino, or sports betting content
+- No hacking, cracking, piracy, or enabling illegal activity
+- No dangerous, derogatory, or hateful content about any group
+- No misleading health or medical claims without disclaimers
+- No deceptive advertising language ("You have been selected", "Click to win")
+- No keyword stuffing — keywords must appear naturally
+- Original content with unique insights — no scraped or auto-generated filler
+- Content must be made for human readers, not search engines alone
+
+EEAT SIGNALS (MANDATORY for Google quality):
+- Experience: Include first-hand perspective, practical usage scenarios
+- Expertise: Demonstrate deep subject knowledge with specific facts, data, and technical details
+- Authoritativeness: Reference industry standards, well-known sources (e.g. "According to research...", "Studies show...")
+- Trustworthiness: Balanced perspective, honest caveats, no exaggerated claims
+
+SEO REQUIREMENTS:
+- Naturally include primary and secondary keywords throughout — never stuffed
+- Every H2 should contain a keyword or search phrase
+- Include synonyms and LSI (Latent Semantic Indexing) terms naturally
+- Write compelling, click-worthy meta-friendly language in the introduction
+
+Format in Markdown only:
+- # for H1 (first line only)
 - ## for H2 section headings
 - ### for H3 subheadings
 - #### for H4 sub-subheadings
-- **bold** for emphasis
+- **bold** for emphasis and key terms
 - - or * for bullet points
-- 1. for numbered lists`;
+- 1. for numbered lists
+- > for important callout quotes`;
 
     case "generate_seo_title":
       return `Generate a single SEO-optimized title for a blog article about: "${subject}".
@@ -483,26 +508,33 @@ Requirements:
 Return ONLY a valid JSON array of strings. Example: ["keyword1","keyword phrase 2","long tail keyword 3"]`;
 
     case "suggest_internal_links":
-      return `Analyze this new article and recommend internal linking opportunities from a list of existing posts.
+      return `Analyze this article and recommend internal link opportunities. You must suggest anchor texts that ACTUALLY EXIST as phrases or words in the article content below.
+
 New article topic: "${subject}"
-${outline ? `Article outline: ${outline}` : ""}
-${content ? `Article content preview: ${content.slice(0, 1000)}` : ""}
+${content ? `Full article content:\n${content.slice(0, 6000)}` : ""}
 
-Existing posts to consider linking from/to:
-${(existingPosts || []).slice(0, 30).map((p, i) => `${i + 1}. ${p}`).join("\n")}
+Existing published posts to link to:
+${(existingPosts || []).slice(0, 50).map((p, i) => `${i + 1}. ${p}`).join("\n")}
 
-For each recommended link, explain WHY it makes sense contextually.
+CRITICAL RULES:
+1. The "anchorText" you suggest MUST be a word or phrase that literally appears in the article content above — copy it exactly as it appears
+2. Suggest minimum 40 internal link opportunities
+3. Each link must be contextually relevant — a reader clicking it should find what they expect
+4. Distribute links throughout the article (beginning, middle, end sections)
+5. Do NOT suggest the same anchor text twice
+6. Prefer specific, descriptive anchor text over generic phrases
+
 Return ONLY valid JSON (no markdown):
 {
   "recommendations": [
     {
-      "postTitle": "<title of existing post to link>",
-      "reason": "<why this internal link makes sense>",
-      "anchorText": "<suggested anchor text for the link>",
-      "placement": "<where in the new article to place this link>"
+      "postTitle": "<exact title of existing post to link to>",
+      "reason": "<why this link adds value to the reader>",
+      "anchorText": "<EXACT word or phrase from the article content above>",
+      "placement": "<which paragraph or section of the article to place this link>"
     }
   ],
-  "summary": "<1-2 sentence overview of the internal linking strategy>"
+  "summary": "<2 sentence overview of the linking strategy>"
 }`;
 
     case "generate_seo_meta":
@@ -662,6 +694,44 @@ Enhancement requirements:
 
 Return the enhanced article in clean HTML using only <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em> tags. Do not include <html>, <body>, or <head> tags.`;
 
+    case "generate_evergreen_headline":
+      return `You are a content strategist for Mayobe Bros, a popular East African blog. Generate 8 evergreen headline ideas based on the site's categories and labels.
+
+Site categories: ${(existingPosts || []).join(', ') || 'Education, Business, Technology, Gaming, Lifestyle, News'}
+Site labels/topics: ${(keywords || []).join(', ') || 'various topics'}
+${category ? `Focus on this category: ${category}` : ''}
+
+EVERGREEN HEADLINE RULES:
+1. Topics must be relevant for years, not tied to current events or trends
+2. High organic search volume — people consistently search for these topics
+3. Fully AdSense-compliant (no gambling, adult, illegal, misleading topics)
+4. Strong EEAT potential — topics where you can demonstrate real expertise
+5. Click-worthy without being clickbait — promise specific value
+6. Include power words: Ultimate, Complete, Proven, Essential, Best, How to, Why, Guide
+
+HEADLINE TYPES TO MIX:
+- How-To Guides ("How to Start a Business in Kenya with No Capital")
+- Numbered Listicles ("15 Proven Ways to Earn Money Online in Africa")
+- Ultimate Guides ("The Complete Guide to Solar Energy for African Homes")
+- Question-Based ("Why Do African Startups Fail in the First Year?")
+- Comparison ("YouTube vs TikTok: Which Earns More for African Creators?")
+- Problem-Solution ("Struggling with Slow Internet? 10 Fixes That Work")
+
+Return ONLY a valid JSON array (no markdown):
+[
+  {
+    "headline": "<compelling, specific, evergreen article title>",
+    "category": "<which site category this fits>",
+    "label": "<most relevant label/topic>",
+    "type": "<How-To|Listicle|Ultimate Guide|Question|Comparison|Problem-Solution>",
+    "primaryKeyword": "<main SEO search keyword>",
+    "searchVolume": "<High|Very High|Medium>",
+    "whyEvergreen": "<one sentence: why this stays relevant for years>",
+    "trendsQuery": "<short search phrase to look up on Google Trends>",
+    "estimatedWordCount": <target word count 4000-5000>
+  }
+]`;
+
     default:
       return `Help with: ${subject}`;
   }
@@ -694,7 +764,9 @@ Deno.serve(async (req: Request) => {
     const systemPrompt = buildSystemPrompt();
     const userPrompt = buildUserPrompt(action, body);
 
-    const maxTokens = ["generate_draft", "generate_full_draft", "generate_article", "generate_full_post", "humanize_content", "eeat_enhance"].includes(action) ? 4000 : 2000;
+    const maxTokens =
+      action === "generate_full_post" ? 8000 :
+      ["generate_draft", "generate_full_draft", "generate_article", "humanize_content", "eeat_enhance"].includes(action) ? 4000 : 2000;
 
     const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

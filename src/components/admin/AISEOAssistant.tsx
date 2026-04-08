@@ -82,10 +82,10 @@ function computeSeoScore(
     keywords.length >= 3 ? 70 : 40;
 
   const contentLengthScore =
-    wordCount >= 1000 ? 100 :
-    wordCount >= 700 ? 80 :
-    wordCount >= 400 ? 55 :
-    wordCount >= 200 ? 30 : 0;
+    wordCount >= 4000 ? 100 :
+    wordCount >= 2000 ? 80 :
+    wordCount >= 1000 ? 55 :
+    wordCount >= 500 ? 30 : 0;
 
   const headingScore = h2Count >= 3 ? 100 : h2Count >= 2 ? 75 : h2Count >= 1 ? 50 : 0;
 
@@ -107,7 +107,7 @@ function computeSeoScore(
   if (titleLen < 50 || titleLen > 60) suggestions.push(`Meta title should be 50–60 characters (currently ${titleLen})`);
   if (descLen < 150 || descLen > 160) suggestions.push(`Meta description should be 150–160 characters (currently ${descLen})`);
   if (keywords.length < 5) suggestions.push('Add at least 5 keywords to improve keyword coverage');
-  if (wordCount < 700) suggestions.push(`Content is too short (${wordCount} words). Aim for 700+ words`);
+  if (wordCount < 4000) suggestions.push(`Content is ${wordCount} words. Aim for 4,000–5,000 words for AdSense approval and top SEO ranking`);
   if (h2Count < 2) suggestions.push('Add at least 2 H2 headings to improve content structure');
   if (imgCount > 0 && imgAltCount < imgCount) suggestions.push(`${imgCount - imgAltCount} image(s) missing alt text`);
   if (internalLinkCount === 0) suggestions.push('Add internal links to improve SEO and navigation');
@@ -116,7 +116,7 @@ function computeSeoScore(
     { label: 'Meta title length (50–60 chars)', pass: titleLen >= 50 && titleLen <= 60, info: `${titleLen} chars` },
     { label: 'Meta description (150–160 chars)', pass: descLen >= 150 && descLen <= 160, info: `${descLen} chars` },
     { label: 'Keywords defined', pass: keywords.length >= 3, info: `${keywords.length} keywords` },
-    { label: 'Content length (700+ words)', pass: wordCount >= 700, info: `${wordCount} words` },
+    { label: 'Content length (4,000+ words)', pass: wordCount >= 4000, info: `${wordCount} words` },
     { label: 'H2 headings used', pass: h2Count >= 2, info: `${h2Count} H2s` },
     { label: 'H3 subheadings used', pass: h3Count >= 1, info: `${h3Count} H3s` },
     { label: 'Images have alt text', pass: imgCount === 0 || imgAltCount === imgCount, info: imgCount === 0 ? 'No images' : `${imgAltCount}/${imgCount}` },
@@ -268,7 +268,7 @@ export default function AISEOAssistant({
     setSelectedLinks(new Set());
     try {
       const { supabase } = await import('../../lib/supabase');
-      const { data: posts } = await supabase.from('posts').select('title, slug, excerpt').eq('status', 'published').limit(50);
+      const { data: posts } = await supabase.from('posts').select('title, slug, excerpt').eq('status', 'published').limit(100);
       const postList = (posts || []).map((p: any) => p.title);
       const res = await fetch(`${SUPABASE_URL}/functions/v1/ai-assistant`, {
         method: 'POST',
@@ -313,11 +313,29 @@ export default function AISEOAssistant({
   const insertSelectedLinks = () => {
     const toInsert = linkSuggestions.filter((_, i) => selectedLinks.has(i));
     if (toInsert.length === 0) return;
-    const html = toInsert
-      .map(l => `<a href="/${l.slug}">${l.anchor}</a>`)
-      .join(' ');
-    onInsertLinks(html);
+
+    let updatedContent = content;
+    let insertedCount = 0;
+
+    for (const link of toInsert) {
+      const { result, inserted } = insertLinkInContent(updatedContent, link.anchor, link.slug, link.postTitle);
+      if (inserted) {
+        updatedContent = result;
+        insertedCount++;
+      }
+    }
+
+    onInsertLinks(updatedContent);
     setSelectedLinks(new Set());
+
+    if (insertedCount < toInsert.length) {
+      const missed = toInsert.length - insertedCount;
+      setLinkError(
+        `${insertedCount} link(s) inserted within the content. ${missed} anchor text(s) not found verbatim — add those phrases to your article then try again.`
+      );
+    } else {
+      setLinkError(null);
+    }
   };
 
   const toggleLink = (i: number) => {
@@ -518,9 +536,9 @@ export default function AISEOAssistant({
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700 mt-1">
                 <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold mb-1">Rules</p>
                 <ul className="text-xs text-gray-400 dark:text-gray-500 space-y-0.5">
-                  <li>• Max 20 internal links per article</li>
-                  <li>• Links inserted at end of content</li>
-                  <li>• Review and edit placements after inserting</li>
+                  <li>• Minimum 40 internal links per article (SEO best practice)</li>
+                  <li>• Links auto-inserted at the anchor word in your content</li>
+                  <li>• Anchor text must exist verbatim in your article</li>
                 </ul>
               </div>
             </div>
@@ -646,4 +664,31 @@ function GenerateRow({
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+/** Replaces the first occurrence of anchor text in a non-tag text node with an <a> link. */
+function insertLinkInContent(
+  content: string,
+  anchor: string,
+  slug: string,
+  postTitle: string,
+): { result: string; inserted: boolean } {
+  const linkHtml = `<a href="/${slug}" title="${postTitle}">${anchor}</a>`;
+  // Split into [text, <tag>, text, <tag>, ...] segments
+  const parts = content.split(/(<[^>]+>)/);
+  let inserted = false;
+
+  const result = parts.map(part => {
+    if (inserted || part.startsWith('<')) return part;
+    const lowerPart = part.toLowerCase();
+    const lowerAnchor = anchor.toLowerCase();
+    const idx = lowerPart.indexOf(lowerAnchor);
+    if (idx !== -1) {
+      inserted = true;
+      return part.slice(0, idx) + linkHtml + part.slice(idx + anchor.length);
+    }
+    return part;
+  });
+
+  return { result: result.join(''), inserted };
 }
