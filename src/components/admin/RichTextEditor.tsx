@@ -202,9 +202,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   };
 
   const insertHtml = (html: string) => {
-    editorRef.current?.focus();
-    document.execCommand('insertHTML', false, html);
-    setTimeout(updateContent, 10);
+    withRestoredSelection(() => {
+      document.execCommand('insertHTML', false, html);
+      setTimeout(updateContent, 10);
+    });
   };
 
   const formatBlock = (tag: string) => {

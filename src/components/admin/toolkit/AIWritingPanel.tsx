@@ -2,21 +2,22 @@ import { useState } from 'react';
 import {
   Sparkles, Wand2, AlignLeft, Maximize2, RefreshCw,
   LayoutList, FileText, Zap, Loader2, ChevronRight,
-  Copy, Check, PlusCircle, ArrowRight,
+  Copy, Check, PlusCircle, ArrowRight, Shield, HelpCircle,
+  Target, BookOpen,
 } from 'lucide-react';
 
 interface AIWritingPanelProps {
   title: string;
   content: string;
   onInsertContent: (html: string, replace?: boolean) => void;
-  onSetTitle?: (t: string) => void; // reserved for future headline generation
+  onSetTitle?: (t: string) => void;
 }
 
 type ActionGroup = 'generate' | 'enhance' | 'structure' | 'snippets';
 
 const TONES = ['Professional', 'Casual', 'Friendly', 'Authoritative', 'Conversational', 'Academic'];
 
-export default function AIWritingPanel({ title, content, onInsertContent, onSetTitle: _onSetTitle }: AIWritingPanelProps) {
+export default function AIWritingPanel({ title, content, onInsertContent }: AIWritingPanelProps) {
   const [activeGroup, setActiveGroup] = useState<ActionGroup>('generate');
   const [loading, setLoading]         = useState<string | null>(null);
   const [result, setResult]           = useState<{ action: string; text: string } | null>(null);
@@ -25,6 +26,8 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
   const [headings, setHeadings]       = useState<string[]>([]);
   const [error, setError]             = useState<string | null>(null);
   const [copied, setCopied]           = useState(false);
+
+  const wordCount = content.replace(/<[^>]+>/g, ' ').trim().split(/\s+/).filter(Boolean).length;
 
   const callWrite = async (action: string, extra?: Record<string, string>) => {
     setLoading(action);
@@ -71,8 +74,22 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
 
   return (
     <div className="flex flex-col h-full">
+      {/* AdSense + EEAT compliance banner */}
+      <div className="px-4 pt-3 pb-2 bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-900/10 dark:to-indigo-900/10 border-b border-violet-100 dark:border-violet-800">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Shield size={12} className="text-violet-600 dark:text-violet-400 shrink-0" />
+          <span className="text-xs font-semibold text-violet-700 dark:text-violet-300">AdSense-Ready • EEAT Compliant • SEO Optimized</span>
+          <span className="ml-auto text-xs text-violet-500">
+            {wordCount >= 4000
+              ? <span className="text-green-600 dark:text-green-400 font-bold">✓ {wordCount.toLocaleString()} words — AdSense target met</span>
+              : <span className="text-amber-600 dark:text-amber-400">Target: 4,000–5,000 words ({wordCount.toLocaleString()} / 4,000)</span>
+            }
+          </span>
+        </div>
+      </div>
+
       {/* Tone Selector */}
-      <div className="px-4 pt-4 pb-3">
+      <div className="px-4 pt-3 pb-3">
         <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider">Writing Tone</label>
         <div className="flex flex-wrap gap-1.5">
           {TONES.map(t => (
@@ -114,10 +131,14 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
         {/* GENERATE */}
         {activeGroup === 'generate' && (
           <>
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+              <strong>Full Article Mode:</strong> Generates a 4,000–5,000 word comprehensive article with EEAT signals, AdSense compliance, 10–14 sections, FAQ, statistics, and internal link placeholders.
+            </div>
+
             <ActionButton
               icon={Sparkles}
-              label="Generate Full Article"
-              desc="Write complete article from your title"
+              label="Generate Full Article (4,000–5,000 words)"
+              desc="Complete AdSense-ready, EEAT-compliant article"
               color="violet"
               loading={loading === 'generate'}
               disabled={!title || !!loading}
@@ -127,7 +148,7 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
             <ActionButton
               icon={AlignLeft}
               label="Write Introduction"
-              desc="Compelling opening paragraph"
+              desc="250–350 word hook-driven opening"
               color="blue"
               loading={loading === 'write_intro'}
               disabled={!title || !!loading}
@@ -135,40 +156,58 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
             />
             <ActionButton
               icon={ArrowRight}
-              label="Write Conclusion"
-              desc="Strong closing with call-to-action"
+              label="Write Conclusion + CTA"
+              desc="Memorable closing with call-to-action"
               color="green"
               loading={loading === 'write_conclusion'}
               disabled={!title || !!loading}
               onClick={() => callWrite('write_conclusion')}
             />
             <ActionButton
+              icon={HelpCircle}
+              label="Write FAQ Section"
+              desc="8–10 questions matching Google searches"
+              color="blue"
+              loading={loading === 'write_faq'}
+              disabled={!title || !!loading}
+              onClick={() => callWrite('write_faq')}
+            />
+            <ActionButton
               icon={Zap}
               label="Continue Writing"
-              desc="Pick up where you left off"
+              desc="Add 500–800 more words seamlessly"
               color="orange"
               loading={loading === 'continue'}
               disabled={!content || !!loading}
               onClick={() => callWrite('continue')}
             />
+            <ActionButton
+              icon={Target}
+              label="SEO Optimize Content"
+              desc="Add keywords, LSI terms, internal link hints"
+              color="blue"
+              loading={loading === 'seo_optimize'}
+              disabled={!content || !!loading}
+              onClick={() => callWrite('seo_optimize')}
+            />
 
             {/* Custom Prompt */}
             <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
-              <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 block mb-2">Custom Prompt</label>
+              <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 block mb-2">Custom Article Prompt</label>
               <textarea
                 value={customPrompt}
                 onChange={e => setCustomPrompt(e.target.value)}
-                placeholder="Tell AI what to write… e.g. 'Write a section about social media marketing strategies'"
+                placeholder="Describe the article you want… e.g. 'Write a comprehensive guide on mobile banking in Kenya targeting first-time smartphone users'"
                 rows={3}
                 className="w-full text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 resize-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-gray-700 dark:text-gray-300 placeholder-gray-400"
               />
               <button
-                onClick={() => callWrite('generate', { title: customPrompt })}
+                onClick={() => callWrite('generate', { customPrompt })}
                 disabled={!customPrompt.trim() || !!loading}
                 className="mt-2 w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold py-2 rounded-lg transition-colors disabled:opacity-50"
               >
                 {loading === 'generate' ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                Generate
+                Generate 4,000+ Word Article
               </button>
             </div>
           </>
@@ -180,7 +219,7 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
             <ActionButton
               icon={Maximize2}
               label="Expand Content"
-              desc="Add more detail and examples"
+              desc="Add depth, examples, stats (3x longer)"
               color="blue"
               loading={loading === 'expand'}
               disabled={!content || !!loading}
@@ -189,7 +228,7 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
             <ActionButton
               icon={Wand2}
               label="Improve Clarity"
-              desc="Clearer, more readable writing"
+              desc="Clearer, more engaging writing"
               color="green"
               loading={loading === 'improve_clarity'}
               disabled={!content || !!loading}
@@ -197,12 +236,21 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
             />
             <ActionButton
               icon={RefreshCw}
-              label="Summarize"
-              desc="Concise summary of your content"
+              label="Summarize Content"
+              desc="Concise key-points summary box"
               color="orange"
               loading={loading === 'summarize'}
               disabled={!content || !!loading}
               onClick={() => callWrite('summarize')}
+            />
+            <ActionButton
+              icon={BookOpen}
+              label="Add EEAT Signals"
+              desc="Expand → add expertise & authority signals"
+              color="violet"
+              loading={loading === 'expand'}
+              disabled={!content || !!loading}
+              onClick={() => callWrite('expand', { tone: 'Authoritative' })}
             />
           </>
         )}
@@ -212,8 +260,8 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
           <>
             <ActionButton
               icon={LayoutList}
-              label="Suggest H2 Headings"
-              desc="Get 6-8 section headings"
+              label="Suggest 10 H2 Headings"
+              desc="SEO-optimized section headings"
               color="violet"
               loading={loading === 'suggest_headings'}
               disabled={!title || !!loading}
@@ -222,17 +270,16 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
             <ActionButton
               icon={RefreshCw}
               label="Fix Article Structure"
-              desc="Reorganize content for better flow"
+              desc="Reorganize for best logical flow"
               color="blue"
               loading={loading === 'fix_structure'}
               disabled={!content || !!loading}
               onClick={() => callWrite('fix_structure')}
             />
 
-            {/* Suggested Headings */}
             {headings.length > 0 && (
               <div className="p-3 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-100 dark:border-violet-800">
-                <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 mb-2">Suggested Headings:</p>
+                <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 mb-2">Suggested H2 Headings ({headings.length}):</p>
                 <div className="space-y-1">
                   {headings.map((h, i) => (
                     <div key={i} className="flex items-center justify-between gap-2 group py-1">
@@ -255,14 +302,18 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
         {activeGroup === 'snippets' && (
           <div className="space-y-1.5">
             {[
-              { label: 'Key Takeaways',   html: '<h3>Key Takeaways</h3><ul><li>Point 1</li><li>Point 2</li><li>Point 3</li></ul>' },
-              { label: 'FAQ Section',     html: '<h2>Frequently Asked Questions</h2><h3>Question 1?</h3><p>Answer here…</p><h3>Question 2?</h3><p>Answer here…</p>' },
-              { label: 'Pro/Con Table',   html: '<table class="editor-table"><thead><tr><th>Pros ✅</th><th>Cons ❌</th></tr></thead><tbody><tr><td>Advantage 1</td><td>Disadvantage 1</td></tr><tr><td>Advantage 2</td><td>Disadvantage 2</td></tr></tbody></table><p></p>' },
-              { label: 'Step-by-Step',    html: '<h2>Step-by-Step Guide</h2><ol><li><strong>Step 1:</strong> Description</li><li><strong>Step 2:</strong> Description</li><li><strong>Step 3:</strong> Description</li></ol>' },
-              { label: 'Summary Box',     html: '<div class="callout callout-info"><p><strong>Summary:</strong> Key points to remember from this section.</p></div>' },
-              { label: 'Expert Quote',    html: '<blockquote><p>"Insert a powerful quote here that supports your argument."</p><footer>— Expert Name, Source</footer></blockquote>' },
-              { label: 'Statistics Block',html: '<div class="callout callout-tip"><p>📊 <strong>Key Statistic:</strong> XX% of people/organizations [fact]. (Source: Name, Year)</p></div>' },
-              { label: 'CTA Block',       html: '<div class="callout callout-success"><p>🚀 <strong>Ready to get started?</strong> [Call-to-action text here. Tell readers what to do next.]</p></div>' },
+              { label: 'Key Takeaways',    html: '<h3>Key Takeaways</h3><ul><li><strong>Point 1:</strong> Description</li><li><strong>Point 2:</strong> Description</li><li><strong>Point 3:</strong> Description</li></ul>' },
+              { label: 'FAQ Section',      html: '<h2>Frequently Asked Questions</h2><h3>Question 1?</h3><p>Answer here…</p><h3>Question 2?</h3><p>Answer here…</p><h3>Question 3?</h3><p>Answer here…</p>' },
+              { label: 'Pro/Con Table',    html: '<div class="table-wrapper"><table class="editor-table"><thead><tr><th>Pros ✅</th><th>Cons ❌</th></tr></thead><tbody><tr><td>Advantage 1</td><td>Disadvantage 1</td></tr><tr><td>Advantage 2</td><td>Disadvantage 2</td></tr></tbody></table></div><p></p>' },
+              { label: 'Comparison Table', html: '<div class="table-wrapper"><table class="editor-table"><thead><tr><th>Feature</th><th>Option A</th><th>Option B</th></tr></thead><tbody><tr><td>Feature 1</td><td>✅</td><td>❌</td></tr><tr><td>Feature 2</td><td>❌</td><td>✅</td></tr></tbody></table></div><p></p>' },
+              { label: 'Step-by-Step Guide', html: '<h2>Step-by-Step Guide</h2><ol><li><strong>Step 1: </strong>Description of first action</li><li><strong>Step 2: </strong>Description of second action</li><li><strong>Step 3: </strong>Description of third action</li></ol>' },
+              { label: 'Info Callout',     html: '<div class="callout callout-info"><p><strong>Note:</strong> Add your key information or context here.</p></div>' },
+              { label: 'Warning Box',      html: '<div class="callout callout-warning"><p><strong>Warning:</strong> Important information readers should be aware of.</p></div>' },
+              { label: 'Success Tip',      html: '<div class="callout callout-success"><p>✅ <strong>Pro Tip:</strong> Helpful tip or best practice here.</p></div>' },
+              { label: 'Expert Quote',     html: '<blockquote><p>"Insert a powerful expert quote here that supports your argument."</p><footer>— Expert Name, Title, Organization (Year)</footer></blockquote>' },
+              { label: 'Statistics Block', html: '<div class="callout callout-tip"><p>📊 <strong>Key Statistic:</strong> XX% of [population] [relevant fact]. (Source: Organization Name, Year)</p></div>' },
+              { label: 'CTA Block',        html: '<div class="callout callout-success"><p>🚀 <strong>Ready to get started?</strong> [Specific call-to-action — tell readers exactly what to do next and why.]</p></div>' },
+              { label: 'Author Insight',   html: '<div class="callout callout-tip"><p>💡 <strong>Expert Perspective:</strong> [Share a professional insight, lived experience, or expert viewpoint that adds EEAT value to the article.]</p></div>' },
             ].map(({ label, html }) => (
               <button
                 key={label}
@@ -307,7 +358,7 @@ export default function AIWritingPanel({ title, content, onInsertContent, onSetT
                 onClick={() => { onInsertContent(result.text, false); setResult(null); }}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold py-2 rounded-lg transition-colors"
               >
-                <PlusCircle size={12} /> Insert Below
+                <PlusCircle size={12} /> Insert at Cursor
               </button>
               <button
                 onClick={() => { onInsertContent(result.text, true); setResult(null); }}

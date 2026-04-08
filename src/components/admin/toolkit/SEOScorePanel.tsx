@@ -96,11 +96,11 @@ function computeLocalSEO(title: string, content: string, _metaTitle: string, met
       detail: primaryKeyword ? (keywordInMeta ? 'Found' : 'Missing') : 'N/A',
     },
     {
-      label: 'Content Length (600+ words)',
-      pass: wordCount >= 600,
-      score: wordCount >= 1500 ? 15 : wordCount >= 900 ? 12 : wordCount >= 600 ? 9 : wordCount >= 300 ? 5 : 0,
+      label: 'Content Length (4,000–5,000 words)',
+      pass: wordCount >= 2000,
+      score: wordCount >= 4000 ? 15 : wordCount >= 2500 ? 13 : wordCount >= 1500 ? 10 : wordCount >= 800 ? 7 : wordCount >= 300 ? 4 : 0,
       max: 15,
-      detail: `${wordCount} words ${wordCount < 600 ? '(aim for 600+)' : wordCount >= 1500 ? '(excellent)' : '(good)'}`,
+      detail: `${wordCount.toLocaleString()} words ${wordCount >= 4000 ? '✓ AdSense target met' : wordCount >= 2000 ? '(growing — aim for 4,000)' : wordCount >= 800 ? '(below AdSense ideal of 4,000)' : '(too short for AdSense approval)'}`,
     },
     {
       label: 'H2 Headings (2+)',
@@ -124,11 +124,11 @@ function computeLocalSEO(title: string, content: string, _metaTitle: string, met
       detail: imgs > 0 ? `${imgs} image${imgs !== 1 ? 's' : ''} (${imgAlts} with alt text)` : 'No images',
     },
     {
-      label: 'Internal/External Links',
-      pass: links >= 2,
-      score: links >= 4 ? 10 : links >= 2 ? 7 : links >= 1 ? 3 : 0,
+      label: 'Internal/External Links (40+ target)',
+      pass: links >= 10,
+      score: links >= 40 ? 10 : links >= 25 ? 8 : links >= 15 ? 6 : links >= 10 ? 4 : links >= 5 ? 2 : 0,
       max: 10,
-      detail: `${links} link${links !== 1 ? 's' : ''}`,
+      detail: `${links} link${links !== 1 ? 's' : ''} ${links >= 40 ? '✓ Excellent' : links >= 25 ? '(good — target 40+)' : links >= 10 ? '(growing — use AI Link Generator)' : '(use AI In-Article Link Generator)'}`,
     },
     {
       label: 'Meta Keywords Set',
@@ -230,7 +230,7 @@ export default function SEOScorePanel({
           <div className="flex-1 min-w-0">
             <div className={`text-lg font-bold ${grade.color}`}>{grade.label}</div>
             <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              {local.wordCount} words · {local.h2Count} H2s · {local.imgCount} images
+              {local.wordCount.toLocaleString()} words · {local.h2Count} H2s · {local.imgCount} images
             </div>
             {local.primaryKeyword && (
               <div className="mt-1.5 flex items-center gap-1.5">
@@ -261,10 +261,10 @@ export default function SEOScorePanel({
       {/* Quick stats grid */}
       <div className="grid grid-cols-2 gap-2 p-4 border-b border-gray-100 dark:border-gray-800">
         {[
-          { icon: List,  label: 'Words',     value: local.wordCount, good: local.wordCount >= 600 },
-          { icon: TrendingUp, label: 'H2 Headings', value: local.h2Count, good: local.h2Count >= 2 },
-          { icon: Image, label: 'Images',    value: local.imgCount, good: local.imgCount >= 1 },
-          { icon: Link,  label: 'Links',     value: local.linkCount, good: local.linkCount >= 2 },
+          { icon: List,  label: 'Words',       value: local.wordCount.toLocaleString(), good: local.wordCount >= 4000 },
+          { icon: TrendingUp, label: 'H2 Headings', value: local.h2Count, good: local.h2Count >= 6 },
+          { icon: Image, label: 'Images',      value: local.imgCount, good: local.imgCount >= 3 },
+          { icon: Link,  label: 'Links',       value: local.linkCount, good: local.linkCount >= 40 },
         ].map(({ icon: Icon, label, value, good }) => (
           <div key={label} className={`flex items-center gap-2.5 p-2.5 rounded-xl border ${good ? 'bg-green-50 dark:bg-green-900/20 border-green-100 dark:border-green-900' : 'bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-900'}`}>
             <Icon size={13} className={good ? 'text-green-500' : 'text-orange-500'} />

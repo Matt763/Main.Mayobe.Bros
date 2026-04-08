@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   Sparkles, CheckCircle2, TrendingUp, Palette, Film, Clock,
   Loader2, AlertCircle, ChevronDown, ChevronUp, Search,
+  Link2, Newspaper,
 } from 'lucide-react';
 import AIWritingPanel from './AIWritingPanel';
 import ProofingPanel from './ProofingPanel';
@@ -9,6 +10,8 @@ import SEOScorePanel from './SEOScorePanel';
 import DesignStudio from './DesignStudio';
 import MediaPanel from './MediaPanel';
 import VersionHistory from './VersionHistory';
+import InArticleLinkPanel from './InArticleLinkPanel';
+import HeadlineGeneratorPanel from './HeadlineGeneratorPanel';
 
 // ── Plagiarism Panel (standalone) ────────────────────────────────────────────
 
@@ -170,7 +173,7 @@ function PlagiarismPanel({ content }: { content: string }) {
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
 
-type TabId = 'ai' | 'proofing' | 'seo' | 'plagiarism' | 'design' | 'media' | 'versions';
+type TabId = 'ai' | 'headlines' | 'links' | 'proofing' | 'seo' | 'plagiarism' | 'design' | 'media' | 'versions';
 
 interface Tab {
   id: TabId;
@@ -181,13 +184,15 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { id: 'ai',         label: 'AI Writing',    shortLabel: 'AI',      icon: Sparkles,     color: 'text-violet-500' },
-  { id: 'proofing',   label: 'Proofing',      shortLabel: 'Proof',   icon: CheckCircle2, color: 'text-green-500' },
-  { id: 'seo',        label: 'SEO',           shortLabel: 'SEO',     icon: TrendingUp,   color: 'text-blue-500' },
-  { id: 'plagiarism', label: 'Originality',   shortLabel: 'Orig.',   icon: Search,       color: 'text-orange-500' },
-  { id: 'design',     label: 'Design Studio', shortLabel: 'Design',  icon: Palette,      color: 'text-pink-500' },
-  { id: 'media',      label: 'Media',         shortLabel: 'Media',   icon: Film,         color: 'text-cyan-500' },
-  { id: 'versions',   label: 'Versions',      shortLabel: 'History', icon: Clock,        color: 'text-amber-500' },
+  { id: 'ai',         label: 'AI Writer',      shortLabel: 'AI',      icon: Sparkles,     color: 'text-violet-500' },
+  { id: 'headlines',  label: 'Headlines',      shortLabel: 'Headlines',icon: Newspaper,    color: 'text-emerald-500' },
+  { id: 'links',      label: 'Link Generator', shortLabel: 'Links',   icon: Link2,        color: 'text-blue-500' },
+  { id: 'proofing',   label: 'Proofing',       shortLabel: 'Proof',   icon: CheckCircle2, color: 'text-green-500' },
+  { id: 'seo',        label: 'SEO',            shortLabel: 'SEO',     icon: TrendingUp,   color: 'text-blue-500' },
+  { id: 'plagiarism', label: 'Originality',    shortLabel: 'Orig.',   icon: Search,       color: 'text-orange-500' },
+  { id: 'design',     label: 'Design Studio',  shortLabel: 'Design',  icon: Palette,      color: 'text-pink-500' },
+  { id: 'media',      label: 'Media',          shortLabel: 'Media',   icon: Film,         color: 'text-cyan-500' },
+  { id: 'versions',   label: 'Versions',       shortLabel: 'History', icon: Clock,        color: 'text-amber-500' },
 ];
 
 // ── Main WritingToolkit ───────────────────────────────────────────────────────
@@ -223,8 +228,11 @@ export default function WritingToolkit({
     onInsertContent(html, replace);
   }, [onInsertContent]);
 
-  const activeTabConfig = TABS.find(t => t.id === activeTab)!;
-  void activeTabConfig; // used for future tab header rendering
+  const handleSetTitle = useCallback((t: string) => {
+    onSetTitle?.(t);
+    // Switch to AI writer so user can immediately generate
+    setActiveTab('ai');
+  }, [onSetTitle]);
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden" style={{ minHeight: 600 }}>
@@ -265,6 +273,20 @@ export default function WritingToolkit({
             content={content}
             onInsertContent={handleInsert}
             onSetTitle={onSetTitle}
+          />
+        )}
+
+        {activeTab === 'headlines' && (
+          <HeadlineGeneratorPanel
+            onSetTitle={handleSetTitle}
+            onInsertContent={handleInsert}
+          />
+        )}
+
+        {activeTab === 'links' && (
+          <InArticleLinkPanel
+            content={content}
+            onInsertContent={handleInsert}
           />
         )}
 
