@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase';
 import AdminLayout from '../../components/admin/AdminLayout';
 import Toast from '../../components/admin/Toast';
 import {
@@ -128,14 +127,23 @@ export default function SubscribersPage() {
 
   const showToast = (type: ToastState['type'], message: string) => setToast({ type, message });
 
+  const apiFetch = async (path: string, options?: RequestInit) => {
+    const res = await fetch(path, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
+      ...options,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `Request failed (${res.status})`);
+    }
+    return res.json();
+  };
+
   const loadSubscribers = async () => {
     setSubscribersLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('newsletter_subscribers')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await apiFetch('/api/newsletter');
       setSubscribers(data || []);
     } catch {
       showToast('error', 'Failed to load subscribers');
@@ -147,11 +155,7 @@ export default function SubscribersPage() {
   const loadRegisteredUsers = async () => {
     setUsersLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('registered_users')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await apiFetch('/api/users');
       setRegisteredUsers(data || []);
     } catch {
       showToast('error', 'Failed to load registered users');
@@ -165,26 +169,10 @@ export default function SubscribersPage() {
     if (!addEmail.trim()) return;
     setAdding(true);
     try {
-      const email = addEmail.trim().toLowerCase();
-      const { data: existing } = await supabase
-        .from('newsletter_subscribers')
-        .select('id, is_active')
-        .eq('email', email)
-        .maybeSingle();
-
-      if (existing) {
-        if (existing.is_active) throw new Error('Email already subscribed');
-        const { error } = await supabase
-          .from('newsletter_subscribers')
-          .update({ is_active: true, unsubscribed_at: null, confirmed_at: new Date().toISOString() })
-          .eq('id', existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('newsletter_subscribers')
-          .insert({ email, is_active: true, source: 'admin', confirmed_at: new Date().toISOString() });
-        if (error) throw error;
-      }
+      await apiFetch('/api/newsletter', {
+        method: 'POST',
+        body: JSON.stringify({ email: addEmail.trim().toLowerCase() }),
+      });
       showToast('success', `${addEmail} added successfully`);
       setAddEmail('');
       setShowAddForm(false);
@@ -199,8 +187,7 @@ export default function SubscribersPage() {
   const handleDeleteSubscriber = async (id: string, email: string) => {
     setDeletingSubId(id);
     try {
-      const { error } = await supabase.from('newsletter_subscribers').delete().eq('id', id);
-      if (error) throw error;
+      await apiFetch(`/api/newsletter/${id}`, { method: 'DELETE' });
       showToast('success', `${email} removed`);
       setSubscribers(prev => prev.filter(s => s.id !== id));
     } catch {
@@ -222,15 +209,13 @@ export default function SubscribersPage() {
 
   const handleToggleSubscriberActive = async (subscriber: Subscriber) => {
     try {
-      const { error } = await supabase
-        .from('newsletter_subscribers')
-        .update({
+      await apiFetch(`/api/newsletter/${subscriber.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
           is_active: !subscriber.is_active,
           unsubscribed_at: !subscriber.is_active ? null : new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', subscriber.id);
-      if (error) throw error;
+        }),
+      });
       setSubscribers(prev =>
         prev.map(s => s.id === subscriber.id ? { ...s, is_active: !s.is_active } : s)
       );
@@ -250,11 +235,7 @@ export default function SubscribersPage() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const { error } = await supabase
-            .from('newsletter_subscribers')
-            .delete()
-            .in('id', [...selectedSubs]);
-          if (error) throw error;
+          await Promise.all([...selectedSubs].map(id => apiFetch(`/api/newsletter/${id}`, { method: 'DELETE' })));
           setSubscribers(prev => prev.filter(s => !selectedSubs.has(s.id)));
           setSelectedSubs(new Set());
           showToast('success', `${count} subscribers deleted`);
@@ -302,11 +283,10 @@ export default function SubscribersPage() {
     if (!banModal) return;
     const { user, reason } = banModal;
     try {
-      const { error } = await supabase
-        .from('registered_users')
-        .update({ is_banned: true, ban_reason: reason || null, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
-      if (error) throw error;
+      await apiFetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_banned: true, ban_reason: reason || null }),
+      });
       setRegisteredUsers(prev =>
         prev.map(u => u.id === user.id ? { ...u, is_banned: true, ban_reason: reason || null } : u)
       );
@@ -319,11 +299,10 @@ export default function SubscribersPage() {
 
   const handleUnbanUser = async (user: RegisteredUser) => {
     try {
-      const { error } = await supabase
-        .from('registered_users')
-        .update({ is_banned: false, ban_reason: null, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
-      if (error) throw error;
+      await apiFetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ is_banned: false, ban_reason: null }),
+      });
       setRegisteredUsers(prev =>
         prev.map(u => u.id === user.id ? { ...u, is_banned: false, ban_reason: null } : u)
       );
@@ -335,16 +314,11 @@ export default function SubscribersPage() {
 
   const handleRemoveUserNewsletter = async (user: RegisteredUser) => {
     try {
-      await supabase
-        .from('newsletter_subscribers')
-        .update({ is_active: false, unsubscribed_at: new Date().toISOString() })
-        .eq('email', user.email);
-
-      await supabase
-        .from('registered_users')
-        .update({ newsletter_unsubscribed: true, updated_at: new Date().toISOString() })
-        .eq('id', user.id);
-
+      // Server cascades: updates newsletter_subscribers.is_active and registered_users.newsletter_unsubscribed
+      await apiFetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ newsletter_unsubscribed: true }),
+      });
       setRegisteredUsers(prev =>
         prev.map(u => u.id === user.id ? { ...u, newsletter_unsubscribed: true } : u)
       );
@@ -364,8 +338,7 @@ export default function SubscribersPage() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const { error } = await supabase.from('registered_users').delete().eq('id', user.id);
-          if (error) throw error;
+          await apiFetch(`/api/users/${user.id}`, { method: 'DELETE' });
           setRegisteredUsers(prev => prev.filter(u => u.id !== user.id));
           showToast('success', `${user.email} deleted`);
         } catch {

@@ -960,48 +960,12 @@ export const api = {
 
   newsletter: {
     subscribe: async (email: string, source?: string) => {
-      const normalizedEmail = email.trim().toLowerCase();
-
-      const { data: existing } = await supabase
-        .from('newsletter_subscribers')
-        .select('id, is_active')
-        .eq('email', normalizedEmail)
-        .maybeSingle();
-
-      if (existing) {
-        if (existing.is_active) {
-          throw new Error('This email is already subscribed');
-        }
-        const { data, error } = await supabase
-          .from('newsletter_subscribers')
-          .update({
-            is_active: true,
-            unsubscribed_at: null,
-            unsubscribe_reason: null,
-            unsubscribe_feedback: null,
-            confirmed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existing.id)
-          .select()
-          .single();
-        if (error) throw error;
-        return { success: true, subscriber: data };
-      }
-
-      const { data, error } = await supabase
-        .from('newsletter_subscribers')
-        .insert({
-          email: normalizedEmail,
-          is_active: true,
-          source: source || 'website',
-          confirmed_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return { success: true, subscriber: data };
+      // Route through server endpoint so unsubscribe_token is generated and welcome email is sent
+      const res = await fetchAPI('/newsletter/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim().toLowerCase(), source: source || 'website' }),
+      });
+      return res;
     },
 
     list: () => fetchAPI('/newsletter'),

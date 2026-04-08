@@ -22,25 +22,14 @@ const USER_CACHE_KEY = 'mayobebros-public-user';
 const UserAuthContext = createContext<UserAuthContextType | undefined>(undefined);
 
 async function autoSubscribeNewsletter(email: string) {
+  // Route through server so unsubscribe_token is generated and welcome email is sent
   try {
-    const { data: existing } = await supabase
-      .from('newsletter_subscribers')
-      .select('id, is_active')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (existing) {
-      if (!existing.is_active) {
-        await supabase
-          .from('newsletter_subscribers')
-          .update({ is_active: true, unsubscribed_at: null })
-          .eq('id', existing.id);
-      }
-    } else {
-      await supabase
-        .from('newsletter_subscribers')
-        .insert({ email, is_active: true, subscribed_at: new Date().toISOString() });
-    }
+    await fetch('/api/newsletter/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, source: 'signup' }),
+    });
+    // Ignore 409 (already subscribed) and 429 (rate limit) silently
   } catch {}
 }
 
@@ -175,12 +164,7 @@ export function UserAuthProvider({ children }: { children: React.ReactNode }) {
     if (data.user) {
       await autoSubscribeNewsletter(email);
       await syncRegisteredUser(data.user);
-      // Send branded account welcome email for email sign-ups
-      fetch('/api/auth/welcome-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name }),
-      }).catch(() => {});
+      // syncRegisteredUser sends the account welcome email for new users
     }
     return { error: null };
   };
