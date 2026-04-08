@@ -157,13 +157,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   useImperativeHandle(ref, () => ({
     insertAtCursor(html: string) {
       if (!editorRef.current) return;
+      // Snapshot range BEFORE focus() — focus fires selectionchange which would overwrite savedRange
+      const rangeSnapshot = savedRange.current ? savedRange.current.cloneRange() : null;
       editorRef.current.focus();
       const sel = window.getSelection();
-      if (sel && savedRange.current) {
+      if (sel && rangeSnapshot) {
         try {
-          if (editorRef.current.contains(savedRange.current.commonAncestorContainer)) {
+          if (editorRef.current.contains(rangeSnapshot.commonAncestorContainer)) {
             sel.removeAllRanges();
-            sel.addRange(savedRange.current.cloneRange());
+            sel.addRange(rangeSnapshot);
           }
         } catch {}
       }
@@ -177,15 +179,15 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
 
   // Restore saved selection then run a callback
   const withRestoredSelection = (fn: () => void) => {
+    const rangeSnapshot = savedRange.current ? savedRange.current.cloneRange() : null;
     if (editorRef.current) {
       editorRef.current.focus();
       const sel = window.getSelection();
-      if (sel && savedRange.current) {
-        // Verify the saved range is still inside the editor
+      if (sel && rangeSnapshot) {
         try {
-          if (editorRef.current.contains(savedRange.current.commonAncestorContainer)) {
+          if (editorRef.current.contains(rangeSnapshot.commonAncestorContainer)) {
             sel.removeAllRanges();
-            sel.addRange(savedRange.current);
+            sel.addRange(rangeSnapshot);
           }
         } catch {}
       }

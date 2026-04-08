@@ -25,6 +25,30 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
+      '/authoritative-sitemap.xml': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/posts-sitemap': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/category-sitemap': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/image-sitemap': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/video-sitemap': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/sitemap-status': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
       '/feed.xml': {
         target: 'http://localhost:3001',
         changeOrigin: true,

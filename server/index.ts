@@ -125,7 +125,7 @@ app.use('/api/reviews', reviewsRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/newsletter', newsletterRoutes);
-app.use('/sitemap.xml', sitemapRoutes);
+app.use(sitemapRoutes);
 app.use('/feed.xml', feedRoutes);
 app.use('/api/indexing', indexingRoutes);
 app.use('/api/trending', trendingRoutes);
