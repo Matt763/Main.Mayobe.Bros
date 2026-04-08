@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { supabase } from '../lib/supabase.js';
+import { getSupabaseClient } from '../utils/supabase.js';
 
 const router = Router();
 
@@ -16,6 +16,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'event and videoSrc are required' });
     }
 
+    const supabase = getSupabaseClient();
     await supabase.from('video_analytics').insert({
       event: String(event).slice(0, 50),
       video_src: String(videoSrc).slice(0, 500),
