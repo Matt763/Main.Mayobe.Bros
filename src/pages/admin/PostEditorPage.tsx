@@ -275,7 +275,12 @@ export default function PostEditorPage() {
     if (imagePickerTarget === 'featured') {
       setFeaturedImage(imageUrl);
     } else {
-      setContent(content + `<img src="${imageUrl}" alt="" class="max-w-full h-auto rounded-lg my-4" />`);
+      const imgHtml = `<img src="${imageUrl}" alt="" class="max-w-full h-auto rounded-lg my-4" />`;
+      if (editorApiRef.current) {
+        editorApiRef.current.insertAtCursor(imgHtml);
+      } else {
+        setContent(prev => prev + imgHtml);
+      }
     }
     setShowImagePicker(false);
   };

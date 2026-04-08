@@ -402,22 +402,48 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
 
   // ── DROP ────────────────────────────────────────────────────────────────
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (file?.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const src = ev.target?.result as string;
-        if (editorRef.current) {
-          editorRef.current.focus();
-          document.execCommand('insertHTML', false,
-            `<figure class="chart-figure"><img src="${src}" alt="Dropped image" /><figcaption contenteditable="true">Caption</figcaption></figure><p></p>`
-          );
-          setTimeout(updateContent, 10);
-        }
-      };
-      reader.readAsDataURL(file);
+
+    if (!file?.type.startsWith('image/')) {
+      // Non-image drop (internal text/HTML DnD) — let the browser handle it
+      // natively so text can be dragged to any position within the editor.
+      // onInput will fire and sync state after the native insertion.
+      return;
     }
+
+    e.preventDefault();
+
+    // Capture the exact drop insertion point via caret-from-point BEFORE
+    // calling focus(), because focus() fires selectionchange which would
+    // overwrite savedRange with the wrong position.
+    let dropRange: Range | null = null;
+    if (document.caretRangeFromPoint) {
+      dropRange = document.caretRangeFromPoint(e.clientX, e.clientY);
+    } else {
+      const pos = (document as any).caretPositionFromPoint?.(e.clientX, e.clientY);
+      if (pos) {
+        dropRange = document.createRange();
+        dropRange.setStart(pos.offsetNode, pos.offset);
+        dropRange.collapse(true);
+      }
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const src = ev.target?.result as string;
+      if (!editorRef.current) return;
+      editorRef.current.focus();
+      const sel = window.getSelection();
+      if (sel && dropRange && editorRef.current.contains(dropRange.commonAncestorContainer)) {
+        sel.removeAllRanges();
+        sel.addRange(dropRange);
+      }
+      document.execCommand('insertHTML', false,
+        `<figure class="chart-figure"><img src="${src}" alt="Dropped image" /><figcaption contenteditable="true">Caption</figcaption></figure><p></p>`
+      );
+      setTimeout(updateContent, 10);
+    };
+    reader.readAsDataURL(file);
   };
 
   // ── KEYBOARD — Word-like behaviour ─────────────────────────────────────
