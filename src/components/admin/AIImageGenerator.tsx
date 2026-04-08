@@ -65,6 +65,7 @@ export default function AIImageGenerator({
     const res = await fetch('/api/images/upload-base64', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ base64, mimeType, label }),
     });
     const data = await res.json();
