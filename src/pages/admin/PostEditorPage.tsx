@@ -159,7 +159,7 @@ export default function PostEditorPage() {
   const getAuthorRole = () => {
     if (isCEO) return 'ceo';
     if (isAdmin) return 'admin';
-    return 'staff';
+    return 'publisher';
   };
 
   const buildPostData = (overrideStatus?: string) => {

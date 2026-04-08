@@ -1,7 +1,72 @@
 import { Router } from 'express';
 import { getSupabaseClient } from '../utils/supabase.js';
+import { sendAccountWelcomeEmail, sendForgotPasswordEmail } from '../utils/resend.js';
 
 const router = Router();
+
+function getSiteUrl(): string {
+  return process.env.VITE_SITE_URL || 'https://mayobebros.com';
+}
+
+function generateMemberCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return `MB-${code}`;
+}
+
+// POST /api/auth/welcome-email — send branded account welcome email
+router.post('/welcome-email', async (req, res) => {
+  try {
+    const { email, name } = req.body;
+    if (!email || !name) return res.status(400).json({ error: 'email and name required' });
+    res.json({ success: true }); // respond immediately, send async
+    sendAccountWelcomeEmail(email, name, getSiteUrl()).catch(e =>
+      console.error('[RESEND] Account welcome email failed:', e)
+    );
+  } catch (error) {
+    console.error('[AUTH] welcome-email error:', error);
+    res.status(500).json({ error: 'Failed to send welcome email' });
+  }
+});
+
+// POST /api/auth/forgot-password — email the user's secret code so they can reset
+router.post('/forgot-password', async (req, res) => {
+  // Always respond immediately — never reveal whether an email exists
+  res.json({ success: true });
+
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string') return;
+
+    const supabase = getSupabaseClient();
+    const { data: user } = await supabase
+      .from('registered_users')
+      .select('id, email, name, secret_code')
+      .eq('email', email.trim().toLowerCase())
+      .maybeSingle();
+
+    if (!user) return;
+
+    let secretCode: string = user.secret_code;
+    if (!secretCode) {
+      secretCode = generateMemberCode();
+      await supabase
+        .from('registered_users')
+        .update({ secret_code: secretCode })
+        .eq('id', user.id);
+    }
+
+    await sendForgotPasswordEmail(
+      user.email,
+      user.name || 'User',
+      secretCode,
+      getSiteUrl()
+    );
+  } catch (e) {
+    console.error('[AUTH] forgot-password error:', e);
+  }
+});
 
 router.post('/login', async (req, res) => {
   try {
@@ -11,10 +76,44 @@ router.post('/login', async (req, res) => {
     }
 
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error || !data.user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+    // First attempt
+    let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    // If email not confirmed, auto-confirm via service role using user_id from admin_users
+    if (error?.message?.toLowerCase().includes('email not confirmed') ||
+        error?.message?.toLowerCase().includes('not confirmed')) {
+      try {
+        const { data: adminRow } = await supabase
+          .from('admin_users')
+          .select('user_id')
+          .eq('email', email.toLowerCase())
+          .maybeSingle();
+        if (adminRow?.user_id) {
+          await supabase.auth.admin.updateUserById(adminRow.user_id, { email_confirm: true });
+          const retry = await supabase.auth.signInWithPassword({ email, password });
+          data = retry.data;
+          error = retry.error;
+        }
+      } catch (adminErr) {
+        console.error('[AUTH] Auto-confirm failed:', adminErr);
+      }
+    }
+
+    if (error || !data?.user) {
+      const msg = error?.message || 'Invalid email or password';
+      return res.status(401).json({ error: msg });
+    }
+
+    // Look up the admin_users record for role + display name
+    const { data: adminRecord } = await supabase
+      .from('admin_users')
+      .select('role, display_name, is_active')
+      .eq('user_id', data.user.id)
+      .maybeSingle();
+
+    if (!adminRecord || !adminRecord.is_active) {
+      return res.status(403).json({ error: 'Access denied. You are not authorized to access the admin panel.' });
     }
 
     req.session.userId = data.user.id;
@@ -24,7 +123,8 @@ router.post('/login', async (req, res) => {
       user: {
         id: data.user.id,
         email: data.user.email || '',
-        role: (data.user.user_metadata?.role as string) || 'admin',
+        role: adminRecord.role,
+        displayName: adminRecord.display_name || email.split('@')[0],
       }
     });
   } catch (error) {

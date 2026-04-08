@@ -36,7 +36,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin', red
 
   const [secretCode, setSecretCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [resetStep, setResetStep] = useState<'code' | 'password' | 'done'>('code');
+  const [resetStep, setResetStep] = useState<'email' | 'code' | 'password' | 'done'>('email');
+  const [resetEmail, setResetEmail] = useState('');
   const [verifiedEmail, setVerifiedEmail] = useState('');
 
   useEffect(() => {
@@ -50,7 +51,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin', red
       setShowPassword(false);
       setSecretCode('');
       setNewPassword('');
-      setResetStep('code');
+      setResetStep('email');
+      setResetEmail('');
       setVerifiedEmail('');
     }
   }, [isOpen, initialMode]);
@@ -150,7 +152,39 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin', red
     }
   };
 
+  const handleSendResetCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail.trim().toLowerCase() }),
+      });
+      // Always move forward — server never reveals if email exists
+      setResetStep('code');
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (mode === 'forgot') {
+    const stepTitles: Record<string, string> = {
+      email: 'Forgot Password',
+      code: 'Enter Reset Code',
+      password: 'New Password',
+      done: 'All Done',
+    };
+    const stepSubs: Record<string, string> = {
+      email: 'We\'ll email your secret reset code',
+      code: 'Check your inbox for the code',
+      password: 'Choose a secure new password',
+      done: 'Your password has been updated',
+    };
+
     return (
       <div
         className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -158,15 +192,33 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin', red
       >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
         <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 dark:border-gray-800">
-          <div className="bg-gradient-to-br from-blue-600 to-blue-700 px-8 pt-8 pb-12">
+
+          {/* Header */}
+          <div className="bg-gradient-to-br from-[#1e3a5f] to-blue-700 px-8 pt-8 pb-12">
             <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors">
               <X size={16} />
             </button>
-            <h2 className="text-2xl font-bold text-white mb-1">Reset Password</h2>
-            <p className="text-blue-100 text-sm">Use your Mayobe Bros Secret Code</p>
+            <h2 className="text-2xl font-bold text-white mb-1">{stepTitles[resetStep]}</h2>
+            <p className="text-blue-100 text-sm">{stepSubs[resetStep]}</p>
           </div>
 
-          <div className="-mt-6 mx-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
+          {/* Step indicator */}
+          {resetStep !== 'done' && (
+            <div className="flex items-center gap-0 px-8 -mt-3 mb-0 relative z-10">
+              {(['email', 'code', 'password'] as const).map((s, i) => (
+                <div key={s} className="flex items-center flex-1 last:flex-none">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                    s === resetStep ? 'bg-blue-600 border-blue-600 text-white shadow-md' :
+                    ['email','code','password'].indexOf(resetStep) > i ? 'bg-green-500 border-green-500 text-white' :
+                    'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-400'
+                  }`}>{['email','code','password'].indexOf(resetStep) > i ? '✓' : i + 1}</div>
+                  {i < 2 && <div className={`flex-1 h-0.5 mx-1 ${['email','code','password'].indexOf(resetStep) > i ? 'bg-green-400' : 'bg-gray-200 dark:bg-gray-700'}`} />}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="-mt-5 mx-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
             {error && (
               <div className="flex items-start gap-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 mb-4">
                 <AlertCircle size={16} className="text-red-500 flex-shrink-0 mt-0.5" />
@@ -174,34 +226,69 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin', red
               </div>
             )}
 
+            {/* Step 1: Enter email */}
+            {resetStep === 'email' && (
+              <form onSubmit={handleSendResetCode} className="space-y-4">
+                <div className="text-center mb-1">
+                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Mail size={22} className="text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Enter your account email. We'll send your secret reset code right away.</p>
+                </div>
+                <div className="relative">
+                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <input
+                    type="email"
+                    placeholder="Your account email"
+                    value={resetEmail}
+                    onChange={e => { setResetEmail(e.target.value); setError(''); }}
+                    required
+                    autoFocus
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
+                </div>
+                <button type="submit" disabled={loading} className="w-full bg-[#1e3a5f] hover:bg-blue-900 text-white py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                  {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Send Reset Code'}
+                </button>
+              </form>
+            )}
+
+            {/* Step 2: Enter emailed code */}
             {resetStep === 'code' && (
               <form onSubmit={handleVerifyCode} className="space-y-4">
-                <div className="text-center mb-2">
-                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <KeyRound size={24} className="text-blue-600 dark:text-blue-400" />
+                <div className="text-center mb-1">
+                  <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <KeyRound size={22} className="text-green-600 dark:text-green-400" />
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Enter the secret code from your account to verify your identity.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    We sent your secret code to <strong className="text-gray-900 dark:text-white">{resetEmail || 'your email'}</strong>. Check your inbox and paste it below.
+                  </p>
                 </div>
                 <div className="relative">
                   <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                   <input
                     type="text"
-                    placeholder="e.g. MB-A9X4P8T2 or S-A7XK2"
+                    placeholder="e.g. MB-A9X4P8T2"
                     value={secretCode}
-                    onChange={e => { setSecretCode(e.target.value); setError(''); }}
+                    onChange={e => { setSecretCode(e.target.value.toUpperCase()); setError(''); }}
                     required
-                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-mono tracking-wider"
+                    autoFocus
+                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-mono tracking-widest"
                   />
                 </div>
-                <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                <button type="submit" disabled={loading} className="w-full bg-[#1e3a5f] hover:bg-blue-900 text-white py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2">
                   {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Verify Code'}
+                </button>
+                <button type="button" onClick={() => { setResetStep('email'); setSecretCode(''); setError(''); }} className="w-full text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors text-center">
+                  Didn't receive it? Go back and try again
                 </button>
               </form>
             )}
 
+            {/* Step 3: New password */}
             {resetStep === 'password' && (
               <form onSubmit={handleResetPassword} className="space-y-4">
-                <div className="text-center mb-2">
+                <div className="text-center mb-1">
                   <p className="text-sm text-gray-600 dark:text-gray-400">Verified as <strong className="text-gray-900 dark:text-white">{verifiedEmail}</strong></p>
                 </div>
                 <div className="relative">
@@ -212,27 +299,29 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin', red
                     value={newPassword}
                     onChange={e => { setNewPassword(e.target.value); setError(''); }}
                     required
+                    autoFocus
                     className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                   <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                <button type="submit" disabled={loading} className="w-full bg-[#1e3a5f] hover:bg-blue-900 text-white py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2">
                   {loading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Reset Password'}
                 </button>
               </form>
             )}
 
+            {/* Step 4: Done */}
             {resetStep === 'done' && (
               <div className="text-center py-4">
                 <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Lock size={28} className="text-green-600 dark:text-green-400" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Password Reset</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Your password has been changed. You can now sign in with your new password.</p>
-                <button onClick={() => { setMode('signin'); setResetStep('code'); }} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold text-sm transition-all">
-                  Go to Sign In
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Password Updated!</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Your password has been changed successfully. Sign in with your new password.</p>
+                <button onClick={() => { setMode('signin'); setResetStep('email'); }} className="w-full bg-[#1e3a5f] hover:bg-blue-900 text-white py-2.5 rounded-xl font-semibold text-sm transition-all">
+                  Sign In Now
                 </button>
               </div>
             )}
@@ -240,7 +329,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin', red
 
           <div className="px-6 py-4 text-center">
             <button
-              onClick={() => { setMode('signin'); setError(''); setResetStep('code'); }}
+              onClick={() => { setMode('signin'); setError(''); setResetStep('email'); setResetEmail(''); }}
               className="text-sm text-blue-600 dark:text-blue-400 font-semibold hover:underline flex items-center gap-1 mx-auto"
             >
               <ArrowLeft size={14} /> Back to Sign In
@@ -360,7 +449,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin', red
               <div className="text-right">
                 <button
                   type="button"
-                  onClick={() => { setMode('forgot'); setError(''); setSuccess(''); }}
+                  onClick={() => { setMode('forgot'); setResetStep('email'); setResetEmail(''); setError(''); setSuccess(''); }}
                   className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium"
                 >
                   Forgot Password?

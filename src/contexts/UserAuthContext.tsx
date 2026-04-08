@@ -87,6 +87,12 @@ async function syncRegisteredUser(suUser: any) {
       await supabase
         .from('registered_users')
         .insert({ id, email, name, avatar_url, provider, last_sign_in_at: new Date().toISOString() });
+      // New user — send welcome email (works for Google OAuth and any first-time sign-in)
+      fetch('/api/auth/welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name }),
+      }).catch(() => {});
     }
   } catch {}
 }
@@ -169,6 +175,12 @@ export function UserAuthProvider({ children }: { children: React.ReactNode }) {
     if (data.user) {
       await autoSubscribeNewsletter(email);
       await syncRegisteredUser(data.user);
+      // Send branded account welcome email for email sign-ups
+      fetch('/api/auth/welcome-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, name }),
+      }).catch(() => {});
     }
     return { error: null };
   };
@@ -181,12 +193,14 @@ export function UserAuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInGoogle = async () => {
     sessionStorage.setItem('mayobebros-return-path', window.location.pathname + window.location.search);
+    const redirectTo = import.meta.env.VITE_SITE_URL
+      ? import.meta.env.VITE_SITE_URL
+      : window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}`,
+        redirectTo,
         queryParams: {
-          client_id: '900031917670-5hic7s69mcui1dlpm64g4gu93jg1pa41.apps.googleusercontent.com',
           access_type: 'offline',
           prompt: 'consent',
         },

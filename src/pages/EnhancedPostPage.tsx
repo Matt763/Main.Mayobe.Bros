@@ -719,7 +719,7 @@ export default function EnhancedPostPage() {
                       </Link>
                       {authorProfile.role && (
                         <span className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
-                          {{ceo:'Founder & CEO',admin:'Managing Editor',editor:'Editor',staff:'Staff Writer',author:'Staff Writer',contributor:'Contributor'}[authorProfile.role] || authorProfile.role}
+                          {{ceo:'Founder & CEO',admin:'Managing Editor',editor:'Editor',publisher:'Publisher',staff:'Publisher',author:'Publisher',contributor:'Contributor'}[authorProfile.role] || authorProfile.role}
                         </span>
                       )}
                     </div>
@@ -815,13 +815,13 @@ export default function EnhancedPostPage() {
                   const role = comment.authorRole || comment.author_role;
                   const isCEOComment = role === 'ceo';
                   const isAdminComment = role === 'admin';
-                  const isStaffComment = role === 'staff';
-                  const isPrivileged = isCEOComment || isAdminComment || isStaffComment;
+                  const isPublisherComment = role === 'publisher' || role === 'staff';
+                  const isPrivileged = isCEOComment || isAdminComment || isPublisherComment;
                   const avatarBg = isCEOComment
                     ? 'bg-amber-500 dark:bg-amber-400'
                     : isAdminComment
                     ? 'bg-blue-700 dark:bg-blue-600'
-                    : isStaffComment
+                    : isPublisherComment
                     ? 'bg-teal-600 dark:bg-teal-500'
                     : 'bg-blue-600 dark:bg-blue-500';
 
@@ -898,12 +898,12 @@ export default function EnhancedPostPage() {
                             const replyRole = reply.author_role;
                             const replyIsCEO = replyRole === 'ceo';
                             const replyIsAdmin = replyRole === 'admin';
-                            const replyIsStaff = replyRole === 'staff';
+                            const replyIsPublisher = replyRole === 'publisher' || replyRole === 'staff';
                             const replyAvatarBg = replyIsCEO
                               ? 'bg-amber-500'
                               : replyIsAdmin
                               ? 'bg-blue-700'
-                              : replyIsStaff
+                              : replyIsPublisher
                               ? 'bg-teal-600'
                               : 'bg-gray-500';
                             return (

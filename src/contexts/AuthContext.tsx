@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 
-export type AdminRole = 'ceo' | 'admin' | 'staff';
+export type AdminRole = 'ceo' | 'admin' | 'publisher';
 
 export interface AdminUser {
   id: string;
@@ -171,6 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    // Primary path: Supabase client (establishes real session for DB queries)
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -184,17 +185,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
         return { error: null };
       }
-    } catch {}
 
-    try {
-      const { user: apiUser } = await api.auth.login(email, password);
-      const mapped: AdminUser = { ...apiUser, role: 'ceo', displayName: apiUser.email?.split('@')[0] || '', isActive: true };
-      setUser(mapped);
-      localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(mapped));
-      return { error: null };
-    } catch (apiError: any) {
-      return { error: { message: apiError.message } };
+      // If not an auth credential error, fall through to server which can auto-confirm
+      const isCredentialError = error?.message?.toLowerCase().includes('invalid login credentials');
+      if (isCredentialError) {
+        return { error: { message: 'Invalid email or password.' } };
+      }
+      // email not confirmed or other — let server handle it
+    } catch (supaErr: any) {
+      console.warn('[AUTH] Supabase client error, trying server:', supaErr?.message);
     }
+
+    // Server-side login: has service role key, auto-confirms email, returns role from admin_users
+    try {
+      const result = await api.auth.login(email, password);
+      if (result.user) {
+        // Now try Supabase client sign-in again (email should be confirmed now)
+        try {
+          const { data: retryData } = await supabase.auth.signInWithPassword({ email, password });
+          if (retryData?.user) {
+            const adminUser = await resolveAdminUser(retryData.user);
+            if (adminUser) {
+              setUser(adminUser);
+              localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
+              return { error: null };
+            }
+          }
+        } catch {}
+
+        // Use server profile directly if Supabase session still not available
+        const mapped: AdminUser = {
+          id: result.user.id,
+          email: result.user.email || '',
+          role: (result.user.role as AdminRole) || 'publisher',
+          displayName: result.user.displayName || result.user.email?.split('@')[0] || '',
+          isActive: true,
+        };
+        setUser(mapped);
+        localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(mapped));
+        return { error: null };
+      }
+    } catch (apiError: any) {
+      return { error: { message: apiError.message || 'Invalid email or password' } };
+    }
+
+    return { error: { message: 'Unable to sign in. Please try again.' } };
   };
 
   const signOut = async () => {

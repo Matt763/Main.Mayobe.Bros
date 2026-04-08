@@ -103,7 +103,7 @@ export default function AuthorProfilePage() {
         facebook_url: form.facebook_url || null,
         website_url: form.website_url || null,
         is_active: true,
-        role: user.role || 'staff',
+        role: user.role || 'publisher',
       };
 
       if (profileId) {

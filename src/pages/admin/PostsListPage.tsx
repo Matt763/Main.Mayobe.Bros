@@ -94,7 +94,7 @@ export default function PostsListPage() {
     let filtered = posts;
 
     if (isStaff) {
-      filtered = filtered.filter(p => p.author_name === (user?.displayName || user?.email?.split('@')[0]) || !p.author_role || p.author_role === 'staff');
+      filtered = filtered.filter(p => p.author_name === (user?.displayName || user?.email?.split('@')[0]) || !p.author_role || p.author_role === 'publisher' || p.author_role === 'staff');
     }
 
     if (activeFilter === 'published') {

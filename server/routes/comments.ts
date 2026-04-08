@@ -14,7 +14,7 @@ import { logActivity } from '../utils/activityLogger.js';
 
 const router = Router();
 
-const PRIVILEGED_ROLES = ['ceo', 'admin', 'staff'];
+const PRIVILEGED_ROLES = ['ceo', 'admin', 'publisher', 'staff'];
 
 function normalizeComment(row: Record<string, unknown>): Record<string, unknown> {
   return {

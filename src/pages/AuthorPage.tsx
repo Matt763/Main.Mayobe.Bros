@@ -37,7 +37,8 @@ const ROLE_LABELS: Record<string, string> = {
   editor: 'Editor',
   author: 'Staff Writer',
   contributor: 'Contributor',
-  staff: 'Staff Writer',
+  publisher: 'Publisher',
+  staff: 'Publisher',
 };
 
 export default function AuthorPage() {

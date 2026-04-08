@@ -6,9 +6,11 @@ export function useRole() {
 
   const isCEO = role === 'ceo';
   const isAdmin = role === 'admin';
-  const isStaff = role === 'staff';
+  const isPublisher = role === 'publisher';
+  /** @deprecated use isPublisher */
+  const isStaff = isPublisher;
 
   const canAccess = (...allowed: AdminRole[]) => role !== null && allowed.includes(role);
 
-  return { role, isCEO, isAdmin, isStaff, canAccess };
+  return { role, isCEO, isAdmin, isPublisher, isStaff, canAccess };
 }

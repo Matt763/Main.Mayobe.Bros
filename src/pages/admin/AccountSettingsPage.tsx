@@ -11,16 +11,16 @@ interface AdminUserRecord {
   user_id: string;
   email: string;
   display_name: string;
-  role: 'ceo' | 'admin' | 'staff';
+  role: 'ceo' | 'admin' | 'publisher';
   is_active: boolean;
 }
 
-const ROLE_LABELS = { ceo: 'CEO', admin: 'Admin', staff: 'Staff / Publisher' };
-const ROLE_ICONS = { ceo: Crown, admin: Shield, staff: User };
+const ROLE_LABELS = { ceo: 'CEO', admin: 'Admin', publisher: 'Publisher' };
+const ROLE_ICONS = { ceo: Crown, admin: Shield, publisher: User };
 const ROLE_COLORS = {
   ceo: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
   admin: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  staff: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  publisher: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
 };
 
 export default function AccountSettingsPage() {
