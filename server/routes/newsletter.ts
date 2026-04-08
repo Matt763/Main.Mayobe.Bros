@@ -82,7 +82,7 @@ router.post('/subscribe', async (req: Request, res: Response) => {
       sendWelcomeEmail(normalizedEmail, unsubscribeUrl, siteUrl).catch(e =>
         console.error('[RESEND] Welcome email failed (reactivation):', e)
       );
-      return res.json({ success: true, subscriber: reactivated });
+      return res.json({ success: true, subscriber: reactivated, reactivated: true });
     }
 
     const { data: subscriber, error } = await supabase
@@ -177,7 +177,8 @@ router.post('/unsubscribe', async (req: Request, res: Response) => {
       .eq('id', subscriber.id);
 
     const siteUrl = getSiteUrl();
-    sendFarewellEmail(subscriber.email, siteUrl, siteUrl, reason || null).catch(e =>
+    const resubscribeUrl = `${siteUrl}/#newsletter`;
+    sendFarewellEmail(subscriber.email, siteUrl, resubscribeUrl, reason || null).catch(e =>
       console.error('[RESEND] Farewell email failed:', e)
     );
 

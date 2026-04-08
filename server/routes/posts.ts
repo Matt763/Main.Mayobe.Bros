@@ -184,12 +184,14 @@ router.put('/:slug', requireAuth, async (req, res) => {
 
     const { data: existing, error: findErr } = await supabase
       .from('posts')
-      .select('id')
+      .select('id, status')
       .eq('slug', req.params.slug)
       .maybeSingle();
 
     if (findErr) throw findErr;
     if (!existing) return res.status(404).json({ error: 'Post not found' });
+
+    const wasPublished = existing.status === 'published';
 
     const categoryId = await resolveCategoryId(supabase, body.categoryId || body.category_id);
     const rawLabelId2 = body.labelId || body.label_id || (Array.isArray(body.labelIds) ? body.labelIds[0] : undefined);
@@ -251,7 +253,9 @@ router.put('/:slug', requireAuth, async (req, res) => {
       description: `${editorName} ${updateAction} the post "${data.title}".`,
     });
 
-    if (data.status === 'published' && body.status === 'published') {
+    // Only dispatch newsletter when a post newly becomes published (draft → published).
+    // Editing an already-published post should NOT re-trigger the newsletter.
+    if (!wasPublished && data.status === 'published') {
       const cats = data.categories as Record<string, string> | null;
       dispatchPostNewsletter({
         id: data.id as string,
@@ -265,7 +269,7 @@ router.put('/:slug', requireAuth, async (req, res) => {
       }).catch(e => console.error('[NEWSLETTER] Update dispatch error:', e));
 
       const catSlug = cats?.slug || '';
-      const postUrl = `https://mayobebros.com/post/${catSlug}/${data.slug}`;
+      const postUrl = `${process.env.VITE_SITE_URL || 'https://mayobebros.com'}/post/${catSlug}/${data.slug}`;
       notifySearchEngines({ postUrl, postSlug: data.slug as string })
         .catch(e => console.error('[PING] Update ping error:', e));
     }
