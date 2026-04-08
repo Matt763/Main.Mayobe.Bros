@@ -32,9 +32,9 @@ async function callClaude(prompt: string, systemPrompt: string, maxTokens = 4096
   return data.content?.[0]?.text || '';
 }
 
-async function callOpenAI(prompt: string, systemPrompt: string, maxTokens = 4096): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('No OpenAI API key configured');
+async function callOpenAI(prompt: string, systemPrompt: string, maxTokens = 4096, userApiKey?: string): Promise<string> {
+  const apiKey = userApiKey || process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('No OpenAI API key configured. Add your OpenAI key in the SEO Assistant settings.');
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -52,7 +52,10 @@ async function callOpenAI(prompt: string, systemPrompt: string, maxTokens = 4096
     }),
   });
 
-  if (!res.ok) throw new Error(`OpenAI API error ${res.status}`);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({})) as any;
+    throw new Error(errBody?.error?.message || `OpenAI API error ${res.status}`);
+  }
   const data = await res.json() as any;
   return data.choices?.[0]?.message?.content || '';
 }
@@ -788,8 +791,8 @@ Text: ${text}`;
 
 router.post('/seo-auto', async (req: Request, res: Response) => {
   try {
-    const { title, content, apiProvider = 'claude' } = req.body as {
-      title: string; content: string; apiProvider?: string;
+    const { title, content, apiProvider = 'claude', openaiKey } = req.body as {
+      title: string; content: string; apiProvider?: string; openaiKey?: string;
     };
     if (!content && !title) return res.status(400).json({ error: 'Title or content required' });
 
@@ -797,34 +800,40 @@ router.post('/seo-auto', async (req: Request, res: Response) => {
     const wordCount = plainText.split(/\s+/).filter(Boolean).length;
     const h2s = (content || '').match(/<h2[^>]*>(.*?)<\/h2>/gi) || [];
 
-    const systemPrompt = `You are an expert SEO content strategist for an African news and lifestyle website (mayobebros.com). You write precise, compelling meta content optimized for Google search. Return ONLY valid JSON — no extra text, no markdown.`;
+    const systemPrompt = `You are an expert SEO content strategist for an African news and lifestyle website (mayobebros.com). You write precise, compelling meta content optimized for Google search. Return ONLY valid JSON — no extra text, no markdown fences.`;
 
-    const prompt = `Generate all SEO metadata for this article. Return ONLY this JSON:
+    const prompt = `Generate all SEO metadata for this article. Return ONLY this JSON object (no markdown, no explanation):
 {
-  "seoTitle": "Compelling SEO title 50-60 chars with primary keyword near start",
-  "metaDescription": "Compelling meta description exactly 150-160 characters. Include primary keyword. End with a value proposition or call-to-action.",
-  "keywords": "keyword1, keyword2, keyword3, keyword4, keyword5, keyword6, keyword7, keyword8, keyword9, keyword10",
-  "excerpt": "Compelling article excerpt/teaser 150-200 words that hooks the reader and summarizes the article value without giving everything away. Write in active voice."
+  "seoTitle": "Compelling SEO title 50-60 characters with primary keyword near start",
+  "metaDescription": "Compelling meta description exactly 150-160 characters. Include primary keyword. End with a value proposition.",
+  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5", "keyword6", "keyword7", "keyword8", "keyword9", "keyword10"],
+  "excerpt": "Compelling article excerpt 150-200 words that hooks the reader and summarizes the article value. Write in active voice."
 }
 
 Rules:
-- SEO Title: 50-60 chars, primary keyword within first 3 words if possible
-- Meta Description: EXACTLY 150-160 chars (count carefully)
-- Keywords: 10-15 comma-separated, mix of short-tail and long-tail, Africa/Kenya context where relevant
-- Excerpt: 150-200 words, hooks reader, ends with implied promise of value
+- seoTitle: 50-60 chars total, primary keyword within first 3 words
+- metaDescription: EXACTLY 150-160 characters (count carefully)
+- keywords: JSON array of 10-15 strings, mix of short-tail and long-tail, Africa/Kenya context where relevant
+- excerpt: 150-200 words, hooks reader, ends with implied promise of value
 
 Article Title: ${title || 'Not set'}
 Word Count: ${wordCount}
 H2 Headings: ${h2s.map(h => h.replace(/<[^>]+>/g, '')).slice(0, 8).join(' | ') || 'None'}
-Content: ${plainText.substring(0, 3000)}`;
+Content (first 3000 chars): ${plainText.substring(0, 3000)}`;
 
     let raw: string;
     if (apiProvider === 'openai') {
-      raw = await callOpenAI(prompt, systemPrompt, 2000);
+      raw = await callOpenAI(prompt, systemPrompt, 2000, openaiKey);
     } else {
-      raw = await callAI(prompt, systemPrompt, 2000);
+      raw = await callClaude(prompt, systemPrompt, 2000);
     }
     const parsed = extractJson(raw);
+
+    // Normalise keywords to always be an array
+    if (typeof parsed.keywords === 'string') {
+      parsed.keywords = parsed.keywords.split(',').map((k: string) => k.trim()).filter(Boolean);
+    }
+
     return res.json(parsed);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

@@ -199,10 +199,18 @@ export default function AISEOAssistant({
       if (!res.ok) throw new Error(data.error || 'Generation failed');
 
       // Auto-populate all fields
-      if (data.seoTitle)        onSetMetaTitle(data.seoTitle.slice(0, 70));
-      if (data.metaDescription) onSetMetaDescription(data.metaDescription.slice(0, 160));
-      if (data.keywords?.length) onSetMetaKeywords(data.keywords.slice(0, 15).join(', '));
-      if (data.excerpt)          onSetExcerpt(data.excerpt);
+      if (data.seoTitle)        onSetMetaTitle(String(data.seoTitle).slice(0, 70));
+      if (data.metaDescription) onSetMetaDescription(String(data.metaDescription).slice(0, 160));
+
+      // keywords can be array or comma-separated string — handle both
+      if (data.keywords) {
+        const kwArray: string[] = Array.isArray(data.keywords)
+          ? data.keywords
+          : String(data.keywords).split(',').map((k: string) => k.trim()).filter(Boolean);
+        onSetMetaKeywords(kwArray.slice(0, 15).join(', '));
+      }
+
+      if (data.excerpt) onSetExcerpt(String(data.excerpt));
 
       setLastResult(data);
     } catch (err: any) {

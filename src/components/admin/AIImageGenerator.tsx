@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Image as ImageIcon, Wand2, Layers, Upload, Link2, Loader2,
-  AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Plus, X, Sparkles,
+  AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Plus, X, Sparkles, Key,
 } from 'lucide-react';
 
 type Mode = 'generate' | 'transform' | 'bulk';
@@ -25,6 +25,17 @@ export default function AIImageGenerator({
 }: AIImageGeneratorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('generate');
+
+  // ── Gemini API Key ─────────────────────────────────────────────────────────
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
+  const [showKeyInput, setShowKeyInput] = useState(false);
+  const [keyDraft, setKeyDraft] = useState(() => localStorage.getItem('gemini_api_key') || '');
+
+  const saveGeminiKey = () => {
+    localStorage.setItem('gemini_api_key', keyDraft);
+    setGeminiKey(keyDraft);
+    setShowKeyInput(false);
+  };
 
   // ── Text-to-Image ──────────────────────────────────────────────────────────
   const [genPrompt, setGenPrompt] = useState('');
@@ -70,6 +81,7 @@ export default function AIImageGenerator({
   // ── Generate image ─────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!genPrompt.trim()) return;
+    if (!geminiKey) { setShowKeyInput(true); setGenError('Gemini API key required. Click the key icon to add it.'); return; }
     setGenLoading(true);
     setGenError(null);
     setGenResult(null);
@@ -78,7 +90,7 @@ export default function AIImageGenerator({
       const res = await fetch('/api/editor-ai/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: genPrompt }),
+        body: JSON.stringify({ prompt: genPrompt, geminiApiKey: geminiKey }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Generation failed');
@@ -112,6 +124,7 @@ export default function AIImageGenerator({
   // ── Transform image ────────────────────────────────────────────────────────
   const handleTransform = async () => {
     if (!transformUrl.trim()) return;
+    if (!geminiKey) { setShowKeyInput(true); setTransformError('Gemini API key required. Click the key icon to add it.'); return; }
     setTransformLoading(true);
     setTransformError(null);
     setTransformResult(null);
@@ -120,7 +133,8 @@ export default function AIImageGenerator({
       const res = await fetch('/api/editor-ai/transform-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: transformUrl, rules: transformRules }),
+        // Server expects 'instructions' not 'rules'
+        body: JSON.stringify({ imageUrl: transformUrl, instructions: transformRules, geminiApiKey: geminiKey }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Transform failed');
@@ -163,10 +177,11 @@ export default function AIImageGenerator({
     setBulkResults([]);
     setBulkInserted(false);
     try {
+      if (!geminiKey) { setBulkError('Gemini API key required. Click the key icon to add it.'); setBulkLoading(false); return; }
       const res = await fetch('/api/editor-ai/bulk-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ headings }),
+        body: JSON.stringify({ headings, geminiApiKey: geminiKey }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Bulk generation failed');
@@ -224,8 +239,45 @@ export default function AIImageGenerator({
             <p className="text-xs text-gray-500 dark:text-gray-400">Gemini Imagen 3 · 8K UHD · 16:9 · Canon EOS R5</p>
           </div>
         </div>
-        {isOpen ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowKeyInput(!showKeyInput); }}
+            className="p-1.5 rounded-lg hover:bg-purple-100 dark:hover:bg-gray-700 transition-colors"
+            title="Configure Gemini API key"
+          >
+            <Key size={14} className={geminiKey ? 'text-green-500' : 'text-gray-400'} />
+          </button>
+          {isOpen ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+        </div>
       </button>
+
+      {/* Gemini key panel */}
+      {showKeyInput && (
+        <div className="px-4 pb-4 border-t border-purple-100 dark:border-gray-700 pt-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Gemini API key — stored in your browser only. Get one at <span className="text-purple-600">aistudio.google.com</span></p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={keyDraft}
+              onChange={(e) => setKeyDraft(e.target.value)}
+              placeholder="AIzaSy..."
+              className="flex-1 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+            <button
+              type="button"
+              onClick={saveGeminiKey}
+              className="px-3 py-2 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700 transition-colors"
+            >Save</button>
+            <button type="button" onClick={() => setShowKeyInput(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <X size={14} className="text-gray-500" />
+            </button>
+          </div>
+          {geminiKey && (
+            <p className="text-xs text-green-600 dark:text-green-400 mt-1.5">Key saved: AIzaSy...{geminiKey.slice(-4)}</p>
+          )}
+        </div>
+      )}
 
       {isOpen && (
         <div className="border-t border-purple-100 dark:border-gray-700">
