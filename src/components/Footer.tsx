@@ -67,7 +67,7 @@ export default function Footer() {
     { label: 'Fact Checking Policy', to: '/fact-checking-policy' },
     { label: 'Cache Policy', to: '/cache-policy' },
     { label: 'Sitemap', to: '/sitemap.xml', external: true },
-    { label: 'RSS Feed', to: '/rss' },
+    { label: 'RSS Feed', to: '/feed.xml', external: true },
   ];
 
   const socials = [
@@ -228,13 +228,15 @@ export default function Footer() {
             )}
 
             <div className="mt-5 flex items-center gap-2">
-              <Link
-                to="/rss"
+              <a
+                href="/feed.xml"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-2 text-xs text-gray-500 hover:text-orange-400 transition-colors"
               >
                 <Rss size={13} />
                 RSS Feed
-              </Link>
+              </a>
             </div>
           </div>
         </div>
