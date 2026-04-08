@@ -85,6 +85,13 @@ interface UrlEntry {
     publicationDate?: string;
     familyFriendly?: boolean;
   };
+  news?: {
+    publication: string;
+    language: string;
+    publicationDate: string;
+    title: string;
+    keywords?: string;
+  };
 }
 
 const NS_IMAGE = 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"';
@@ -251,6 +258,9 @@ router.get('/sitemap.xml', async (_req, res) => {
 
     // 5. Video sitemap (always include; may be empty if no videos found)
     entries.push({ loc: `${SITE_URL}/video-sitemap1.xml`, lastmod: isoDate(now) });
+
+    // 6. Google News sitemap (last 48h of articles)
+    entries.push({ loc: `${SITE_URL}/news-sitemap.xml`, lastmod: isoDate(latestPostDate) });
 
     const xml = buildSitemapIndex(entries);
     toCache(cacheKey, xml, entries.length);
@@ -636,7 +646,95 @@ router.get(/^\/video-sitemap(\d+)\.xml$/, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ROUTE 7: SITEMAP STATUS  → /sitemap-status
+// ROUTE 7: GOOGLE NEWS SITEMAP  → /news-sitemap.xml
+// Last 48 hours of published posts for Google News inclusion.
+// Google News only indexes articles published within the past 2 days.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildNewsSitemap(entries: UrlEntry[]): string {
+  const NS_NEWS  = 'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"';
+  const ns = [NS_BASE, NS_NEWS].join(' ');
+
+  const items = entries.map(e => {
+    if (!e.news) return '';
+    const lines = ['  <url>'];
+    lines.push(`    <loc>${escapeXml(e.loc)}</loc>`);
+    if (e.lastmod) lines.push(`    <lastmod>${isoDate(e.lastmod)}</lastmod>`);
+    lines.push('    <news:news>');
+    lines.push('      <news:publication>');
+    lines.push(`        <news:name>${escapeXml(e.news.publication)}</news:name>`);
+    lines.push(`        <news:language>${escapeXml(e.news.language)}</news:language>`);
+    lines.push('      </news:publication>');
+    lines.push(`      <news:publication_date>${isoDate(e.news.publicationDate)}</news:publication_date>`);
+    lines.push(`      <news:title>${escapeXml(e.news.title)}</news:title>`);
+    if (e.news.keywords) lines.push(`      <news:keywords>${escapeXml(e.news.keywords)}</news:keywords>`);
+    lines.push('    </news:news>');
+    lines.push('  </url>');
+    return lines.join('\n');
+  }).filter(Boolean).join('\n');
+
+  return [
+    xmlDeclaration(),
+    `<urlset ${ns}>`,
+    items,
+    '</urlset>',
+    `<!-- Google News Sitemap | Generated: ${new Date().toISOString()} | Articles: ${entries.length} -->`,
+  ].join('\n');
+}
+
+router.get('/news-sitemap.xml', async (_req, res) => {
+  try {
+    const cacheKey = 'news';
+    const cached = fromCache(cacheKey);
+    if (cached) return sendXml(res, cached);
+
+    const supabase = getSupabaseClient();
+
+    // Google News only cares about the last 2 days
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+
+    const { data: posts, error } = await supabase
+      .from('posts')
+      .select('slug, published_at, updated_at, title, excerpt, categories(slug), labels(slug)')
+      .eq('status', 'published')
+      .gte('published_at', cutoff)
+      .order('published_at', { ascending: false })
+      .limit(1000); // Google News max is 1000
+
+    if (error) throw error;
+
+    const entries: UrlEntry[] = [];
+
+    for (const post of posts || []) {
+      const catSlug   = (post.categories as any)?.slug;
+      const labelSlug = (post.labels as any)?.slug;
+      if (!catSlug) continue;
+
+      entries.push({
+        loc:     postUrl(catSlug, labelSlug, post.slug),
+        lastmod: isoDate(post.updated_at || post.published_at),
+        news: {
+          publication:     'Mayobe Bros',
+          language:        'en',
+          publicationDate: post.published_at || post.updated_at || new Date().toISOString(),
+          title:           post.title || post.slug,
+          keywords:        undefined,
+        },
+      });
+    }
+
+    const xml = buildNewsSitemap(entries);
+    // Cache news sitemap for only 15 min (freshness matters)
+    toCache(cacheKey, xml, entries.length, 15 * 60 * 1000);
+    return sendXml(res, xml);
+  } catch (err) {
+    console.error('[Sitemap] News error:', err);
+    return res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><error>Failed</error>');
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROUTE 9: SITEMAP STATUS  → /sitemap-status
 // JSON health report: stats, cache state, all sitemap URLs.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -679,6 +777,7 @@ router.get('/sitemap-status', async (_req, res) => {
         categories:    Array.from({ length: catPages  }, (_, i) => `${SITE_URL}/category-sitemap${i + 1}.xml`),
         images:        Array.from({ length: imgPages  }, (_, i) => `${SITE_URL}/image-sitemap${i + 1}.xml`),
         videos:        [`${SITE_URL}/video-sitemap1.xml`],
+        news:          `${SITE_URL}/news-sitemap.xml`,
       },
       cache: {
         entries:    getCacheEntries().length,
@@ -693,7 +792,7 @@ router.get('/sitemap-status', async (_req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ROUTE 8: MANUAL PING TRIGGER  → POST /sitemap-ping
+// ROUTE 10: MANUAL PING TRIGGER  → POST /sitemap-ping
 // For use by CMS admin to force-ping search engines.
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -155,7 +155,7 @@ router.post('/', requireAuth, async (req, res) => {
     });
 
     if (data.status === 'published') {
-      invalidateSitemapCache(['posts', 'image', 'video', 'index']);
+      invalidateSitemapCache(['posts', 'image', 'video', 'news', 'index']);
 
       const cats = data.categories as Record<string, string> | null;
       dispatchPostNewsletter({
@@ -258,7 +258,7 @@ router.put('/:slug', requireAuth, async (req, res) => {
 
     // Invalidate sitemap cache whenever a published post changes (create, edit, or status change).
     if (wasPublished || data.status === 'published') {
-      invalidateSitemapCache(['posts', 'image', 'video', 'index']);
+      invalidateSitemapCache(['posts', 'image', 'video', 'news', 'index']);
     }
 
     // Only dispatch newsletter when a post newly becomes published (draft → published).
@@ -319,7 +319,7 @@ router.delete('/:slug', requireAuth, async (req, res) => {
       .eq('slug', req.params.slug);
 
     if (error) throw error;
-    invalidateSitemapCache(['posts', 'image', 'video', 'index']);
+    invalidateSitemapCache(['posts', 'image', 'video', 'news', 'index']);
     res.json({ message: 'Post deleted successfully' });
   } catch (error) {
     console.error('Error deleting post:', error);

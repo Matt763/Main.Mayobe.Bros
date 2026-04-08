@@ -6,18 +6,38 @@ Disallow: /admin/*
 Disallow: /api/
 Disallow: /api/*
 
-Sitemap: https://mayobebros.com/sitemap.xml
-Sitemap: https://mayobebros.com/feed.xml
+# ── Sitemaps ──────────────────────────────────────────────────────────────────
+Sitemap: https://www.mayobebros.com/sitemap.xml
+Sitemap: https://www.mayobebros.com/authoritative-sitemap.xml
+Sitemap: https://www.mayobebros.com/posts-sitemap1.xml
+Sitemap: https://www.mayobebros.com/category-sitemap1.xml
+Sitemap: https://www.mayobebros.com/image-sitemap1.xml
+Sitemap: https://www.mayobebros.com/video-sitemap1.xml
+Sitemap: https://www.mayobebros.com/news-sitemap.xml
+Sitemap: https://www.mayobebros.com/feed.xml
 
+# ── Bot rules ─────────────────────────────────────────────────────────────────
 User-agent: Googlebot
 Allow: /
 Disallow: /admin/
 Disallow: /api/
 
+User-agent: Googlebot-Image
+Allow: /
+
 User-agent: Bingbot
 Allow: /
 Disallow: /admin/
 Disallow: /api/
+
+User-agent: Slurp
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /admin/
 
 User-agent: GPTBot
 Disallow: /
