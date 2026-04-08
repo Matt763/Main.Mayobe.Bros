@@ -66,8 +66,7 @@ export default function Footer() {
     { label: 'Editorial Policy', to: '/editorial-policy' },
     { label: 'Fact Checking Policy', to: '/fact-checking-policy' },
     { label: 'Cache Policy', to: '/cache-policy' },
-    { label: 'Sitemap', to: '/sitemap' },
-    { label: 'XML Sitemap', to: '/sitemap.xml', external: true },
+    { label: 'Sitemap', to: '/sitemap.xml', external: true },
     { label: 'RSS Feed', to: '/rss' },
   ];
 

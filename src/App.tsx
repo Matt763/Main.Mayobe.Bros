@@ -24,7 +24,7 @@ const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'));
 const CookiePolicyPage = lazy(() => import('./pages/CookiePolicyPage'));
 const CachePolicyPage = lazy(() => import('./pages/CachePolicyPage'));
-const SitemapPage = lazy(() => import('./pages/SitemapPage'));
+
 const RSSPage = lazy(() => import('./pages/RSSPage'));
 const AboutUsPage = lazy(() => import('./pages/AboutUsPage'));
 const ContactUsPage = lazy(() => import('./pages/ContactUsPage'));
@@ -293,7 +293,7 @@ function App() {
                           <Route path="/cache-policy" element={<CachePolicyPage />} />
                           <Route path="/editorial-policy" element={<EditorialPolicyPage />} />
                           <Route path="/fact-checking-policy" element={<FactCheckingPolicyPage />} />
-                          <Route path="/sitemap" element={<SitemapPage />} />
+
                           <Route path="/rss" element={<RSSPage />} />
                           <Route path="/about" element={<AboutUsPage />} />
                           <Route path="/contact" element={<ContactUsPage />} />
