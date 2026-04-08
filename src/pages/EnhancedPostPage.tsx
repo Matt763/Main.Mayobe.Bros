@@ -3,7 +3,7 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { Calendar, Eye, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown } from 'lucide-react';
+import { Calendar, Eye, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown, ChevronDown, List } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import SocialShare from '../components/SocialShare';
 import VoiceNarration from '../components/VoiceNarration';
@@ -13,6 +13,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { AdSlotRenderer } from '../components/AdSlotRenderer';
 import { usePlyrInit } from '../hooks/usePlyrInit';
 import VideoSchemaMarkup from '../components/VideoSchemaMarkup';
+import VideoAdPlayer from '../components/VideoAdPlayer';
+
+const TOC_ACTIVE = '#347c25';
 
 function generateToken(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -48,6 +51,7 @@ export default function EnhancedPostPage() {
 
   usePlyrInit(contentRef, post?.content || '');
   const [activeSection, setActiveSection] = useState('');
+  const [mobileTocOpen, setMobileTocOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [replies, setReplies] = useState<Record<string, any[]>>({});
@@ -493,6 +497,8 @@ export default function EnhancedPostPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black transition-colors">
       <VideoSchemaMarkup post={post} />
+      {/* Smart sticky video ad — fixed overlay, auto-plays muted on scroll */}
+      <VideoAdPlayer />
       <nav aria-label="Breadcrumb" className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
         <div className="container mx-auto px-4 sm:px-6 md:px-8 max-w-7xl py-2.5">
           <ol className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400 flex-wrap">
@@ -611,57 +617,100 @@ export default function EnhancedPostPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
           {tableOfContents.length > 1 && (
             <aside className="lg:col-span-1 hidden lg:block">
-              <div className="sticky top-24 bg-white dark:bg-gray-800 rounded-xl shadow-md p-5 transition-colors max-h-[calc(100vh-120px)] overflow-y-auto">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2 transition-colors">
-                  <MessageSquare size={14} className="text-blue-600 dark:text-blue-400" />
-                  Table of Contents
-                </h3>
-                <nav className="space-y-0.5">
-                  {tableOfContents.map((heading) => (
-                    <button
-                      key={heading.id}
-                      onClick={() => scrollToSection(heading.id)}
-                      className={`block w-full text-left text-sm py-1.5 pr-2 rounded-lg transition-all duration-200 ${
-                        heading.level === 2 ? 'pl-3' : heading.level === 3 ? 'pl-6' : 'pl-9'
-                      } ${
-                        activeSection === heading.id
-                          ? 'text-blue-600 dark:text-blue-400 font-semibold bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-600 dark:border-blue-400'
-                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-l-2 border-transparent'
-                      }`}
-                    >
-                      <span className="line-clamp-2">{heading.text}</span>
-                    </button>
-                  ))}
+              <div className="sticky top-24 bg-white dark:bg-gray-800 rounded-2xl shadow-md overflow-hidden transition-colors max-h-[calc(100vh-120px)] overflow-y-auto">
+                {/* TOC header */}
+                <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-gray-100 dark:border-gray-700">
+                  <div className="w-1.5 h-4 rounded-full" style={{ background: TOC_ACTIVE }} />
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-tight">
+                    Table of Contents
+                  </h3>
+                </div>
+                <nav className="p-2 space-y-0.5">
+                  {tableOfContents.map((heading) => {
+                    const isActive = activeSection === heading.id;
+                    return (
+                      <button
+                        key={heading.id}
+                        onClick={() => scrollToSection(heading.id)}
+                        className={`group block w-full text-left text-[13px] py-2 pr-3 rounded-xl transition-all duration-200 ${
+                          heading.level === 2 ? 'pl-3' : heading.level === 3 ? 'pl-6' : 'pl-9'
+                        } ${
+                          isActive
+                            ? 'font-semibold'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                        }`}
+                        style={isActive ? { color: TOC_ACTIVE } : {}}
+                      >
+                        <div className="flex items-start gap-1.5">
+                          <div
+                            className="shrink-0 w-0.5 rounded-full mt-[5px] transition-all duration-300"
+                            style={{ height: '12px', background: isActive ? TOC_ACTIVE : 'transparent' }}
+                          />
+                          <span
+                            className={`leading-snug rounded-lg px-1.5 py-0.5 transition-all duration-200 line-clamp-2 ${
+                              isActive ? 'bg-green-50 dark:bg-green-900/20' : ''
+                            }`}
+                          >
+                            {heading.text}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </nav>
               </div>
             </aside>
           )}
 
           {tableOfContents.length > 1 && (
-            <div className="lg:hidden col-span-full">
-              <details className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-2 transition-colors">
-                <summary className="flex items-center gap-2 cursor-pointer list-none text-sm font-bold text-gray-900 dark:text-white">
-                  <MessageSquare size={14} className="text-blue-600 dark:text-blue-400" />
-                  Table of Contents
-                </summary>
-                <nav className="mt-3 space-y-0.5">
-                  {tableOfContents.map((heading) => (
-                    <button
-                      key={heading.id}
-                      onClick={() => scrollToSection(heading.id)}
-                      className={`block w-full text-left text-sm py-1.5 rounded-lg transition-colors ${
-                        heading.level === 2 ? 'pl-3' : heading.level === 3 ? 'pl-6' : 'pl-9'
-                      } ${
-                        activeSection === heading.id
-                          ? 'text-blue-600 dark:text-blue-400 font-semibold'
-                          : 'text-gray-600 dark:text-gray-400'
-                      }`}
-                    >
-                      {heading.text}
-                    </button>
-                  ))}
-                </nav>
-              </details>
+            <div className="lg:hidden col-span-full sticky top-0 z-30">
+              <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+                {/* Always-visible header — shows active section name */}
+                <button
+                  onClick={() => setMobileTocOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 min-h-[48px]"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <List size={15} style={{ color: TOC_ACTIVE, flexShrink: 0 }} />
+                    <span className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
+                      {tableOfContents.find(h => h.id === activeSection)?.text || 'Table of Contents'}
+                    </span>
+                  </div>
+                  <ChevronDown
+                    size={16}
+                    className={`text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${mobileTocOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                {/* Expandable list */}
+                {mobileTocOpen && (
+                  <nav className="max-h-64 overflow-y-auto border-t border-gray-100 dark:border-gray-700 py-1.5">
+                    {tableOfContents.map((heading) => {
+                      const isActive = activeSection === heading.id;
+                      return (
+                        <button
+                          key={heading.id}
+                          onClick={() => { scrollToSection(heading.id); setMobileTocOpen(false); }}
+                          className={`block w-full text-left text-[13px] py-2.5 border-l-2 transition-all duration-150 ${
+                            heading.level === 2 ? 'pl-5' : heading.level === 3 ? 'pl-9' : 'pl-12'
+                          } ${
+                            isActive
+                              ? 'font-semibold'
+                              : 'text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
+                          }`}
+                          style={isActive ? {
+                            color: TOC_ACTIVE,
+                            borderLeftColor: TOC_ACTIVE,
+                            background: 'rgba(52,124,37,0.06)',
+                          } : {}}
+                        >
+                          {heading.text}
+                        </button>
+                      );
+                    })}
+                  </nav>
+                )}
+              </div>
             </div>
           )}
 

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   Sparkles, CheckCircle2, TrendingUp, Palette, Film, Clock,
   Loader2, AlertCircle, ChevronDown, ChevronUp, Search,
-  Link2, Newspaper,
+  Link2, Newspaper, Clapperboard,
 } from 'lucide-react';
 import AIWritingPanel from './AIWritingPanel';
 import ProofingPanel from './ProofingPanel';
@@ -12,6 +12,7 @@ import MediaPanel from './MediaPanel';
 import VersionHistory from './VersionHistory';
 import InArticleLinkPanel from './InArticleLinkPanel';
 import HeadlineGeneratorPanel from './HeadlineGeneratorPanel';
+import AIMediaPanel from './AIMediaPanel';
 
 // ── Plagiarism Panel (standalone) ────────────────────────────────────────────
 
@@ -173,7 +174,7 @@ function PlagiarismPanel({ content }: { content: string }) {
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
 
-type TabId = 'ai' | 'headlines' | 'links' | 'proofing' | 'seo' | 'plagiarism' | 'design' | 'media' | 'versions';
+type TabId = 'ai' | 'headlines' | 'links' | 'proofing' | 'seo' | 'plagiarism' | 'design' | 'media' | 'versions' | 'video';
 
 interface Tab {
   id: TabId;
@@ -193,6 +194,7 @@ const TABS: Tab[] = [
   { id: 'design',     label: 'Design Studio',  shortLabel: 'Design',  icon: Palette,      color: 'text-pink-500' },
   { id: 'media',      label: 'Media',          shortLabel: 'Media',   icon: Film,         color: 'text-cyan-500' },
   { id: 'versions',   label: 'Versions',       shortLabel: 'History', icon: Clock,        color: 'text-amber-500' },
+  { id: 'video',      label: 'AI Media',       shortLabel: 'Media',   icon: Clapperboard, color: 'text-rose-500'  },
 ];
 
 // ── Main WritingToolkit ───────────────────────────────────────────────────────
@@ -327,6 +329,10 @@ export default function WritingToolkit({
             excerpt={excerpt}
             onRestore={onRestoreVersion}
           />
+        )}
+
+        {activeTab === 'video' && (
+          <AIMediaPanel title={title} content={content} />
         )}
       </div>
     </div>

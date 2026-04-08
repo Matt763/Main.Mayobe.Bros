@@ -1063,4 +1063,196 @@ router.post('/bulk-images', async (req: Request, res: Response) => {
   }
 });
 
+// ── AI VOICEOVER (OpenAI TTS) ─────────────────────────────────────────────────
+// Returns base64-encoded MP3 audio.
+
+router.post('/voiceover', async (req: Request, res: Response) => {
+  try {
+    const { text, voice = 'nova', speed = 1.0 } = req.body as {
+      text: string;
+      voice?: string;
+      speed?: number;
+    };
+
+    if (!text?.trim()) return res.status(400).json({ error: 'text is required' });
+    if (text.length > 4096) return res.status(400).json({ error: 'Text exceeds 4 096-character limit. Use a shorter excerpt.' });
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'OpenAI API key not configured on the server.' });
+
+    const ttsRes = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: text.trim(),
+        voice,
+        speed: Math.min(Math.max(speed, 0.25), 4.0),
+        response_format: 'mp3',
+      }),
+    });
+
+    if (!ttsRes.ok) {
+      const errBody = await ttsRes.json().catch(() => ({})) as any;
+      throw new Error(errBody?.error?.message || `OpenAI TTS error ${ttsRes.status}`);
+    }
+
+    const buffer = Buffer.from(await ttsRes.arrayBuffer());
+    return res.json({ audioBase64: buffer.toString('base64'), mimeType: 'audio/mpeg' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SUBTITLE GENERATION (Claude → VTT cues) ───────────────────────────────────
+// Splits article text into timed VTT cues based on reading speed.
+
+router.post('/subtitles', async (req: Request, res: Response) => {
+  try {
+    const { content, title, wpm = 150, lang = 'en' } = req.body as {
+      content: string; title?: string; wpm?: number; lang?: string;
+    };
+
+    const plainText = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (plainText.length < 50) return res.status(400).json({ error: 'Content is too short.' });
+
+    const prompt = `You are a subtitle generator. Convert the following article into a WebVTT subtitle file.
+
+Rules:
+1. Break text into natural spoken chunks of 8-12 words each.
+2. Calculate timestamps based on ${wpm} words per minute speaking speed.
+3. Each cue starts exactly where the previous one ended.
+4. Output ONLY a JSON array of cue objects — no other text.
+5. Language for the subtitles: ${lang}
+
+Format each cue as:
+{"index": 1, "start": "00:00:00.000", "end": "00:00:03.200", "text": "the subtitle text here"}
+
+Title: ${title || ''}
+Article:
+${plainText.slice(0, 6000)}`;
+
+    const raw = await callClaude(prompt, 'You are a precise subtitle generator. Output only valid JSON arrays.', 4096);
+
+    // Extract JSON array from Claude response
+    const jsonMatch = raw.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('Failed to parse subtitle response.');
+    const cues = JSON.parse(jsonMatch[0]);
+
+    return res.json({ cues, count: cues.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GOOGLE DISCOVER SCORE (Claude analysis) ───────────────────────────────────
+
+router.post('/discover-score', async (req: Request, res: Response) => {
+  try {
+    const { title, content } = req.body as { title: string; content: string };
+    if (!title || !content) return res.status(400).json({ error: 'title and content required' });
+
+    const plainText = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const wordCount = plainText.split(/\s+/).filter(Boolean).length;
+    const hasImages = /<img/i.test(content);
+    const h2Count   = (content.match(/<h2/gi) || []).length;
+
+    const prompt = `You are a Google Discover SEO expert. Evaluate this article for Google Discover eligibility and rank potential.
+
+Title: "${title}"
+Word count: ${wordCount}
+Has images: ${hasImages}
+H2 headings: ${h2Count}
+Content (first 3000 chars):
+${plainText.slice(0, 3000)}
+
+Evaluate these 8 criteria and assign an overall score 0-100 plus letter grade (A/B/C/D/F).
+
+Criteria to assess:
+1. Headline Appeal — Is the title curiosity-driven, specific, and click-worthy?
+2. Image Quality — Does the article include images? (minimum 1200×628px recommended)
+3. Content Depth — Is the content comprehensive and expert-level (1500+ words ideal)?
+4. E-E-A-T Signals — Does content show experience, expertise, authority, trustworthiness?
+5. Freshness — Is the topic timely and relevant to current events/trends?
+6. Engagement Potential — Would this trigger strong emotional response or sharing?
+7. Topic Breadth — Does it cover a topic people genuinely want to explore?
+8. Mobile Readability — Short paragraphs, scannable headings, good structure?
+
+Return ONLY valid JSON:
+{
+  "score": 72,
+  "grade": "B",
+  "verdict": "one-sentence overall assessment",
+  "criteria": [
+    {"name": "Headline Appeal", "pass": true, "note": "brief specific note"},
+    ...all 8 criteria...
+  ],
+  "strengths": ["strength 1", "strength 2"],
+  "improvements": ["actionable improvement 1", "actionable improvement 2", "actionable improvement 3"]
+}`;
+
+    const raw = await callClaude(prompt, 'You are a Google Discover SEO expert. Output only valid JSON.', 2048);
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Failed to parse analysis response.');
+    const result = JSON.parse(jsonMatch[0]);
+
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── SHORTS SCRIPT GENERATOR (Claude) ─────────────────────────────────────────
+
+router.post('/shorts-script', async (req: Request, res: Response) => {
+  try {
+    const { title, content, format = '30s', platform = 'reels' } = req.body as {
+      title: string; content: string; format?: string; platform?: string;
+    };
+
+    if (!title || !content) return res.status(400).json({ error: 'title and content required' });
+
+    const maxWords: Record<string, number> = { '15s': 38, '30s': 75, '60s': 150 };
+    const words = maxWords[format] || 75;
+    const platformNames: Record<string, string> = {
+      reels: 'Instagram Reels', tiktok: 'TikTok', shorts: 'YouTube Shorts',
+    };
+
+    const plainText = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000);
+
+    const prompt = `You are a viral social media content writer. Create a ${format} ${platformNames[platform] || platform} script from this article.
+
+Article title: "${title}"
+Article summary: ${plainText.slice(0, 1200)}
+
+Requirements:
+- Hook: one powerful opening line (max 10 words) that stops the scroll
+- Script: engaging narration, exactly ${words} words (spoken naturally aloud)
+- Hashtags: 8-10 relevant hashtags including niche + broad tags
+- Duration: "${format} script"
+- Style: conversational, energetic, perfect for ${platformNames[platform] || platform}
+
+Return ONLY valid JSON:
+{
+  "hook": "The single hook line here",
+  "script": "Full ${words}-word narration script…",
+  "hashtags": ["#hashtag1", "#hashtag2", ...],
+  "duration": "${format}",
+  "platforms": ["${platform}"]
+}`;
+
+    const raw = await callClaude(prompt, 'You are a viral social media content creator. Output only valid JSON.', 1024);
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Failed to parse script response.');
+    const result = JSON.parse(jsonMatch[0]);
+
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
