@@ -11,6 +11,8 @@ import NewsletterSignup from '../components/NewsletterSignup';
 import { applyMeta, buildPostMeta, buildArticleJsonLd, buildBreadcrumbJsonLd, buildItemListJsonLd, injectJsonLd, removeJsonLd, SITE_URL } from '../lib/seo';
 import { useTheme } from '../contexts/ThemeContext';
 import { AdSlotRenderer } from '../components/AdSlotRenderer';
+import { usePlyrInit } from '../hooks/usePlyrInit';
+import VideoSchemaMarkup from '../components/VideoSchemaMarkup';
 
 function generateToken(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -40,8 +42,11 @@ export default function EnhancedPostPage() {
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentError, setCommentError] = useState('');
   const [commentHoneypot, setCommentHoneypot] = useState('');
+  const contentRef = useRef<HTMLDivElement>(null);
   const commentTokenRef = useRef(generateToken());
   const lastCommentRef = useRef<number>(0);
+
+  usePlyrInit(contentRef, post?.content || '');
   const [activeSection, setActiveSection] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -487,6 +492,7 @@ export default function EnhancedPostPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black transition-colors">
+      <VideoSchemaMarkup post={post} />
       <nav aria-label="Breadcrumb" className="bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
         <div className="container mx-auto px-4 sm:px-6 md:px-8 max-w-7xl py-2.5">
           <ol className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400 flex-wrap">
@@ -664,16 +670,17 @@ export default function EnhancedPostPage() {
 
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 mb-6 md:mb-8 transition-colors">
               <div
+                ref={contentRef}
                 className="article-content max-w-none text-gray-700 dark:text-gray-300"
                 dangerouslySetInnerHTML={{
                   __html: DOMPurify.sanitize(post.content, {
                     ADD_TAGS: ['figure', 'figcaption', 'sub', 'sup', 'iframe'],
                     ADD_ATTR: [
                       'class', 'target', 'rel', 'title',
-                      'style',                           // preserve video embed margins
-                      'src', 'width', 'height',          // iframe / img
-                      'frameborder', 'allowfullscreen',  // YouTube embeds
-                      'controls', 'autoplay', 'loop',    // <video>
+                      'style',                                    // preserve video embed margins
+                      'src', 'width', 'height',                   // iframe / img
+                      'frameborder', 'allowfullscreen', 'allow',  // YouTube/Vimeo embeds
+                      'controls', 'autoplay', 'loop', 'playsinline', 'poster', // <video>
                     ],
                     ALLOW_DATA_ATTR: true,
                     FORCE_BODY: true,

@@ -223,12 +223,22 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   };
 
   const insertVideo = () => {
-    const url = prompt('Enter YouTube or video URL:');
+    const url = prompt('Enter YouTube, Vimeo, or direct video URL:');
     if (!url) return;
+
     const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    const html = yt
-      ? `<div class="video-embed" style="margin:1.5rem 0"><iframe width="100%" height="400" src="https://www.youtube.com/embed/${yt[1]}" frameborder="0" allowfullscreen style="border-radius:8px"></iframe></div><p></p>`
-      : `<div style="margin:1.5rem 0"><video controls style="width:100%;border-radius:8px"><source src="${url}"></video></div><p></p>`;
+    const vimeo = url.match(/vimeo\.com\/(\d+)/);
+
+    let html: string;
+    if (yt) {
+      const videoId = yt[1];
+      html = `<div class="plyr__video-embed js-plyr" style="margin:1.5rem 0;border-radius:12px;overflow:hidden"><iframe src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=https://mayobebros.com&modestbranding=1&rel=0&iv_load_policy=3" allowfullscreen allow="autoplay; fullscreen; picture-in-picture; web-share" frameborder="0"></iframe></div><p></p>`;
+    } else if (vimeo) {
+      const videoId = vimeo[1];
+      html = `<div class="plyr__video-embed js-plyr" style="margin:1.5rem 0;border-radius:12px;overflow:hidden"><iframe src="https://player.vimeo.com/video/${videoId}?byline=0&portrait=0&title=0" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" frameborder="0"></iframe></div><p></p>`;
+    } else {
+      html = `<div style="margin:1.5rem 0"><video class="js-plyr" controls playsinline style="width:100%;border-radius:12px;max-height:480px"><source src="${url}"></video></div><p></p>`;
+    }
     insertHtml(html);
   };
 

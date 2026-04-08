@@ -539,3 +539,256 @@
   background: var(--nav-accent, #3b82f6);
   box-shadow: 0 0 8px var(--nav-accent, #3b82f6);
 }
+
+/* ═══════════════════════════════════════════════════
+   PLYR PREMIUM VIDEO PLAYER — MAYOBE BROS LUXURY THEME
+   ═══════════════════════════════════════════════════ */
+
+/* ── Design tokens ─────────────────────────────── */
+:root {
+  --plyr-color-main:                   #347c25;
+  --plyr-video-background:             #000;
+  --plyr-video-controls-background:    linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0.72));
+  --plyr-audio-controls-background:    #f8faf7;
+  --plyr-control-spacing:              12px;
+  --plyr-control-radius:               8px;
+  --plyr-range-thumb-height:           14px;
+  --plyr-range-thumb-shadow:           0 2px 8px rgba(52,124,37,0.45);
+  --plyr-font-family:                  inherit;
+  --plyr-font-size-base:               14px;
+  --plyr-video-control-color:          rgba(255,255,255,0.92);
+  --plyr-video-control-color-hover:    #fff;
+  --plyr-badge-background:             #347c25;
+  --plyr-badge-text-color:             #fff;
+  --plyr-tooltip-background:           rgba(0,0,0,0.82);
+  --plyr-tooltip-color:                #fff;
+  --plyr-tooltip-radius:               6px;
+  --plyr-tooltip-padding:              6px 10px;
+  --plyr-progress-loading-background:  rgba(52,124,37,0.3);
+  --plyr-captions-background:          rgba(0,0,0,0.72);
+  --plyr-captions-text-color:          #fff;
+  --plyr-tab-focus-color:              #347c25;
+}
+
+/* ── Player shell ──────────────────────────────── */
+.plyr {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.28),
+    0 2px 8px  rgba(0,0,0,0.14),
+    0 0 0 1px  rgba(255,255,255,0.05);
+  background: #000;
+  transition: box-shadow 0.3s ease, transform 0.25s ease;
+}
+
+.plyr:hover {
+  box-shadow:
+    0 14px 44px rgba(0,0,0,0.36),
+    0 4px 14px  rgba(0,0,0,0.18),
+    0 0 0 1px   rgba(52,124,37,0.18);
+}
+
+.plyr--video {
+  animation: plyrFadeIn 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+@keyframes plyrFadeIn {
+  from { opacity: 0; transform: scale(0.985); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.plyr--fullscreen-active {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ── Controls bar — glassmorphism ──────────────── */
+.plyr__controls {
+  backdrop-filter: blur(18px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(160%) !important;
+  background: linear-gradient(
+    to top,
+    rgba(0,0,0,0.80) 0%,
+    rgba(0,0,0,0.50) 50%,
+    rgba(0,0,0,0)    100%
+  ) !important;
+  padding: 10px 14px 14px !important;
+  border-radius: 0 0 12px 12px;
+  transition: opacity 0.3s ease;
+}
+
+/* ── Individual controls ───────────────────────── */
+.plyr__control {
+  border-radius: 8px !important;
+  transition:
+    background-color 0.18s ease,
+    transform       0.15s ease,
+    box-shadow      0.18s ease !important;
+}
+
+.plyr__control:hover,
+.plyr__control:focus-visible {
+  background: rgba(52,124,37,0.38) !important;
+  transform: scale(1.1);
+  outline: none;
+}
+
+.plyr__control--pressed {
+  background: rgba(52,124,37,0.55) !important;
+}
+
+/* ── Big play button ───────────────────────────── */
+.plyr__control--overlaid {
+  background: rgba(52,124,37,0.88) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 50% !important;
+  width:  66px !important;
+  height: 66px !important;
+  box-shadow:
+    0 4px 24px rgba(52,124,37,0.50),
+    0 0 0 4px rgba(52,124,37,0.18);
+  transition:
+    transform       0.2s cubic-bezier(0.22,1,0.36,1),
+    background-color 0.2s ease,
+    box-shadow      0.2s ease !important;
+}
+
+.plyr__control--overlaid svg {
+  transition: transform 0.18s ease;
+}
+
+.plyr__control--overlaid:hover {
+  background: rgba(52,124,37,1) !important;
+  transform: scale(1.12) !important;
+  box-shadow:
+    0 8px 32px rgba(52,124,37,0.65),
+    0 0 0 6px rgba(52,124,37,0.25) !important;
+}
+
+.plyr__control--overlaid:hover svg {
+  transform: scale(1.08);
+}
+
+/* ── Progress & volume sliders ─────────────────── */
+.plyr__progress input[type='range'],
+.plyr__volume input[type='range'] {
+  border-radius: 4px !important;
+  height: 4px;
+}
+
+.plyr__progress--played,
+.plyr__volume--display {
+  background: #347c25 !important;
+}
+
+.plyr__progress--buffer {
+  background: rgba(255,255,255,0.18) !important;
+}
+
+/* Thumb glow on hover */
+.plyr__progress input[type='range']::-webkit-slider-thumb:hover,
+.plyr__volume input[type='range']::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 5px rgba(52,124,37,0.30) !important;
+}
+
+/* ── Menu / settings ───────────────────────────── */
+.plyr__menu__container {
+  border-radius: 10px !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  background: rgba(15,15,15,0.88) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.40) !important;
+}
+
+.plyr__menu__container [role='menuitem']:hover,
+.plyr__menu__container [role='menuitemradio']:hover {
+  background: rgba(52,124,37,0.25) !important;
+}
+
+/* ── Captions ──────────────────────────────────── */
+.plyr__captions {
+  font-size: 1rem;
+  line-height: 1.4;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.90);
+  font-family: inherit;
+}
+
+/* ── Poster image ──────────────────────────────── */
+.plyr__poster {
+  background-size: cover;
+  background-position: center;
+  border-radius: 12px;
+}
+
+/* ── Embed (YouTube / Vimeo) wrapper ───────────── */
+.plyr__video-embed {
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.28),
+    0 2px 8px rgba(0,0,0,0.14);
+}
+
+/* ── Article video wrappers ────────────────────── */
+.plyr-video-wrapper,
+.video-embed {
+  margin: 2rem 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* ── Lazy-load placeholder ─────────────────────── */
+.plyr-pending {
+  position: relative;
+  min-height: 220px;
+  background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 100%);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.20);
+}
+
+.plyr-pending::before {
+  content: '';
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: rgba(52,124,37,0.82);
+  box-shadow: 0 4px 20px rgba(52,124,37,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plyr-pending::after {
+  content: '▶';
+  position: absolute;
+  font-size: 1.4rem;
+  color: #fff;
+  margin-left: 4px;
+  pointer-events: none;
+}
+
+/* ── Mobile ────────────────────────────────────── */
+@media (max-width: 640px) {
+  .plyr__control--overlaid {
+    width:  52px !important;
+    height: 52px !important;
+  }
+  .plyr__controls {
+    padding: 6px 8px 10px !important;
+  }
+  .plyr__captions {
+    font-size: 0.875rem;
+  }
+}
+
+/* ── Dark mode audio player ────────────────────── */
+@media (prefers-color-scheme: dark) {
+  --plyr-audio-controls-background: #1a1a1a;
+  --plyr-audio-control-color: rgba(255,255,255,0.85);
+}
+

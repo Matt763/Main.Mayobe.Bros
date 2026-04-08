@@ -27,6 +27,7 @@ import socialAutomationRoutes from './routes/socialAutomation.js';
 import itangoRoutes from './routes/itango.js';
 import usersRoutes from './routes/users.js';
 import editorAiRoutes from './routes/editor-ai.js';
+import videoAnalyticsRoutes from './routes/videoAnalytics.js';
 import { securityMonitor, getSecurityLog, unblockIP, getBlockedIPs } from './middleware/securityMonitor.js';
 import { serveWithMeta } from './utils/metaInjector.js';
 
@@ -136,6 +137,7 @@ app.use('/api/social', socialAutomationRoutes);
 app.use('/api/itango', itangoRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/editor-ai', editorAiRoutes);
+app.use('/api/video-analytics', videoAnalyticsRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Mayobe Bros API Server Running' });

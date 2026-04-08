@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 import { Calendar, Clock, ArrowLeft } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { usePlyrInit } from '../hooks/usePlyrInit';
 
 interface StaticPage {
   id: string;
@@ -24,6 +25,9 @@ export default function DynamicPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const { resolvedTheme } = useTheme();
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  usePlyrInit(contentRef, page?.content || '');
 
   useEffect(() => {
     if (slug) loadPage(slug);
@@ -168,8 +172,22 @@ export default function DynamicPage() {
       <div className="container mx-auto px-4 sm:px-6 py-10 max-w-4xl">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 sm:p-10 transition-colors">
           <div
+            ref={contentRef}
             className="article-content prose prose-sm sm:prose-base md:prose-lg max-w-none text-gray-700 dark:text-gray-300 [&_h1]:text-gray-900 [&_h1]:dark:text-white [&_h2]:text-gray-900 [&_h2]:dark:text-white [&_h3]:text-gray-900 [&_h3]:dark:text-white [&_a]:text-blue-600 [&_a]:dark:text-blue-400 [&_img]:rounded-xl [&_img]:w-full [&_blockquote]:border-l-4 [&_blockquote]:border-blue-500 [&_blockquote]:pl-4 [&_blockquote]:italic [&_pre]:bg-gray-900 [&_pre]:rounded-lg [&_code]:text-blue-600 [&_code]:dark:text-blue-400"
-            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.content) }}
+            dangerouslySetInnerHTML={{
+              __html: DOMPurify.sanitize(page.content, {
+                ADD_TAGS: ['figure', 'figcaption', 'iframe'],
+                ADD_ATTR: [
+                  'class', 'target', 'rel', 'style',
+                  'src', 'width', 'height',
+                  'frameborder', 'allowfullscreen', 'allow',
+                  'controls', 'playsinline', 'poster',
+                ],
+                ALLOW_DATA_ATTR: true,
+                FORCE_BODY: true,
+                FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+              }),
+            }}
           />
         </div>
       </div>

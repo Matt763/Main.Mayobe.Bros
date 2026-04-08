@@ -113,11 +113,16 @@
     </script>
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7857493359758179"
      crossorigin="anonymous"></script>
-    
+
+    <!-- Plyr Video Player -->
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.8.4/plyr.css" />
+
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Plyr JS — deferred so it never blocks render -->
+    <script src="https://cdn.plyr.io/3.8.4/plyr.polyfilled.js" defer></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

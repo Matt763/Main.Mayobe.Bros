@@ -201,7 +201,7 @@ export default function MediaPanel({ title, onInsertContent }: MediaPanelProps) 
             <div className="space-y-2">
               {mediaFile.type === 'video' && (
                 <button
-                  onClick={() => onInsertContent(`<div style="margin:1.5rem 0"><video controls style="width:100%;border-radius:8px;max-height:480px"><source src="${mediaFile.url}"></video></div><p></p>`)}
+                  onClick={() => onInsertContent(`<div style="margin:1.5rem 0"><video class="js-plyr" controls playsinline style="width:100%;border-radius:12px;max-height:480px"><source src="${mediaFile.url}"></video></div><p></p>`)}
                   className="w-full flex items-center gap-2 px-3 py-2.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl text-blue-700 dark:text-blue-300 font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
                 >
                   <FileVideo size={13} /> Insert Video Player
