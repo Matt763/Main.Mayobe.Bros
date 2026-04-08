@@ -220,12 +220,12 @@ router.get('/sitemap.xml', async (_req, res) => {
       supabase.from('labels').select('*', { count: 'exact', head: true }),
       supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'published').not('featured_image', 'is', null),
       supabase.from('posts').select('updated_at, published_at').eq('status', 'published').order('updated_at', { ascending: false }).limit(1),
-      supabase.from('categories').select('updated_at').order('updated_at', { ascending: false }).limit(1),
+      supabase.from('categories').select('created_at').order('created_at', { ascending: false }).limit(1),
     ]);
 
     const now = new Date().toISOString();
     const latestPostDate = latestPost?.[0]?.updated_at || latestPost?.[0]?.published_at || now;
-    const latestCatDate  = latestCat?.[0]?.updated_at || now;
+    const latestCatDate  = latestCat?.[0]?.created_at || now;
 
     const postPages  = Math.max(1, Math.ceil((totalPosts  || 0) / URLS_PER_SITEMAP));
     const catPages   = Math.max(1, Math.ceil(((totalCats || 0) + (totalLabels || 0)) / URLS_PER_SITEMAP));
@@ -406,10 +406,15 @@ router.get(/^\/category-sitemap(\d+)\.xml$/, async (req, res) => {
     const supabase = getSupabaseClient();
     const now = new Date().toISOString();
 
-    const [{ data: categories }, { data: labels }] = await Promise.all([
-      supabase.from('categories').select('slug, name, updated_at').order('name'),
-      supabase.from('labels').select('slug, name, category_id, updated_at, categories(slug)').order('name'),
+    const [
+      { data: categories, error: catErr },
+      { data: labels, error: labelErr },
+    ] = await Promise.all([
+      supabase.from('categories').select('slug, name, created_at').order('name'),
+      supabase.from('labels').select('slug, name, category_id, created_at, categories(slug)').order('name'),
     ]);
+
+    if (catErr) throw catErr;
 
     const allEntries: UrlEntry[] = [];
 
@@ -417,7 +422,7 @@ router.get(/^\/category-sitemap(\d+)\.xml$/, async (req, res) => {
     for (const cat of categories || []) {
       allEntries.push({
         loc:        `${SITE_URL}/category/${cat.slug}`,
-        lastmod:    isoDate(cat.updated_at || now),
+        lastmod:    isoDate((cat as any).created_at || now),
         changefreq: 'weekly',
         priority:   '0.7',
       });
@@ -425,7 +430,7 @@ router.get(/^\/category-sitemap(\d+)\.xml$/, async (req, res) => {
 
     // Category → label sub-pages
     const seenKeys = new Set<string>();
-    for (const label of labels || []) {
+    for (const label of labelErr ? [] : (labels || [])) {
       const catSlug = (label.categories as any)?.slug;
       if (!catSlug) continue;
       const key = `${catSlug}/${label.slug}`;
@@ -433,7 +438,7 @@ router.get(/^\/category-sitemap(\d+)\.xml$/, async (req, res) => {
       seenKeys.add(key);
       allEntries.push({
         loc:        `${SITE_URL}/category/${catSlug}/${label.slug}`,
-        lastmod:    isoDate(label.updated_at || now),
+        lastmod:    isoDate((label as any).created_at || now),
         changefreq: 'weekly',
         priority:   '0.6',
       });
