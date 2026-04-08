@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   Bold, Italic, Underline, Strikethrough,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
@@ -9,10 +9,16 @@ import {
   Printer, Search, Subscript, Superscript, ChevronRight, ChevronLeft,
 } from 'lucide-react';
 
+export interface RichTextEditorHandle {
+  insertAtCursor(html: string): void;
+  getContent(): string;
+}
+
 interface RichTextEditorProps {
   value: string;
   onChange: (value: string) => void;
   onImageClick?: () => void;
+  onRequestToolkit?: () => void;
   placeholder?: string;
 }
 
@@ -72,10 +78,10 @@ function sanitizePastedHtml(html: string): string {
 }
 
 // ── COMPONENT ────────────────────────────────────────────────────────────────
-export default function RichTextEditor({
-  value, onChange, onImageClick,
+const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
+  value, onChange, onImageClick, onRequestToolkit,
   placeholder = 'Start writing your content…  (Ctrl+V pastes images, tables & charts)',
-}: RichTextEditorProps) {
+}, ref) => {
   const editorRef  = useRef<HTMLDivElement>(null);
   const savedRange = useRef<Range | null>(null);
 
@@ -130,13 +136,44 @@ export default function RichTextEditor({
     }
   }, [onChange]);
 
-  // Save selection (for async operations like image read)
-  const saveSelection = () => {
+  // Save selection — only capture if range is inside this editor
+  const saveSelection = useCallback(() => {
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
-      savedRange.current = sel.getRangeAt(0).cloneRange();
+      const range = sel.getRangeAt(0);
+      if (editorRef.current?.contains(range.commonAncestorContainer)) {
+        savedRange.current = range.cloneRange();
+      }
     }
-  };
+  }, []);
+
+  // Track selection changes continuously so insertAtCursor always lands correctly
+  useEffect(() => {
+    document.addEventListener('selectionchange', saveSelection);
+    return () => document.removeEventListener('selectionchange', saveSelection);
+  }, [saveSelection]);
+
+  // ── IMPERATIVE HANDLE — exposes insertAtCursor to parent components ──────────
+  useImperativeHandle(ref, () => ({
+    insertAtCursor(html: string) {
+      if (!editorRef.current) return;
+      editorRef.current.focus();
+      const sel = window.getSelection();
+      if (sel && savedRange.current) {
+        try {
+          if (editorRef.current.contains(savedRange.current.commonAncestorContainer)) {
+            sel.removeAllRanges();
+            sel.addRange(savedRange.current.cloneRange());
+          }
+        } catch {}
+      }
+      document.execCommand('insertHTML', false, html);
+      setTimeout(updateContent, 10);
+    },
+    getContent() {
+      return editorRef.current?.innerHTML || htmlContent;
+    },
+  }), [htmlContent, updateContent]);
 
   // Restore saved selection then run a callback
   const withRestoredSelection = (fn: () => void) => {
@@ -298,9 +335,9 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
   // ── SMART PASTE ────────────────────────────────────────────────────────
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
-    saveSelection(); // capture cursor position BEFORE anything async
+    saveSelection();
 
-    // 1. Image in clipboard (screenshots, chart images, etc.)
+    // 1. Image blob (screenshots, copied chart images)
     const items = Array.from(e.clipboardData.items);
     const imgItem = items.find(it => it.type.startsWith('image/'));
     if (imgItem) {
@@ -311,7 +348,7 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
           const src = ev.target?.result as string;
           withRestoredSelection(() => {
             document.execCommand('insertHTML', false,
-              `<figure class="chart-figure"><img src="${src}" alt="Pasted chart / image" /><figcaption contenteditable="true">Caption: describe this chart</figcaption></figure><p></p>`
+              `<figure class="chart-figure"><img src="${src}" alt="Pasted image" /><figcaption contenteditable="true">Caption</figcaption></figure><p></p>`
             );
             setTimeout(updateContent, 10);
           });
@@ -321,10 +358,12 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
       }
     }
 
-    // 2. HTML with tables / figures (Excel, Google Sheets, web copy-paste)
-    const html = e.clipboardData.getData('text/html');
-    if (html && (/<table/i.test(html) || /<figure/i.test(html) || /<img/i.test(html))) {
-      const clean = sanitizePastedHtml(html);
+    // 2. HTML — always use HTML when available (preserves bold, lists, headings,
+    //    tables, links from ANY source: web, Word, Google Docs, etc.)
+    //    Inserts at cursor position, never jumps to end.
+    const htmlData = e.clipboardData.getData('text/html');
+    if (htmlData && htmlData.trim()) {
+      const clean = sanitizePastedHtml(htmlData);
       if (clean.trim()) {
         document.execCommand('insertHTML', false, clean);
         setTimeout(updateContent, 10);
@@ -332,10 +371,18 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
       }
     }
 
-    // 3. Plain text — insert at cursor (never jumps to end)
+    // 3. Plain text fallback — convert double-newlines to <p> tags (Word-like)
     const text = e.clipboardData.getData('text/plain');
     if (text) {
-      document.execCommand('insertText', false, text);
+      const paras = text.split(/\n{2,}/).filter(p => p.trim());
+      if (paras.length > 1) {
+        const html = paras
+          .map(p => `<p>${p.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`)
+          .join('');
+        document.execCommand('insertHTML', false, html);
+      } else {
+        document.execCommand('insertText', false, text);
+      }
       setTimeout(updateContent, 10);
     }
   };
@@ -370,6 +417,8 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
     if (ctrl && e.key === 'p') { e.preventDefault(); handlePrint(); return; }
     // Ctrl+H → find & replace
     if (ctrl && e.key === 'h') { e.preventDefault(); setShowFindReplace(v => !v); return; }
+    // Ctrl+Shift+T → open Writing Toolkit
+    if (ctrl && e.shiftKey && (e.key === 't' || e.key === 'T')) { e.preventDefault(); onRequestToolkit?.(); return; }
     // F11 → fullscreen
     if (e.key === 'F11') { e.preventDefault(); setIsFullscreen(v => !v); return; }
 
@@ -583,6 +632,21 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
         {/* Print */}
         <Btn icon={<Printer size={15}/>} onClick={handlePrint} title="Print Post (Ctrl+P)" />
 
+        {/* Writing Toolkit */}
+        {onRequestToolkit && (
+          <>
+            <Sep />
+            <button
+              type="button"
+              onMouseDown={e => { e.preventDefault(); onRequestToolkit(); }}
+              title="Open Writing Toolkit (Ctrl+Shift+T)"
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold bg-violet-100 dark:bg-violet-900/40 text-violet-600 dark:text-violet-400 hover:bg-violet-200 dark:hover:bg-violet-900/60 transition-colors"
+            >
+              <Sparkles size={12}/> Toolkit
+            </button>
+          </>
+        )}
+
         {/* Fullscreen */}
         <Btn
           icon={isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
@@ -596,7 +660,7 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
 
         {/* Hint label */}
         <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 hidden xl:block pr-1 select-none">
-          Ctrl+V: paste images/tables • Shift+Enter: line break • Tab: indent
+          Ctrl+Shift+T: toolkit • Ctrl+P: print • Shift+Enter: line break
         </span>
       </div>
 
@@ -758,7 +822,9 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
       `}</style>
     </div>
   );
-}
+});
+
+export default RichTextEditor;
 
 // ── SUB-COMPONENTS ────────────────────────────────────────────────────────────
 function Btn({ icon, onClick, title, active }: {

@@ -667,10 +667,17 @@ export default function EnhancedPostPage() {
                 className="article-content max-w-none text-gray-700 dark:text-gray-300"
                 dangerouslySetInnerHTML={{
                   __html: DOMPurify.sanitize(post.content, {
-                    ADD_TAGS: ['figure', 'figcaption', 'sub', 'sup'],
-                    ADD_ATTR: ['class', 'target', 'rel', 'contenteditable', 'title'],
+                    ADD_TAGS: ['figure', 'figcaption', 'sub', 'sup', 'iframe'],
+                    ADD_ATTR: [
+                      'class', 'target', 'rel', 'title',
+                      'style',                           // preserve video embed margins
+                      'src', 'width', 'height',          // iframe / img
+                      'frameborder', 'allowfullscreen',  // YouTube embeds
+                      'controls', 'autoplay', 'loop',    // <video>
+                    ],
                     ALLOW_DATA_ATTR: true,
                     FORCE_BODY: true,
+                    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
                   }),
                 }}
               />

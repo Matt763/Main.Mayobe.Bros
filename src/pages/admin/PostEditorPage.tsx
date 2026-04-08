@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRole } from '../../hooks/useRole';
 import AdminLayout from '../../components/admin/AdminLayout';
-import RichTextEditor from '../../components/admin/RichTextEditor';
+import RichTextEditor, { type RichTextEditorHandle } from '../../components/admin/RichTextEditor';
 import ImagePicker from '../../components/admin/ImagePicker';
 import Toast from '../../components/admin/Toast';
 import WritingToolkit from '../../components/admin/toolkit/WritingToolkit';
@@ -13,7 +14,7 @@ import AIRewriteFloater from '../../components/admin/toolkit/AIRewriteFloater';
 import {
   Save, ArrowLeft, Image as ImageIcon, Calendar, User, Tag, Folder,
   Star, Globe, Send, AlertTriangle, X, CheckCircle2, FileText, Clock,
-  Eye, ChevronDown, ChevronUp, Settings2, Sparkles,
+  Eye, ChevronDown, ChevronUp, Settings2, Sparkles, Printer,
 } from 'lucide-react';
 
 interface Category { id: string; name: string; }
@@ -32,6 +33,8 @@ export default function PostEditorPage() {
   const { isCEO, isAdmin } = useRole();
   const autoSaveRef      = useRef<NodeJS.Timeout | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
+  const editorApiRef     = useRef<RichTextEditorHandle | null>(null);
+  const toolkitRef       = useRef<HTMLDivElement | null>(null);
 
   const [currentSlug, setCurrentSlug] = useState('');
   const [title, setTitle] = useState('');
@@ -64,17 +67,29 @@ export default function PostEditorPage() {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [seoExpanded, setSeoExpanded] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const wordCount = countWords(content);
   const readingTime = Math.max(1, Math.round(wordCount / 200));
 
   // ── Toolkit callbacks ─────────────────────────────────────────────────────
+
+  // Insert at cursor — ref method handles DOM + fires onChange → setContent
   const handleInsertContent = useCallback((html: string, replace?: boolean) => {
-    if (replace) {
-      setContent(html);
+    if (replace) { setContent(html); return; }
+    if (editorApiRef.current) {
+      editorApiRef.current.insertAtCursor(html);
     } else {
       setContent(prev => prev + html);
     }
+  }, []);
+
+  // Scroll to writing toolkit panel
+  const handleRequestToolkit = useCallback(() => {
+    setSidebarOpen(true);
+    setTimeout(() => {
+      toolkitRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   }, []);
 
   const handleExportDesignImage = useCallback((dataUrl: string) => {
@@ -323,16 +338,58 @@ export default function PostEditorPage() {
               <Settings2 size={15} />
               {sidebarOpen ? 'Hide Panel' : 'Show Panel'}
             </button>
-            {id && (
-              <a
-                href={`/post/${categories.find(c => c.id === categoryId)?.name?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'uncategorized'}/${slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
-                <Eye size={15} /> Preview
-              </a>
-            )}
+
+            {/* Draft preview — shows post appearance before publishing */}
+            <button
+              type="button"
+              onClick={() => setShowPreview(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            >
+              <Eye size={15} /> Preview
+            </button>
+
+            {/* Print */}
+            <button
+              type="button"
+              onClick={() => {
+                const win = window.open('', '_blank', 'width=900,height=700');
+                if (!win) return;
+                win.document.write(`<!DOCTYPE html><html><head><title>${title || 'Post'}</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Georgia,'Times New Roman',serif;font-size:1rem;line-height:1.8;color:#111;max-width:780px;margin:0 auto;padding:2.5cm 2cm}
+h1{font-size:2rem;font-weight:800;margin-bottom:1rem}
+h2{font-size:1.5rem;font-weight:700;margin:1.75em 0 .5em;border-bottom:1px solid #ccc;padding-bottom:.2em}
+h3{font-size:1.2rem;font-weight:700;margin:1.4em 0 .4em}
+h4{font-size:1.05rem;font-weight:600;margin:1.2em 0 .35em}
+p{margin-bottom:1em}
+ul{list-style:disc;padding-left:1.75em;margin-bottom:1em}
+ol{list-style:decimal;padding-left:1.75em;margin-bottom:1em}
+ul ul{list-style:circle}li{margin-bottom:.3em}
+a{color:#1d4ed8;text-decoration:underline}
+blockquote{border-left:3px solid #3b82f6;padding-left:1em;margin:1.25em 0;color:#555;font-style:italic}
+pre{background:#f4f4f4;padding:1em;border-radius:4px;font-size:.85em;overflow-x:auto;white-space:pre;margin:1em 0}
+table{width:100%;border-collapse:collapse;margin:1.5em 0;font-size:.9rem}
+th{background:#f1f5f9;font-weight:700;padding:.5em .75em;text-align:left;border-bottom:2px solid #ccc}
+td{padding:.5em .75em;border-bottom:1px solid #e5e7eb}
+img{max-width:100%;border-radius:6px;display:block;margin:1em auto}
+.callout{padding:.85em 1.1em;margin:1.25em 0;border-radius:6px;border-left:4px solid}
+.callout-info{background:#eff6ff;border-color:#3b82f6}
+.callout-warning{background:#fffbeb;border-color:#f59e0b}
+.callout-success{background:#f0fdf4;border-color:#22c55e}
+.callout-danger{background:#fef2f2;border-color:#ef4444}
+.callout-tip{background:#faf5ff;border-color:#a855f7}
+@media print{@page{margin:1.5cm}body{padding:0}}
+</style></head><body>${title ? `<h1>${title}</h1>` : ''}${content}</body></html>`);
+                win.document.close();
+                win.focus();
+                setTimeout(() => win.print(), 600);
+              }}
+              className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              title="Print post (Ctrl+P in editor)"
+            >
+              <Printer size={15} />
+            </button>
+
             <button
               onClick={() => handleSave()}
               disabled={saving}
@@ -395,9 +452,11 @@ export default function PostEditorPage() {
 
               <div className="px-0" ref={editorContainerRef}>
                 <RichTextEditor
+                  ref={editorApiRef}
                   value={content}
                   onChange={setContent}
                   onImageClick={() => openImagePicker('content')}
+                  onRequestToolkit={handleRequestToolkit}
                   placeholder="Start writing your post… (drag & drop images to upload)"
                 />
               </div>
@@ -591,22 +650,24 @@ export default function PostEditorPage() {
                 )}
               </div>
 
-              <WritingToolkit
-                title={title}
-                content={content}
-                excerpt={excerpt}
-                metaTitle={metaTitle}
-                metaDescription={metaDescription}
-                metaKeywords={metaKeywords}
-                postId={id}
-                onInsertContent={handleInsertContent}
-                onSetTitle={setTitle}
-                onSetMetaTitle={setMetaTitle}
-                onSetMetaDescription={setMetaDescription}
-                onSetMetaKeywords={setMetaKeywords}
-                onExportDesignImage={handleExportDesignImage}
-                onRestoreVersion={handleRestoreVersion}
-              />
+              <div ref={toolkitRef}>
+                <WritingToolkit
+                  title={title}
+                  content={content}
+                  excerpt={excerpt}
+                  metaTitle={metaTitle}
+                  metaDescription={metaDescription}
+                  metaKeywords={metaKeywords}
+                  postId={id}
+                  onInsertContent={handleInsertContent}
+                  onSetTitle={setTitle}
+                  onSetMetaTitle={setMetaTitle}
+                  onSetMetaDescription={setMetaDescription}
+                  onSetMetaKeywords={setMetaKeywords}
+                  onExportDesignImage={handleExportDesignImage}
+                  onRestoreVersion={handleRestoreVersion}
+                />
+              </div>
 
               {isCEO && (
                 <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-amber-100 dark:border-amber-900/30 p-4">
@@ -621,6 +682,111 @@ export default function PostEditorPage() {
           )}
         </div>
       </div>
+
+      {/* ── POST PREVIEW PANEL ── */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowPreview(false)}
+          />
+          {/* Drawer */}
+          <div className="relative ml-auto w-full max-w-3xl h-full bg-white dark:bg-gray-900 shadow-2xl flex flex-col overflow-hidden animate-slide-in-right">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                  <Eye size={15} className="text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900 dark:text-white">Post Preview</h2>
+                  <p className="text-xs text-gray-400">How your post will look when published</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {id && (
+                  <a
+                    href={`/post/${categories.find(c => c.id === categoryId)?.name?.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'') || 'uncategorized'}/${slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <Globe size={12} /> Live View
+                  </a>
+                )}
+                <button
+                  onClick={() => setShowPreview(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  <X size={18} className="text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            {/* Preview content */}
+            <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-black">
+              <div className="max-w-2xl mx-auto py-8 px-6">
+                {/* Featured image */}
+                {featuredImage && (
+                  <img
+                    src={featuredImage}
+                    alt={title}
+                    className="w-full h-56 object-cover rounded-2xl mb-6 shadow-lg"
+                  />
+                )}
+
+                {/* Title */}
+                {title ? (
+                  <h1 className="text-3xl font-black text-gray-900 dark:text-white leading-tight mb-4">
+                    {title}
+                  </h1>
+                ) : (
+                  <div className="h-9 bg-gray-200 dark:bg-gray-800 rounded-lg mb-4 animate-pulse" />
+                )}
+
+                {/* Meta */}
+                <div className="flex items-center gap-4 text-xs text-gray-400 border-b border-gray-200 dark:border-gray-700 pb-4 mb-6">
+                  {author && <span className="flex items-center gap-1"><User size={11}/>{author}</span>}
+                  <span className="flex items-center gap-1"><Clock size={11}/>{readingTime} min read</span>
+                  <span className="flex items-center gap-1"><FileText size={11}/>{wordCount.toLocaleString()} words</span>
+                  {published
+                    ? <span className="flex items-center gap-1 text-green-500"><Globe size={11}/>Published</span>
+                    : <span className="flex items-center gap-1 text-amber-500"><Eye size={11}/>Draft</span>
+                  }
+                </div>
+
+                {/* Excerpt */}
+                {excerpt && (
+                  <p className="text-base italic text-gray-500 dark:text-gray-400 border-l-4 border-blue-400 pl-4 mb-6 leading-relaxed">
+                    {excerpt}
+                  </p>
+                )}
+
+                {/* Body */}
+                {content ? (
+                  <div
+                    className="article-content"
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(content, {
+                        ADD_TAGS: ['figure', 'figcaption', 'sub', 'sup', 'iframe'],
+                        ADD_ATTR: ['class', 'target', 'rel', 'style', 'allowfullscreen', 'frameborder', 'src', 'width', 'height'],
+                        ALLOW_DATA_ATTR: true,
+                      }),
+                    }}
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {[1,2,3,4,5].map(i => (
+                      <div key={i} className="h-4 bg-gray-200 dark:bg-gray-800 rounded animate-pulse" style={{ width: `${85 + (i % 3) * 5}%` }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showImagePicker && (
         <ImagePicker onSelect={handleImageSelect} onClose={() => setShowImagePicker(false)} />
