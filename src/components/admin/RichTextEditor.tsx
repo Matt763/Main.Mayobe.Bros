@@ -6,7 +6,7 @@ import {
   Undo, Redo, Type, Palette, Eye, EyeOff, Minus, Video, Smile,
   Table, Info, AlertTriangle, CheckCircle, XCircle,
   GitBranch, BarChart2, Maximize2, Minimize2,
-  Printer, Search, Subscript, Superscript, ChevronRight, ChevronLeft,
+  Printer, Search, Subscript, Superscript, ChevronRight, ChevronLeft, Sparkles,
 } from 'lucide-react';
 
 export interface RichTextEditorHandle {
