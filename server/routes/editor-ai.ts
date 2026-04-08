@@ -854,30 +854,70 @@ const IMAGE_STYLE_SUFFIX = [
   '16:9 widescreen composition',
 ].join(', ');
 
-// Shared helper: generate one image via Gemini 2.0 Flash image generation
-async function geminiGenerateImage(prompt: string, apiKey: string): Promise<{ imageBase64: string; mimeType: string }> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`;
+// Model preference list — tried in order until one succeeds.
+// gemini-3.1-flash-image-preview = "Nano Banana 2" (latest, per Google AI docs Apr 2026)
+// gemini-2.5-flash-image = "Nano Banana" (stable fallback)
+// gemini-2.0-flash-exp  = experimental fallback (supports IMAGE responseModality)
+const IMAGE_MODELS = [
+  'gemini-3.1-flash-image-preview',
+  'gemini-2.5-flash-image',
+  'gemini-2.0-flash-exp',
+];
+
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+/**
+ * Call one Gemini model for text-to-image. Returns the raw fetch response.
+ * Auth via x-goog-api-key header (recommended) — also passes key as query
+ * param as belt-and-suspenders for older model routing.
+ */
+async function callGeminiImageModel(
+  model: string,
+  parts: object[],
+  apiKey: string,
+  withImageConfig = true,
+): Promise<{ imageBase64: string; mimeType: string }> {
+  const url = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
+
+  const generationConfig: Record<string, any> = {
+    responseModalities: ['TEXT', 'IMAGE'],
+  };
+  if (withImageConfig) {
+    generationConfig.imageConfig = { aspectRatio: '16:9', imageSize: '2K' };
+  }
 
   const body = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+    contents: [{ parts }],
+    generationConfig,
   };
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey,
+    },
     body: JSON.stringify(body),
   });
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({})) as any;
-    throw new Error(errBody?.error?.message || `Gemini image API error ${res.status}`);
+    const msg = errBody?.error?.message || `HTTP ${res.status}`;
+    throw new Error(`[${model}] ${msg}`);
   }
 
   const data = await res.json() as any;
-  const parts: any[] = data?.candidates?.[0]?.content?.parts || [];
-  const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
-  if (!imagePart) throw new Error('No image returned. Try a different prompt or check your API key has image generation access.');
+  const responseParts: any[] = data?.candidates?.[0]?.content?.parts || [];
+  const imagePart = responseParts.find(
+    (p: any) => p.inlineData?.mimeType?.startsWith('image/'),
+  );
+
+  if (!imagePart) {
+    // Surface any finish reason to help with debugging
+    const finishReason = data?.candidates?.[0]?.finishReason || 'UNKNOWN';
+    const safetyRatings = JSON.stringify(data?.candidates?.[0]?.safetyRatings || []);
+    throw new Error(`[${model}] No image in response. finishReason=${finishReason} safety=${safetyRatings}`);
+  }
 
   return {
     imageBase64: imagePart.inlineData.data,
@@ -885,91 +925,95 @@ async function geminiGenerateImage(prompt: string, apiKey: string): Promise<{ im
   };
 }
 
+/**
+ * Try each model in IMAGE_MODELS until one succeeds.
+ * Collects errors so we can surface a useful message if all fail.
+ * On first success, returns immediately.
+ */
+async function geminiGenerateImage(
+  textParts: object[],
+  apiKey: string,
+  withImageConfig = true,
+): Promise<{ imageBase64: string; mimeType: string; modelUsed: string }> {
+  const errors: string[] = [];
+
+  for (const model of IMAGE_MODELS) {
+    try {
+      const result = await callGeminiImageModel(model, textParts, apiKey, withImageConfig);
+      return { ...result, modelUsed: model };
+    } catch (err: any) {
+      errors.push(err.message);
+    }
+  }
+
+  throw new Error(
+    `All Gemini image models failed:\n${errors.join('\n')}\n\nCheck: (1) API key is valid, (2) Gemini API is enabled in your Google Cloud project at aistudio.google.com`,
+  );
+}
+
+// ── TEXT-TO-IMAGE ─────────────────────────────────────────────────────────────
+
 router.post('/generate-image', async (req: Request, res: Response) => {
   try {
-    const { prompt, geminiApiKey } = req.body as { prompt: string; geminiApiKey: string };
+    const { prompt, geminiApiKey } = req.body as { prompt: string; geminiApiKey?: string };
     if (!prompt) return res.status(400).json({ error: 'Prompt required' });
 
     const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required. Enter it via the key icon in the Image Generator panel.' });
+    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required. Click the key icon in the Image Generator panel to add it.' });
 
     const fullPrompt = `${prompt.trim()}, ${IMAGE_STYLE_SUFFIX}`;
-    const { imageBase64, mimeType } = await geminiGenerateImage(fullPrompt, apiKey);
+    const { imageBase64, mimeType, modelUsed } = await geminiGenerateImage(
+      [{ text: fullPrompt }],
+      apiKey,
+    );
 
-    return res.json({ imageBase64, mimeType, prompt: fullPrompt });
+    return res.json({ imageBase64, mimeType, prompt: fullPrompt, modelUsed });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// ── GEMINI IMAGE TRANSFORM ────────────────────────────────────────────────────
+// ── IMAGE TRANSFORM ───────────────────────────────────────────────────────────
 
 router.post('/transform-image', async (req: Request, res: Response) => {
   try {
     const { imageBase64, imageUrl, instructions, geminiApiKey } = req.body as {
-      imageBase64?: string; imageUrl?: string; instructions: string; geminiApiKey: string;
+      imageBase64?: string;
+      imageUrl?: string;
+      instructions?: string;
+      geminiApiKey?: string;
     };
-    if (!instructions) return res.status(400).json({ error: 'Instructions required' });
-    if (!imageBase64 && !imageUrl) return res.status(400).json({ error: 'Image source required' });
+    if (!imageBase64 && !imageUrl) return res.status(400).json({ error: 'Image source required (imageBase64 or imageUrl)' });
 
     const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required' });
+    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required.' });
 
-    let base64Data = imageBase64;
-    let mimeType = 'image/jpeg';
+    // Resolve image to base64
+    let imgData = imageBase64;
+    let imgMime = 'image/jpeg';
 
-    // If URL provided, fetch the image
     if (imageUrl && !imageBase64) {
       const fetchRes = await fetch(imageUrl);
       if (!fetchRes.ok) throw new Error(`Could not fetch image from URL: ${fetchRes.status}`);
-      const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
-      mimeType = contentType.split(';')[0];
-      const arrayBuffer = await fetchRes.arrayBuffer();
-      base64Data = Buffer.from(arrayBuffer).toString('base64');
+      imgMime = (fetchRes.headers.get('content-type') || 'image/jpeg').split(';')[0];
+      imgData = Buffer.from(await fetchRes.arrayBuffer()).toString('base64');
     }
 
-    const transformPrompt = `Transform and edit this image following these instructions: ${instructions}
+    const transformInstruction = instructions
+      ? `Transform this image: ${instructions}. Also apply: ${IMAGE_STYLE_SUFFIX}, 16:9 aspect ratio.`
+      : `Enhance this image: ${IMAGE_STYLE_SUFFIX}, 16:9 aspect ratio, professional photo editing.`;
 
-Apply these quality standards:
-- ${IMAGE_STYLE_SUFFIX}
-- Maintain 16:9 aspect ratio
-- Enhance to 8K UHD quality
-- Professional photo editing result`;
+    // For image editing, text instruction first, then image — as per Google docs example
+    const { imageBase64: outBase64, mimeType: outMime, modelUsed } = await geminiGenerateImage(
+      [
+        { text: transformInstruction },
+        { inlineData: { mimeType: imgMime, data: imgData } },
+      ],
+      apiKey,
+      false, // imageConfig not supported for image-editing calls
+    );
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`;
-
-    const body = {
-      contents: [{
-        parts: [
-          { inlineData: { mimeType, data: base64Data } },
-          { text: transformPrompt },
-        ],
-      }],
-      generationConfig: {
-        responseModalities: ['IMAGE', 'TEXT'],
-      },
-    };
-
-    const transformRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-
-    if (!transformRes.ok) {
-      const errBody = await transformRes.json().catch(() => ({})) as any;
-      throw new Error(errBody?.error?.message || `Gemini transform error ${transformRes.status}`);
-    }
-
-    const transformData = await transformRes.json() as any;
-    const parts = transformData?.candidates?.[0]?.content?.parts || [];
-    const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
-    if (!imagePart) throw new Error('No image returned from Gemini transform');
-
-    return res.json({
-      imageBase64: imagePart.inlineData.data,
-      mimeType: imagePart.inlineData.mimeType || 'image/png',
-    });
+    return res.json({ imageBase64: outBase64, mimeType: outMime, modelUsed });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -981,29 +1025,36 @@ router.post('/bulk-images', async (req: Request, res: Response) => {
   try {
     const { headings, articleTitle, geminiApiKey } = req.body as {
       headings: string[];
-      articleTitle: string;
-      geminiApiKey: string;
+      articleTitle?: string;
+      geminiApiKey?: string;
     };
-    if (!headings || headings.length === 0) return res.status(400).json({ error: 'Headings required' });
+    if (!headings?.length) return res.status(400).json({ error: 'Headings array required' });
 
     const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required' });
+    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required.' });
 
-    // Generate one image per heading sequentially (to avoid rate limits)
-    const results: { heading: string; imageBase64: string; mimeType: string; prompt: string }[] = [];
+    const results: { heading: string; imageBase64: string; mimeType: string; prompt: string; modelUsed: string }[] = [];
 
     for (const heading of headings.slice(0, 12)) {
       try {
-        const imagePrompt = `Editorial photograph for article section: "${heading}"${articleTitle ? ` in context of "${articleTitle}"` : ''}. Professional news/lifestyle magazine photo, African context where relevant, ${IMAGE_STYLE_SUFFIX}`;
+        const imagePrompt = [
+          `Editorial photograph for article section: "${heading}"`,
+          articleTitle ? `Article: "${articleTitle}"` : '',
+          'Professional news/lifestyle magazine photo, African context where relevant',
+          IMAGE_STYLE_SUFFIX,
+        ].filter(Boolean).join('. ');
 
-        const { imageBase64, mimeType } = await geminiGenerateImage(imagePrompt, apiKey);
-        results.push({ heading, imageBase64, mimeType, prompt: imagePrompt });
-
-        // Delay between requests to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 800));
+        const { imageBase64, mimeType, modelUsed } = await geminiGenerateImage(
+          [{ text: imagePrompt }],
+          apiKey,
+        );
+        results.push({ heading, imageBase64, mimeType, prompt: imagePrompt, modelUsed });
       } catch {
-        // Skip failed headings, continue with others
+        // Skip failed heading, continue with the rest
       }
+
+      // Rate limit: ~1 req/sec for free tier
+      await new Promise(r => setTimeout(r, 1000));
     }
 
     return res.json({ images: results, generated: results.length, total: headings.length });
