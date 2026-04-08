@@ -1,11 +1,20 @@
 import { Router } from 'express';
+import { createClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../utils/supabase.js';
 import { sendAccountWelcomeEmail, sendForgotPasswordEmail } from '../utils/resend.js';
+import { setAdminCookie, clearAdminCookie } from '../middleware/auth.js';
 
 const router = Router();
 
 function getSiteUrl(): string {
   return process.env.VITE_SITE_URL || 'https://mayobebros.com';
+}
+
+function getServiceRoleClient() {
+  const url = process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) throw new Error('Supabase not configured');
+  return createClient(url, key);
 }
 
 function generateMemberCode(): string {
@@ -14,6 +23,63 @@ function generateMemberCode(): string {
   for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return `MB-${code}`;
 }
+
+// POST /api/auth/sync-user — upsert registered_users record and send welcome email for new users.
+// Called from the frontend after every sign-in/sign-up.
+// Uses service role key so it works regardless of RLS policies.
+router.post('/sync-user', async (req, res) => {
+  try {
+    const { userId, email, name, avatarUrl, provider } = req.body;
+    if (!userId || !email) return res.status(400).json({ error: 'userId and email required' });
+
+    const supabase = getServiceRoleClient();
+    const siteUrl = getSiteUrl();
+
+    const { data: existing } = await supabase
+      .from('registered_users')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('registered_users')
+        .update({
+          name: name || '',
+          avatar_url: avatarUrl || null,
+          provider: provider || 'email',
+          last_sign_in_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+      return res.json({ success: true, isNew: false });
+    }
+
+    // New user — insert and send welcome email
+    const { error: insertErr } = await supabase
+      .from('registered_users')
+      .insert({
+        id: userId,
+        email,
+        name: name || '',
+        avatar_url: avatarUrl || null,
+        provider: provider || 'email',
+        last_sign_in_at: new Date().toISOString(),
+      });
+
+    if (insertErr) throw insertErr;
+
+    res.json({ success: true, isNew: true });
+
+    // Send after responding so the user isn't blocked
+    sendAccountWelcomeEmail(email, name || email.split('@')[0], siteUrl).catch(e =>
+      console.error('[AUTH] sync-user welcome email failed:', e)
+    );
+  } catch (err: any) {
+    console.error('[AUTH] sync-user error:', err);
+    res.status(500).json({ error: 'Failed to sync user' });
+  }
+});
 
 // POST /api/auth/welcome-email — send branded account welcome email
 router.post('/welcome-email', async (req, res) => {
@@ -119,6 +185,9 @@ router.post('/login', async (req, res) => {
     req.session.userId = data.user.id;
     req.session.email = data.user.email;
 
+    // Set stateless signed cookie as fallback for Vercel cold-start session loss
+    setAdminCookie(res, data.user.id, data.user.email || '');
+
     res.json({
       user: {
         id: data.user.id,
@@ -134,6 +203,7 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
+  clearAdminCookie(res);
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).json({ error: 'Logout failed' });

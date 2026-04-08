@@ -22,15 +22,21 @@ const USER_CACHE_KEY = 'mayobebros-public-user';
 const UserAuthContext = createContext<UserAuthContextType | undefined>(undefined);
 
 async function autoSubscribeNewsletter(email: string) {
-  // Route through server so unsubscribe_token is generated and welcome email is sent
+  // Route through server so unsubscribe_token is generated and welcome email is sent.
+  // 409 = already subscribed (OK), 429 = rate limited (OK), other errors logged.
   try {
-    await fetch('/api/newsletter/subscribe', {
+    const res = await fetch('/api/newsletter/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, source: 'signup' }),
     });
-    // Ignore 409 (already subscribed) and 429 (rate limit) silently
-  } catch {}
+    if (!res.ok && res.status !== 409 && res.status !== 429) {
+      const body = await res.json().catch(() => ({}));
+      console.warn('[NEWSLETTER] Auto-subscribe failed:', res.status, body);
+    }
+  } catch (e) {
+    console.warn('[NEWSLETTER] Auto-subscribe error:', e);
+  }
 }
 
 async function generateSecretCode(userId: string) {
@@ -44,45 +50,22 @@ async function generateSecretCode(userId: string) {
 }
 
 async function syncRegisteredUser(suUser: any) {
+  // Route through server endpoint (service role key bypasses RLS, handles welcome email reliably)
   try {
-    const id = suUser.id;
     const email = suUser.email || '';
     const name =
       suUser.user_metadata?.full_name ||
       suUser.user_metadata?.name ||
       email.split('@')[0] ||
       'User';
-    const avatar_url = suUser.user_metadata?.avatar_url || suUser.user_metadata?.picture || null;
+    const avatarUrl = suUser.user_metadata?.avatar_url || suUser.user_metadata?.picture || null;
     const provider = suUser.app_metadata?.provider === 'google' ? 'google' : 'email';
 
-    const { data: existing } = await supabase
-      .from('registered_users')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (existing) {
-      await supabase
-        .from('registered_users')
-        .update({
-          name,
-          avatar_url,
-          provider,
-          last_sign_in_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
-    } else {
-      await supabase
-        .from('registered_users')
-        .insert({ id, email, name, avatar_url, provider, last_sign_in_at: new Date().toISOString() });
-      // New user — send welcome email (works for Google OAuth and any first-time sign-in)
-      fetch('/api/auth/welcome-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name }),
-      }).catch(() => {});
-    }
+    await fetch('/api/auth/sync-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: suUser.id, email, name, avatarUrl, provider }),
+    });
   } catch {}
 }
 
