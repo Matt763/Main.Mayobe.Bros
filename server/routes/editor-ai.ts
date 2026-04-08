@@ -854,47 +854,49 @@ const IMAGE_STYLE_SUFFIX = [
   '16:9 widescreen composition',
 ].join(', ');
 
+// Shared helper: generate one image via Gemini 2.0 Flash image generation
+async function geminiGenerateImage(prompt: string, apiKey: string): Promise<{ imageBase64: string; mimeType: string }> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`;
+
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({})) as any;
+    throw new Error(errBody?.error?.message || `Gemini image API error ${res.status}`);
+  }
+
+  const data = await res.json() as any;
+  const parts: any[] = data?.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
+  if (!imagePart) throw new Error('No image returned. Try a different prompt or check your API key has image generation access.');
+
+  return {
+    imageBase64: imagePart.inlineData.data,
+    mimeType: imagePart.inlineData.mimeType || 'image/png',
+  };
+}
+
 router.post('/generate-image', async (req: Request, res: Response) => {
   try {
     const { prompt, geminiApiKey } = req.body as { prompt: string; geminiApiKey: string };
     if (!prompt) return res.status(400).json({ error: 'Prompt required' });
 
     const apiKey = geminiApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required. Add GEMINI_API_KEY to env or enter it in the panel.' });
+    if (!apiKey) return res.status(400).json({ error: 'Gemini API key required. Enter it via the key icon in the Image Generator panel.' });
 
     const fullPrompt = `${prompt.trim()}, ${IMAGE_STYLE_SUFFIX}`;
+    const { imageBase64, mimeType } = await geminiGenerateImage(fullPrompt, apiKey);
 
-    // Try Imagen 3 first (best quality), fall back to Gemini 2.0 Flash image generation
-    const imagen3Url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
-
-    const imgRes = await fetch(imagen3Url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        instances: [{ prompt: fullPrompt }],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: '16:9',
-          safetyFilterLevel: 'block_few',
-          personGeneration: 'allow_adult',
-        },
-      }),
-    });
-
-    if (!imgRes.ok) {
-      const errBody = await imgRes.json().catch(() => ({})) as any;
-      throw new Error(errBody?.error?.message || `Imagen API error ${imgRes.status}`);
-    }
-
-    const imgData = await imgRes.json() as any;
-    const prediction = imgData?.predictions?.[0];
-    if (!prediction?.bytesBase64Encoded) throw new Error('No image returned from Imagen API');
-
-    return res.json({
-      imageBase64: prediction.bytesBase64Encoded,
-      mimeType: prediction.mimeType || 'image/png',
-      prompt: fullPrompt,
-    });
+    return res.json({ imageBase64, mimeType, prompt: fullPrompt });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -934,7 +936,7 @@ Apply these quality standards:
 - Enhance to 8K UHD quality
 - Professional photo editing result`;
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${apiKey}`;
 
     const body = {
       contents: [{
@@ -992,31 +994,13 @@ router.post('/bulk-images', async (req: Request, res: Response) => {
 
     for (const heading of headings.slice(0, 12)) {
       try {
-        const imagePrompt = `Editorial photograph for article section: "${heading}" in context of "${articleTitle}". Professional news/lifestyle magazine photo, African context where relevant, ${IMAGE_STYLE_SUFFIX}`;
+        const imagePrompt = `Editorial photograph for article section: "${heading}"${articleTitle ? ` in context of "${articleTitle}"` : ''}. Professional news/lifestyle magazine photo, African context where relevant, ${IMAGE_STYLE_SUFFIX}`;
 
-        const imgRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instances: [{ prompt: imagePrompt }],
-            parameters: { sampleCount: 1, aspectRatio: '16:9', safetyFilterLevel: 'block_few' },
-          }),
-        });
+        const { imageBase64, mimeType } = await geminiGenerateImage(imagePrompt, apiKey);
+        results.push({ heading, imageBase64, mimeType, prompt: imagePrompt });
 
-        if (imgRes.ok) {
-          const data = await imgRes.json() as any;
-          const pred = data?.predictions?.[0];
-          if (pred?.bytesBase64Encoded) {
-            results.push({
-              heading,
-              imageBase64: pred.bytesBase64Encoded,
-              mimeType: pred.mimeType || 'image/png',
-              prompt: imagePrompt,
-            });
-          }
-        }
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Delay between requests to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 800));
       } catch {
         // Skip failed headings, continue with others
       }
