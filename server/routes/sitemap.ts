@@ -148,6 +148,7 @@ function sendXml(res: Response, xml: string): void {
   res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400');
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   res.setHeader('Vary', 'Accept-Encoding');
+  res.setHeader('X-Feed', `${SITE_URL}/feed.xml`);
   res.send(xml);
 }
 

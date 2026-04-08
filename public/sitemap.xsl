@@ -84,6 +84,31 @@
             font-size: 0.8rem;
             font-weight: 600;
           }
+          .rss-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: rgba(251,146,60,0.22);
+            color: #fed7aa;
+            border: 1px solid rgba(251,146,60,0.4);
+            border-radius: 999px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 0.28rem 0.7rem;
+            text-decoration: none;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: background 0.15s;
+          }
+          .rss-btn:hover {
+            background: rgba(251,146,60,0.35);
+          }
+          .rss-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: #fb923c;
+            display: inline-block;
+          }
 
           /* ── Main ── */
           main {
@@ -324,6 +349,9 @@
               <span class="entry-count">
                 <xsl:value-of select="count(sitemap:sitemapindex/sitemap:sitemap) + count(sitemap:urlset/sitemap:url)"/> entries
               </span>
+              <a href="/feed.xml" class="rss-btn">
+                <span class="rss-dot"/>RSS Feed
+              </a>
               <span class="badge">XML</span>
             </div>
           </div>
