@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../utils/supabase.js';
-import { sendAccountWelcomeEmail, sendForgotPasswordEmail } from '../utils/resend.js';
+import { sendAccountWelcomeEmail, sendForgotPasswordEmail, sendWelcomeEmail } from '../utils/resend.js';
 import { setAdminCookie, clearAdminCookie } from '../middleware/auth.js';
 
 const router = Router();
@@ -55,7 +55,7 @@ router.post('/sync-user', async (req, res) => {
       return res.json({ success: true, isNew: false });
     }
 
-    // New user — insert and send welcome email
+    // New user — insert record
     const { error: insertErr } = await supabase
       .from('registered_users')
       .insert({
@@ -71,10 +71,54 @@ router.post('/sync-user', async (req, res) => {
 
     res.json({ success: true, isNew: true });
 
-    // Send after responding so the user isn't blocked
-    sendAccountWelcomeEmail(email, name || email.split('@')[0], siteUrl).catch(e =>
+    // After responding: send account welcome email + auto-subscribe to newsletter
+    const displayName = name || email.split('@')[0];
+
+    sendAccountWelcomeEmail(email, displayName, siteUrl).catch(e =>
       console.error('[AUTH] sync-user welcome email failed:', e)
     );
+
+    // Auto-subscribe to newsletter (server-side: no rate limit, no double-call risk)
+    (async () => {
+      try {
+        const { data: existingSub } = await supabase
+          .from('newsletter_subscribers')
+          .select('id, is_active, unsubscribe_token')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (existingSub) {
+          // Reactivate if previously unsubscribed
+          if (!existingSub.is_active) {
+            await supabase
+              .from('newsletter_subscribers')
+              .update({ is_active: true, unsubscribed_at: null, confirmed_at: new Date().toISOString() })
+              .eq('id', existingSub.id);
+            const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${existingSub.unsubscribe_token}`;
+            sendWelcomeEmail(email, unsubUrl, siteUrl).catch(e =>
+              console.error('[AUTH] Newsletter reactivation email failed:', e)
+            );
+          }
+          // Already active — no action needed
+        } else {
+          // Create new subscription
+          const { data: newSub } = await supabase
+            .from('newsletter_subscribers')
+            .insert({ email, is_active: true, source: 'signup', confirmed_at: new Date().toISOString() })
+            .select('id, unsubscribe_token')
+            .single();
+
+          if (newSub?.unsubscribe_token) {
+            const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${newSub.unsubscribe_token}`;
+            sendWelcomeEmail(email, unsubUrl, siteUrl).catch(e =>
+              console.error('[AUTH] Newsletter welcome email failed:', e)
+            );
+          }
+        }
+      } catch (e) {
+        console.error('[AUTH] sync-user newsletter subscription failed:', e);
+      }
+    })();
   } catch (err: any) {
     console.error('[AUTH] sync-user error:', err);
     res.status(500).json({ error: 'Failed to sync user' });

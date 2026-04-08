@@ -21,24 +21,6 @@ interface UserAuthContextType {
 const USER_CACHE_KEY = 'mayobebros-public-user';
 const UserAuthContext = createContext<UserAuthContextType | undefined>(undefined);
 
-async function autoSubscribeNewsletter(email: string) {
-  // Route through server so unsubscribe_token is generated and welcome email is sent.
-  // 409 = already subscribed (OK), 429 = rate limited (OK), other errors logged.
-  try {
-    const res = await fetch('/api/newsletter/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, source: 'signup' }),
-    });
-    if (!res.ok && res.status !== 409 && res.status !== 429) {
-      const body = await res.json().catch(() => ({}));
-      console.warn('[NEWSLETTER] Auto-subscribe failed:', res.status, body);
-    }
-  } catch (e) {
-    console.warn('[NEWSLETTER] Auto-subscribe error:', e);
-  }
-}
-
 async function generateSecretCode(userId: string) {
   try {
     await fetch('/api/secret-codes/generate', {
@@ -49,8 +31,9 @@ async function generateSecretCode(userId: string) {
   } catch {}
 }
 
-async function syncRegisteredUser(suUser: any) {
-  // Route through server endpoint (service role key bypasses RLS, handles welcome email reliably)
+// Returns true when this is the user's first ever sign-in (new account).
+// The server handles welcome email + newsletter subscription for new users.
+async function syncRegisteredUser(suUser: any): Promise<boolean> {
   try {
     const email = suUser.email || '';
     const name =
@@ -61,12 +44,17 @@ async function syncRegisteredUser(suUser: any) {
     const avatarUrl = suUser.user_metadata?.avatar_url || suUser.user_metadata?.picture || null;
     const provider = suUser.app_metadata?.provider === 'google' ? 'google' : 'email';
 
-    await fetch('/api/auth/sync-user', {
+    const res = await fetch('/api/auth/sync-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: suUser.id, email, name, avatarUrl, provider }),
     });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return data.isNew === true;
+    }
   } catch {}
+  return false;
 }
 
 export function UserAuthProvider({ children }: { children: React.ReactNode }) {
@@ -103,7 +91,7 @@ export function UserAuthProvider({ children }: { children: React.ReactNode }) {
           setPublicUser(u);
           localStorage.setItem(USER_CACHE_KEY, JSON.stringify(u));
           if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-            await autoSubscribeNewsletter(u.email);
+            // sync-user handles welcome email + newsletter subscription for new users server-side
             await syncRegisteredUser(session.user);
             generateSecretCode(u.id);
             const returnPath = sessionStorage.getItem('mayobebros-return-path');
@@ -144,10 +132,11 @@ export function UserAuthProvider({ children }: { children: React.ReactNode }) {
       options: { data: { full_name: name } },
     });
     if (error) return { error: error.message };
+    // If Supabase requires email confirmation, SIGNED_IN won't fire until the user
+    // confirms, so we sync now. If autoConfirm is on, SIGNED_IN fires and also syncs —
+    // the second call is a no-op (isNew=false) and sends no duplicate emails.
     if (data.user) {
-      await autoSubscribeNewsletter(email);
       await syncRegisteredUser(data.user);
-      // syncRegisteredUser sends the account welcome email for new users
     }
     return { error: null };
   };
