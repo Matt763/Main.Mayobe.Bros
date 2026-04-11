@@ -127,31 +127,37 @@ async function fetchGeo(): Promise<GeoInfo | null> {
     }
   } catch { /* fallthrough */ }
 
-  // Fallback: ip-api.com (no HTTPS on free tier — use http)
+  // Fallback: freeipapi.com (HTTPS, free, no API key needed)
   try {
-    const res = await fetch('http://ip-api.com/json/?fields=country,countryCode,city,lat,lon', { signal: AbortSignal.timeout(5000) });
+    const res = await fetch('https://freeipapi.com/api/json/', { signal: AbortSignal.timeout(5000) });
     if (res.ok) {
       const json = await res.json();
-      const info: GeoInfo = {
-        country_code: json.countryCode || '',
-        country_name: json.country || '',
-        city: json.city || '',
-        latitude: json.lat,
-        longitude: json.lon,
-      };
-      try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify({ data: info, ts: Date.now() })); } catch { /* ignore */ }
-      return info;
+      if (json.countryCode && json.countryCode !== '-') {
+        const info: GeoInfo = {
+          country_code: json.countryCode || '',
+          country_name: json.countryName || '',
+          city: json.cityName || '',
+          latitude: json.latitude,
+          longitude: json.longitude,
+        };
+        try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify({ data: info, ts: Date.now() })); } catch { /* ignore */ }
+        return info;
+      }
     }
   } catch { /* ignore */ }
 
-  // Last resort: country only
+  // Last resort: country code only — country_name left blank to avoid polluting
+  // the Top Countries list with raw ISO codes (e.g. "KE" instead of "Kenya").
+  // The map still works via country_code; the bar list simply omits these visitors.
   try {
     const res = await fetch('https://api.country.is/', { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
       const json = await res.json();
-      const info: GeoInfo = { country_code: json.country || '', country_name: json.country || '', city: '' };
-      try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify({ data: info, ts: Date.now() })); } catch { /* ignore */ }
-      return info;
+      if (json.country) {
+        const info: GeoInfo = { country_code: json.country, country_name: '', city: '' };
+        try { localStorage.setItem(GEO_CACHE_KEY, JSON.stringify({ data: info, ts: Date.now() })); } catch { /* ignore */ }
+        return info;
+      }
     }
   } catch { /* ignore */ }
 

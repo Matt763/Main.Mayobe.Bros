@@ -199,6 +199,29 @@ function exportCSV(rows: ViewRow[]): void {
   a.click(); URL.revokeObjectURL(url);
 }
 
+// ─── Paginated fetch ──────────────────────────────────────────────────────────
+// Supabase PostgREST hard-caps responses at 1000 rows regardless of .limit().
+// We page through in batches of 1000 until we receive a partial page (done).
+async function fetchAllPageViews(fields: string, rangeStart: Date): Promise<ViewRow[]> {
+  const PAGE = 1000;
+  const all: ViewRow[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('page_views')
+      .select(fields)
+      .gte('created_at', rangeStart.toISOString())
+      .order('created_at', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...(data as ViewRow[]));
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SectionCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -637,13 +660,11 @@ export default function AnalyticsPage() {
       const adRangeStart = getRangeStart(adRange);
       const twoMinAgo    = new Date(Date.now() - 2 * 60 * 1000);
 
-      const [pvRes, onRes, adRes] = await Promise.all([
-        supabase
-          .from('page_views')
-          .select('created_at,session_id,visitor_id,is_unique,country_code,country_name,city,device_type,browser,os,page_path,referrer')
-          .gte('created_at', rangeStart.toISOString())
-          .order('created_at', { ascending: true })
-          .limit(50000),
+      const [pvRows, onRes, adRes] = await Promise.all([
+        fetchAllPageViews(
+          'created_at,session_id,visitor_id,is_unique,country_code,country_name,city,device_type,browser,os,page_path,referrer',
+          rangeStart,
+        ),
         supabase
           .from('online_visitors')
           .select('visitor_id,page_path,country_name,city,device_type,last_seen')
@@ -656,7 +677,7 @@ export default function AnalyticsPage() {
           .gte('created_at', adRangeStart.toISOString()),
       ]);
 
-      setRows((pvRes.data as ViewRow[]) || []);
+      setRows(pvRows);
       setOnlineRows((onRes.data as OnlineRow[]) || []);
       setAdRows((adRes.data as AdEventRow[]) || []);
       setUpdatedAt(new Date());
@@ -712,8 +733,13 @@ export default function AnalyticsPage() {
   const metrics = useMemo(() => {
     const totalViews     = rows.length;
     const uniqueVisitors = new Set(rows.map(r => r.visitor_id)).size;
-    const newVisitors    = rows.filter(r => r.is_unique).length;
-    const returningVisitors = uniqueVisitors - newVisitors;
+    // Count distinct visitor_ids that have at least one is_unique=true row in
+    // the range. Using a Set prevents multi-day visitors from being counted
+    // multiple times (one is_unique row per day), which previously made
+    // returningVisitors go negative.
+    const newVisitorIds  = new Set(rows.filter(r => r.is_unique).map(r => r.visitor_id));
+    const newVisitors    = newVisitorIds.size;
+    const returningVisitors = Math.max(0, uniqueVisitors - newVisitors);
 
     const sessionPageCounts: Record<string, number> = {};
     const sessionTimes: Record<string, { first: number; last: number }> = {};
