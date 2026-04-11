@@ -6,7 +6,7 @@ import {
   Undo, Redo, Type, Palette, Eye, EyeOff, Minus, Video, Smile,
   Table, Info, AlertTriangle, CheckCircle, XCircle,
   GitBranch, BarChart2, Maximize2, Minimize2,
-  Printer, Search, Subscript, Superscript, ChevronRight, ChevronLeft, Sparkles,
+  Printer, Search, Subscript, Superscript, ChevronRight, ChevronLeft, Sparkles, X,
 } from 'lucide-react';
 
 export interface RichTextEditorHandle {
@@ -100,6 +100,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   const [replaceText,     setReplaceText]     = useState('');
   const [replaceMsg,      setReplaceMsg]      = useState('');
   const [wc,              setWc]              = useState(0);
+  const [showVideoModal,  setShowVideoModal]  = useState(false);
+  const [videoModalUrl,   setVideoModalUrl]   = useState('');
+  const draggedElement = useRef<HTMLElement | null>(null);
 
   const closeAllMenus = () => {
     setShowEmojiPicker(false);
@@ -152,6 +155,61 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
     document.addEventListener('selectionchange', saveSelection);
     return () => document.removeEventListener('selectionchange', saveSelection);
   }, [saveSelection]);
+
+  // ── ELEMENT DRAG-AND-DROP (figures, images, videos) ───────────────────────
+  // Makes all block-level media elements draggable so users can reposition them.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const makeDraggable = (el: Element) => {
+      if ((el as HTMLElement).matches?.('figure, .video-figure')) {
+        const elem = el as HTMLElement;
+        elem.draggable = true;
+      }
+    };
+
+    // Seed existing elements
+    editor.querySelectorAll('figure, .video-figure').forEach(makeDraggable);
+
+    // Watch for new elements inserted by the editor (paste, toolbar insert, etc.)
+    const observer = new MutationObserver(mutations => {
+      mutations.forEach(m => m.addedNodes.forEach(n => {
+        if (n instanceof HTMLElement) {
+          makeDraggable(n);
+          n.querySelectorAll?.('figure, .video-figure').forEach(makeDraggable);
+        }
+      }));
+    });
+    observer.observe(editor, { childList: true, subtree: true });
+
+    const onDragStart = (e: DragEvent) => {
+      const t = e.target as HTMLElement;
+      const block = t.closest('figure, .video-figure') as HTMLElement | null;
+      if (block && editor.contains(block)) {
+        draggedElement.current = block;
+        e.dataTransfer?.setData('application/x-editor-element', '1');
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+        // Fade element while dragging
+        setTimeout(() => { if (draggedElement.current) draggedElement.current.style.opacity = '0.4'; }, 0);
+      }
+    };
+
+    const onDragEnd = () => {
+      if (draggedElement.current) {
+        draggedElement.current.style.opacity = '';
+        draggedElement.current = null;
+      }
+    };
+
+    editor.addEventListener('dragstart', onDragStart);
+    editor.addEventListener('dragend', onDragEnd);
+    return () => {
+      observer.disconnect();
+      editor.removeEventListener('dragstart', onDragStart);
+      editor.removeEventListener('dragend', onDragEnd);
+    };
+  }, []);
 
   // ── IMPERATIVE HANDLE — exposes insertAtCursor to parent components ──────────
   useImperativeHandle(ref, () => ({
@@ -223,7 +281,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   };
 
   const insertVideo = () => {
-    const url = prompt('Enter YouTube, Vimeo, or direct video URL:');
+    setShowVideoModal(true);
+  };
+
+  const insertVideoFromModal = () => {
+    const url = videoModalUrl.trim();
     if (!url) return;
 
     const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -232,14 +294,16 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
     let html: string;
     if (yt) {
       const videoId = yt[1];
-      html = `<div class="plyr__video-embed js-plyr" style="margin:1.5rem 0;border-radius:12px;overflow:hidden"><iframe src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=https://mayobebros.com&modestbranding=1&rel=0&iv_load_policy=3" allowfullscreen allow="autoplay; fullscreen; picture-in-picture; web-share" frameborder="0"></iframe></div><p></p>`;
+      html = `<figure class="video-figure" contenteditable="false" draggable="true"><div class="plyr__video-embed js-plyr" style="border-radius:12px;overflow:hidden"><iframe src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=https://mayobebros.com&modestbranding=1&rel=0&iv_load_policy=3" allowfullscreen allow="autoplay; fullscreen; picture-in-picture; web-share" frameborder="0"></iframe></div></figure><p></p>`;
     } else if (vimeo) {
       const videoId = vimeo[1];
-      html = `<div class="plyr__video-embed js-plyr" style="margin:1.5rem 0;border-radius:12px;overflow:hidden"><iframe src="https://player.vimeo.com/video/${videoId}?byline=0&portrait=0&title=0" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" frameborder="0"></iframe></div><p></p>`;
+      html = `<figure class="video-figure" contenteditable="false" draggable="true"><div class="plyr__video-embed js-plyr" style="border-radius:12px;overflow:hidden"><iframe src="https://player.vimeo.com/video/${videoId}?byline=0&portrait=0&title=0" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" frameborder="0"></iframe></div></figure><p></p>`;
     } else {
-      html = `<div style="margin:1.5rem 0"><video class="js-plyr" controls playsinline style="width:100%;border-radius:12px;max-height:480px"><source src="${url}"></video></div><p></p>`;
+      html = `<figure class="video-figure" contenteditable="false" draggable="true"><video class="js-plyr" controls playsinline style="max-width:100%;border-radius:12px;display:block;margin:0 auto;max-height:480px"><source src="${url}"></video></figure><p></p>`;
     }
     insertHtml(html);
+    setShowVideoModal(false);
+    setVideoModalUrl('');
   };
 
   const insertEmoji = (em: string) => {
@@ -402,11 +466,41 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
 
   // ── DROP ────────────────────────────────────────────────────────────────
   const handleDrop = (e: React.DragEvent) => {
+    // ── Internal element move (figures, video wrappers) ────────────────────
+    const isElementMove = e.dataTransfer.types.includes('application/x-editor-element');
+    if (isElementMove && draggedElement.current) {
+      e.preventDefault();
+      const elementHtml = draggedElement.current.outerHTML;
+      const toRemove = draggedElement.current;
+
+      // Capture drop point BEFORE focus() so selectionchange doesn't clobber it
+      let dropRange: Range | null = null;
+      if (document.caretRangeFromPoint) {
+        dropRange = document.caretRangeFromPoint(e.clientX, e.clientY);
+      } else {
+        const pos = (document as any).caretPositionFromPoint?.(e.clientX, e.clientY);
+        if (pos) { dropRange = document.createRange(); dropRange.setStart(pos.offsetNode, pos.offset); dropRange.collapse(true); }
+      }
+
+      if (editorRef.current) {
+        editorRef.current.focus();
+        const sel = window.getSelection();
+        if (sel && dropRange && editorRef.current.contains(dropRange.commonAncestorContainer)) {
+          sel.removeAllRanges();
+          sel.addRange(dropRange);
+        }
+        toRemove.remove();
+        document.execCommand('insertHTML', false, elementHtml + '<p></p>');
+        setTimeout(updateContent, 10);
+      }
+      draggedElement.current = null;
+      return;
+    }
+
     const file = e.dataTransfer.files[0];
 
     if (!file?.type.startsWith('image/')) {
-      // Non-image drop (internal text/HTML DnD) — let the browser handle it
-      // natively so text can be dragged to any position within the editor.
+      // Non-image, non-element drop — let the browser handle native text DnD.
       // onInput will fire and sync state after the native insertion.
       return;
     }
@@ -732,13 +826,13 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
       )}
 
       {/* ── EDITOR AREA ── */}
-      <div className={isFullscreen ? 'flex-1 overflow-y-auto' : ''}>
+      <div className={isFullscreen ? 'flex-1 overflow-hidden' : ''}>
         {showHtml ? (
           <textarea
             value={htmlContent}
             onChange={e => { setHtmlContent(e.target.value); onChange(e.target.value); }}
-            className="w-full p-6 font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none resize-y"
-            style={{ minHeight: isFullscreen ? '100%' : '520px' }}
+            className="w-full p-6 font-mono text-sm bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none resize-none admin-scroll"
+            style={{ height: isFullscreen ? 'calc(100vh - 180px)' : '520px', overflowY: 'auto' }}
             placeholder="HTML content…"
           />
         ) : (
@@ -754,9 +848,10 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
             onDragOver={e => e.preventDefault()}
             onFocus={() => { setIsFocused(true); closeAllMenus(); }}
             onBlur={() => setIsFocused(false)}
-            className="w-full px-8 py-6 focus:outline-none text-gray-900 dark:text-gray-100 leading-relaxed"
+            className="w-full px-8 py-6 focus:outline-none text-gray-900 dark:text-gray-100 leading-relaxed admin-scroll"
             style={{
-              minHeight: isFullscreen ? 'calc(100vh - 180px)' : '520px',
+              height: isFullscreen ? 'calc(100vh - 180px)' : '520px',
+              overflowY: 'auto',
               wordWrap: 'break-word', overflowWrap: 'break-word',
             }}
             data-placeholder={placeholder}
@@ -775,6 +870,97 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
           {isFullscreen ? 'Esc · exit fullscreen' : 'F11 · fullscreen'} · Ctrl+H · find &amp; replace · Ctrl+P · print
         </span>
       </div>
+
+      {/* ── VIDEO INSERT MODAL ── */}
+      {showVideoModal && (
+        <div
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={e => { if (e.target === e.currentTarget) { setShowVideoModal(false); setVideoModalUrl(''); } }}
+        >
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg mx-4 border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Video size={18} className="text-blue-500" /> Insert Video
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setShowVideoModal(false); setVideoModalUrl(''); }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Video URL</label>
+                <input
+                  type="url"
+                  value={videoModalUrl}
+                  onChange={e => setVideoModalUrl(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && videoModalUrl.trim()) insertVideoFromModal(); }}
+                  placeholder="https://youtube.com/watch?v=… or direct .mp4 URL"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 placeholder-gray-400"
+                  autoFocus
+                />
+                <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  Supports YouTube, Vimeo, and direct video URLs (.mp4, .webm, .mov)
+                </p>
+              </div>
+
+              {/* Live preview */}
+              {(() => {
+                const yt    = videoModalUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+                const vimeo = videoModalUrl.match(/vimeo\.com\/(\d+)/);
+                const direct = videoModalUrl.match(/\.(mp4|webm|ogg|mov)($|\?)/i);
+                if (!yt && !vimeo && !direct) return null;
+                return (
+                  <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-black aspect-video">
+                    {yt ? (
+                      <iframe
+                        src={`https://www.youtube.com/embed/${yt[1]}?modestbranding=1&rel=0`}
+                        className="w-full h-full"
+                        allowFullScreen
+                        title="YouTube preview"
+                      />
+                    ) : vimeo ? (
+                      <iframe
+                        src={`https://player.vimeo.com/video/${vimeo[1]}?byline=0&portrait=0&title=0`}
+                        className="w-full h-full"
+                        allowFullScreen
+                        title="Vimeo preview"
+                      />
+                    ) : (
+                      <video src={videoModalUrl} controls className="w-full h-full" />
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-3 px-6 pb-5 justify-end">
+              <button
+                type="button"
+                onClick={() => { setShowVideoModal(false); setVideoModalUrl(''); }}
+                className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={insertVideoFromModal}
+                disabled={!videoModalUrl.trim()}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors flex items-center gap-2"
+              >
+                <Video size={14} /> Insert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── STYLES ── */}
       <style>{`
@@ -858,6 +1044,28 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
         .callout-btn-success { color:#22c55e; }
         .callout-btn-danger  { color:#ef4444; }
         .callout-btn-tip     { color:#a855f7; }
+
+        /* Video figure — non-editable atomic block, draggable */
+        [contenteditable] figure.video-figure {
+          margin:1.5rem 0;
+          border-radius:12px;
+          overflow:hidden;
+          cursor:grab;
+          outline:2px solid transparent;
+          transition:outline-color 0.15s ease;
+          user-select:none;
+        }
+        [contenteditable] figure.video-figure:hover { outline-color:rgba(59,130,246,0.45); }
+        [contenteditable] figure.video-figure:active { cursor:grabbing; }
+
+        /* Drag ghost: dim dragged element */
+        [contenteditable] figure[draggable="true"] { position:relative; }
+
+        /* Scrollbar inside editor — styled via admin-scroll class */
+        [contenteditable].admin-scroll::-webkit-scrollbar { width:5px; }
+        [contenteditable].admin-scroll::-webkit-scrollbar-track { background:transparent; }
+        [contenteditable].admin-scroll::-webkit-scrollbar-thumb { background:rgba(148,163,184,0.35);border-radius:5px; }
+        [contenteditable].admin-scroll::-webkit-scrollbar-thumb:hover { background:rgba(52,124,37,0.55); }
       `}</style>
     </div>
   );

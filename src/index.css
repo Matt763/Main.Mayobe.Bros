@@ -792,3 +792,61 @@
   --plyr-audio-control-color: rgba(255,255,255,0.85);
 }
 
+/* ================================================================
+   GLOBAL SCROLLBAR THEME — Mayobe Bros Brand (Light & Dark Mode)
+   All scrollbars: thin, subtle, green-accented on hover.
+   ================================================================ */
+
+/* ── Webkit (Chrome, Edge, Safari) ─────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.30);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 124, 37, 0.58);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dark mode — Webkit */
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 124, 37, 0.65);
+}
+
+/* ── Firefox ────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.30) transparent;
+}
+.dark * {
+  scrollbar-color: rgba(148, 163, 184, 0.22) transparent;
+}
+
+/* ── Admin scroll override (narrower, used in sidebars/panels) ─── */
+.admin-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+.admin-scroll::-webkit-scrollbar-track { background: transparent; }
+.admin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 4px;
+}
+.admin-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 124, 37, 0.55);
+}
+.dark .admin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.20);
+}
+.dark .admin-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 124, 37, 0.65);
+}
+
