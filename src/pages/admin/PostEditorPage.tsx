@@ -16,7 +16,8 @@ import AIImageGenerator from '../../components/admin/AIImageGenerator';
 import {
   Save, ArrowLeft, Image as ImageIcon, Calendar, User, Tag, Folder,
   Star, Globe, Send, AlertTriangle, X, CheckCircle2, FileText, Clock,
-  Eye, ChevronDown, ChevronUp, Settings2, Sparkles, Printer,
+  Eye, ChevronDown, ChevronUp, Settings2, Sparkles, Printer, RefreshCw,
+  RotateCcw,
 } from 'lucide-react';
 
 interface Category { id: string; name: string; }
@@ -33,10 +34,16 @@ export default function PostEditorPage() {
   const isEditing = !!id;
   const { user } = useAuth();
   const { isCEO, isAdmin } = useRole();
-  const autoSaveRef      = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveRef        = useRef<NodeJS.Timeout | null>(null);
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
-  const editorApiRef     = useRef<RichTextEditorHandle | null>(null);
-  const toolkitRef       = useRef<HTMLDivElement | null>(null);
+  const editorApiRef       = useRef<RichTextEditorHandle | null>(null);
+  const toolkitRef         = useRef<HTMLDivElement | null>(null);
+  // Stores the publishedAt value loaded from the DB. Used to prevent
+  // updating an existing published post from resetting its publish date,
+  // which would make it appear as a freshly published post in RSS feeds.
+  const originalPublishedAt = useRef<string | null>(null);
+  // True when the post was already published when the editor was opened.
+  const wasPublishedOnLoad  = useRef(false);
 
   const [currentSlug, setCurrentSlug] = useState('');
   const [title, setTitle] = useState('');
@@ -70,6 +77,9 @@ export default function PostEditorPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [seoExpanded, setSeoExpanded] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  // Recovery draft offered when a new post has unsaved content from a
+  // previous session (e.g. browser closed, session timed out mid-edit).
+  const [recoveryDraft, setRecoveryDraft] = useState<Record<string, any> | null>(null);
 
   const wordCount = countWords(content);
   const readingTime = Math.max(1, Math.round(wordCount / 200));
@@ -109,8 +119,38 @@ export default function PostEditorPage() {
   useEffect(() => {
     loadCategories();
     loadLabels();
-    if (isEditing) loadPost();
+    if (isEditing) {
+      loadPost();
+    } else {
+      // Check for a recovery draft from a previous session (e.g. browser crash,
+      // forced logout while writing). Offer to restore — never auto-apply.
+      try {
+        const raw = localStorage.getItem('mb-recovery-post-new');
+        if (raw) {
+          const draft = JSON.parse(raw);
+          if (draft?.title || draft?.content) setRecoveryDraft(draft);
+        }
+      } catch {}
+    }
   }, [id]);
+
+  // ── Before-logout recovery save ─────────────────────────────────────────
+  // AuthContext dispatches 'admin-before-logout' before clearing the session.
+  // We write current editor state to localStorage so nothing is lost.
+  useEffect(() => {
+    const handleBeforeLogout = () => {
+      if (!title && !content) return;
+      try {
+        localStorage.setItem(`mb-recovery-post-${id || 'new'}`, JSON.stringify({
+          title, content, excerpt, categoryId, labelId,
+          featuredImage, metaTitle, metaDescription, metaKeywords,
+          slug, isFeatured, savedAt: new Date().toISOString(),
+        }));
+      } catch {}
+    };
+    window.addEventListener('admin-before-logout', handleBeforeLogout);
+    return () => window.removeEventListener('admin-before-logout', handleBeforeLogout);
+  }, [title, content, excerpt, categoryId, labelId, featuredImage, metaTitle, metaDescription, metaKeywords, slug, isFeatured, id]);
 
   useEffect(() => {
     if (categoryId) {
@@ -129,12 +169,36 @@ export default function PostEditorPage() {
 
   useEffect(() => {
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    if (isEditing && title && categoryId) {
+
+    // Always write to localStorage immediately — works for both new and
+    // existing posts, requires no fields, survives crashes and forced logouts.
+    if (title || content) {
+      try {
+        localStorage.setItem(`mb-recovery-post-${id || 'new'}`, JSON.stringify({
+          title, content, excerpt, categoryId, labelId,
+          featuredImage, metaTitle, metaDescription, metaKeywords,
+          slug, isFeatured,
+        }));
+      } catch {}
+    }
+
+    // DB auto-save (3 s debounce):
+    // - Existing posts: only title required (category can be filled later)
+    // - New posts: title + category required so the DB record is valid
+    const canDbSave = isEditing ? !!title : (!!title && !!categoryId);
+    if (canDbSave) {
       autoSaveRef.current = setTimeout(async () => {
         setAutoSaveStatus('saving');
         try {
-          await api.posts.update(currentSlug || slug, buildPostData());
-          setCurrentSlug(slug);
+          if (isEditing) {
+            await api.posts.update(currentSlug || slug, buildPostData());
+            setCurrentSlug(slug);
+          } else {
+            const data = await api.posts.create({ ...buildPostData(), views: 0 });
+            setCurrentSlug(data.slug);
+            try { localStorage.removeItem('mb-recovery-post-new'); } catch {}
+            setTimeout(() => navigate(`/admin/posts/edit/${data.id}`, { replace: true }), 100);
+          }
           setAutoSaveStatus('saved');
           setTimeout(() => setAutoSaveStatus('idle'), 2500);
         } catch {
@@ -143,7 +207,7 @@ export default function PostEditorPage() {
       }, 3000);
     }
     return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
-  }, [title, content, excerpt, published, featuredImage, metaTitle, metaDescription]);
+  }, [title, content, excerpt, published, featuredImage, metaTitle, metaDescription, isFeatured, categoryId, labelId]);
 
   const loadCategories = async () => {
     const data = await api.categories.list();
@@ -171,9 +235,17 @@ export default function PostEditorPage() {
         setMetaTitle(data.metaTitle || '');
         setMetaDescription(data.metaDescription || '');
         setMetaKeywords(data.metaKeywords || '');
-        setPublished(data.status === 'published');
+        const isPublished = data.status === 'published';
+        setPublished(isPublished);
         setIsFeatured(data.isFeatured || false);
-        setPublishDate(data.publishedAt ? new Date(data.publishedAt).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16));
+        const publishedAt = data.publishedAt
+          ? new Date(data.publishedAt).toISOString()
+          : new Date().toISOString();
+        setPublishDate(publishedAt.slice(0, 16));
+        // Capture original date so "Update Post" never resets it to now(),
+        // which would make the post appear new in RSS feeds / recent queries.
+        originalPublishedAt.current = isPublished ? publishedAt : null;
+        wasPublishedOnLoad.current   = isPublished;
         setAuthor(data.author || 'Admin');
       }
     } catch {
@@ -203,6 +275,22 @@ export default function PostEditorPage() {
 
   const buildPostData = (overrideStatus?: string) => {
     const intendedStatus = overrideStatus ?? (published ? 'published' : 'draft');
+
+    // Determine the correct publishedAt value:
+    // - Updating an ALREADY-published post → keep the original date so it
+    //   doesn't re-appear at the top of RSS feeds and "recent posts" queries.
+    // - Publishing for the first time → set to now.
+    // - Draft save → use whatever is in the publishDate field.
+    const resolvePublishedAt = () => {
+      if (overrideStatus === 'published') {
+        if (isEditing && wasPublishedOnLoad.current && originalPublishedAt.current) {
+          return originalPublishedAt.current;
+        }
+        return new Date().toISOString();
+      }
+      return published && !publishDate ? new Date().toISOString() : publishDate;
+    };
+
     return {
       title, slug, content, excerpt, categoryId,
       labelIds: labelId ? [labelId] : [],
@@ -215,9 +303,49 @@ export default function PostEditorPage() {
       author_role: getAuthorRole(),
       author_name: user?.displayName || user?.email?.split('@')[0] || author,
       isFeatured,
-      publishedAt: overrideStatus === 'published' ? new Date().toISOString() : (published && !publishDate ? new Date().toISOString() : publishDate),
+      publishedAt: resolvePublishedAt(),
       author: user?.displayName || user?.email?.split('@')[0] || author,
     };
+  };
+
+  // Saves all edits to an existing published post while preserving its
+  // original publishedAt so it is not treated as a new post anywhere.
+  const handleUpdatePost = async () => {
+    if (!title.trim()) { setToast({ message: 'Please enter a title', type: 'error' }); return; }
+    setSaving(true);
+    try {
+      const data = {
+        ...buildPostData(),
+        // Unconditionally preserve the date regardless of status flags
+        publishedAt: originalPublishedAt.current || publishDate,
+      };
+      await api.posts.update(currentSlug || slug, data);
+      setCurrentSlug(slug);
+      setToast({ message: 'Post updated successfully', type: 'success' });
+    } catch {
+      setToast({ message: 'Failed to update post. Please try again.', type: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Restores a recovery draft that was saved before an unexpected logout/crash.
+  const restoreRecoveryDraft = () => {
+    if (!recoveryDraft) return;
+    setTitle(recoveryDraft.title || '');
+    setContent(recoveryDraft.content || '');
+    setExcerpt(recoveryDraft.excerpt || '');
+    setCategoryId(recoveryDraft.categoryId || '');
+    setLabelId(recoveryDraft.labelId || '');
+    setFeaturedImage(recoveryDraft.featuredImage || '');
+    setMetaTitle(recoveryDraft.metaTitle || '');
+    setMetaDescription(recoveryDraft.metaDescription || '');
+    setMetaKeywords(recoveryDraft.metaKeywords || '');
+    if (recoveryDraft.slug) setSlug(recoveryDraft.slug);
+    setIsFeatured(recoveryDraft.isFeatured || false);
+    try { localStorage.removeItem('mb-recovery-post-new'); } catch {}
+    setRecoveryDraft(null);
+    setToast({ message: 'Recovery draft restored', type: 'success' });
   };
 
   const handleSave = async (isAutoSave = false) => {
@@ -303,6 +431,40 @@ export default function PostEditorPage() {
   return (
     <AdminLayout>
       <div className="max-w-[1600px] mx-auto">
+
+        {/* ── Recovery draft banner ── */}
+        {recoveryDraft && (
+          <div className="mb-4 flex items-center justify-between gap-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <RotateCcw size={16} className="text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Unsaved draft recovered</p>
+                <p className="text-xs text-amber-600 dark:text-amber-500 truncate">
+                  "{recoveryDraft.title || 'Untitled'}"
+                  {recoveryDraft.savedAt && ` — saved ${new Date(recoveryDraft.savedAt).toLocaleString()}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={restoreRecoveryDraft}
+                className="px-3 py-1.5 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 transition-colors"
+              >
+                Restore
+              </button>
+              <button
+                onClick={() => {
+                  try { localStorage.removeItem('mb-recovery-post-new'); } catch {}
+                  setRecoveryDraft(null);
+                }}
+                className="p-1.5 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40 rounded-lg transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <button
@@ -405,13 +567,26 @@ img{max-width:100%;border-radius:6px;display:block;margin:1em auto}
               <Save size={16} />
               {saving ? 'Saving…' : 'Save Draft'}
             </button>
+            {/* Update Post — shown only when editing an already-published post.
+                Saves all changes while preserving the original publishedAt so
+                the post does NOT re-appear as a new item in RSS/recent feeds. */}
+            {isEditing && wasPublishedOnLoad.current && (
+              <button
+                onClick={handleUpdatePost}
+                disabled={saving}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 text-sm font-semibold shadow-md shadow-emerald-200 dark:shadow-emerald-900/30"
+              >
+                <RefreshCw size={16} />
+                {saving ? 'Updating…' : 'Update Post'}
+              </button>
+            )}
             <button
               onClick={confirmPublish}
               disabled={saving}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm font-semibold shadow-md shadow-blue-200 dark:shadow-blue-900/30"
             >
               <Send size={16} />
-              {isCEO ? (published ? 'Update & Publish' : 'Publish Now') : 'Submit for Approval'}
+              {isCEO ? (published ? 'Re-publish' : 'Publish Now') : 'Submit for Approval'}
             </button>
           </div>
         </div>

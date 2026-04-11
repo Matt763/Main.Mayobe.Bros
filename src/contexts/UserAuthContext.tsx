@@ -87,6 +87,9 @@ export function UserAuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
         if (session?.user) {
+          // If an admin is logged in on this tab the Supabase session belongs to
+          // the admin, not a public user. Skip so the public-user state stays null.
+          if (sessionStorage.getItem('mb-admin-tab')) { finish(); return; }
           const u = buildUser(session.user);
           setPublicUser(u);
           localStorage.setItem(USER_CACHE_KEY, JSON.stringify(u));
@@ -112,11 +115,12 @@ export function UserAuthProvider({ children }: { children: React.ReactNode }) {
     const timer = setTimeout(finish, 5000);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
+      // Same guard: admin session on this tab must not bleed into public state
+      if (session?.user && !sessionStorage.getItem('mb-admin-tab')) {
         const u = buildUser(session.user);
         setPublicUser(u);
         localStorage.setItem(USER_CACHE_KEY, JSON.stringify(u));
-      } else if (!localStorage.getItem(USER_CACHE_KEY)) {
+      } else if (!session?.user && !localStorage.getItem(USER_CACHE_KEY)) {
         setPublicUser(null);
       }
       finish();

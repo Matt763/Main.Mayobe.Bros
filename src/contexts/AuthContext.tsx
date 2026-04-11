@@ -19,17 +19,19 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
+// sessionStorage key — tab-specific so new tabs start unauthenticated
 const AUTH_CACHE_KEY = 'mayobebros-user-cache';
+// Flag that marks this browser tab as an active admin session.
+// sessionStorage is NOT shared with new tabs, so other tabs start at the
+// login page even when one tab is already authenticated.
+const ADMIN_TAB_KEY = 'mb-admin-tab';
 const CEO_EMAIL = 'mclean@mayobebros.com';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// In-flight cache: prevents concurrent calls for the same user from each
-// triggering a duplicate upsert, which causes 409 Conflict errors.
 const resolveInFlight = new Map<string, Promise<AdminUser | null>>();
 
 async function resolveAdminUser(supabaseUser: { id: string; email?: string }): Promise<AdminUser | null> {
-  // If a resolve is already running for this user, reuse that promise
   const existing = resolveInFlight.get(supabaseUser.id);
   if (existing) return existing;
 
@@ -54,7 +56,6 @@ async function resolveAdminUser(supabaseUser: { id: string; email?: string }): P
     }
 
     if (email.toLowerCase() === CEO_EMAIL.toLowerCase()) {
-      // Upsert — safe to ignore 409 since it just means the record already exists
       await supabase.from('admin_users').upsert(
         {
           user_id: supabaseUser.id,
@@ -83,9 +84,10 @@ async function resolveAdminUser(supabaseUser: { id: string; email?: string }): P
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Read initial state from sessionStorage (tab-specific — never shares with new tabs)
   const [user, setUser] = useState<AdminUser | null>(() => {
     try {
-      const cached = localStorage.getItem(AUTH_CACHE_KEY);
+      const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
       return cached ? JSON.parse(cached) : null;
     } catch {
       return null;
@@ -103,21 +105,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    // ── Cross-tab logout listener ──────────────────────────────────────────
+    // When another tab calls signOut it broadcasts ADMIN_LOGOUT. We respond
+    // by clearing this tab's session state immediately.
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('admin-auth');
+      bc.addEventListener('message', (e: MessageEvent) => {
+        if (e.data?.type === 'ADMIN_LOGOUT') {
+          setUser(null);
+          sessionStorage.removeItem(AUTH_CACHE_KEY);
+          sessionStorage.removeItem(ADMIN_TAB_KEY);
+        }
+      });
+    } catch {
+      // BroadcastChannel not supported (very old browsers)
+    }
+
+    // ── Supabase auth state listener ───────────────────────────────────────
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
-        if (session?.user) {
-          const adminUser = await resolveAdminUser(session.user);
-          if (adminUser) {
-            setUser(adminUser);
-            localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
-          } else {
-            setUser(null);
-            localStorage.removeItem(AUTH_CACHE_KEY);
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // Only accept SIGNED_IN events that originated from THIS tab.
+          // Without this check, logging in on Tab A would also "log in"
+          // Tab B because Supabase fires onAuthStateChange on all tabs
+          // that share the same localStorage JWT.
+          if (!sessionStorage.getItem(ADMIN_TAB_KEY)) {
+            finishLoading();
+            return;
+          }
+          if (session?.user) {
+            const adminUser = await resolveAdminUser(session.user);
+            if (adminUser) {
+              setUser(adminUser);
+              sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
+            } else {
+              setUser(null);
+              sessionStorage.removeItem(AUTH_CACHE_KEY);
+              sessionStorage.removeItem(ADMIN_TAB_KEY);
+            }
           }
           finishLoading();
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
-          localStorage.removeItem(AUTH_CACHE_KEY);
+          sessionStorage.removeItem(AUTH_CACHE_KEY);
+          sessionStorage.removeItem(ADMIN_TAB_KEY);
           finishLoading();
         }
       })();
@@ -125,29 +157,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const timeout = setTimeout(() => finishLoading(), 5000);
 
+    // ── Initial session check ──────────────────────────────────────────────
     supabase.auth.getSession()
       .then(async ({ data: { session } }) => {
         if (session?.user) {
+          // If the Supabase session exists but THIS tab hasn't authenticated,
+          // another tab is logged in. Show the login page, not the dashboard.
+          if (!sessionStorage.getItem(ADMIN_TAB_KEY)) {
+            setUser(null);
+            finishLoading();
+            return;
+          }
           const adminUser = await resolveAdminUser(session.user);
           if (adminUser) {
             setUser(adminUser);
-            localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
+            sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
           } else {
             setUser(null);
-            localStorage.removeItem(AUTH_CACHE_KEY);
+            sessionStorage.removeItem(AUTH_CACHE_KEY);
+            sessionStorage.removeItem(ADMIN_TAB_KEY);
           }
           finishLoading();
         } else {
+          // No Supabase session — try the server cookie session as fallback
           try {
             const { user: apiUser } = await api.auth.getSession();
             if (apiUser) {
               setUser({ ...apiUser, role: 'ceo', displayName: apiUser.email?.split('@')[0] || '', isActive: true });
-              localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(apiUser));
+              sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(apiUser));
+              sessionStorage.setItem(ADMIN_TAB_KEY, '1');
             } else {
               setUser(null);
             }
           } catch {
-            if (!localStorage.getItem(AUTH_CACHE_KEY)) setUser(null);
+            if (!sessionStorage.getItem(AUTH_CACHE_KEY)) setUser(null);
           }
           finishLoading();
         }
@@ -157,7 +200,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .then(({ user: apiUser }) => {
             if (apiUser) {
               setUser({ ...apiUser, role: 'ceo', displayName: apiUser.email?.split('@')[0] || '', isActive: true });
-              localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(apiUser));
+              sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(apiUser));
+              sessionStorage.setItem(ADMIN_TAB_KEY, '1');
             }
           })
           .catch(() => {})
@@ -167,11 +211,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       clearTimeout(timeout);
       subscription.unsubscribe();
+      bc?.close();
     };
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    // Primary path: Supabase client (establishes real session for DB queries)
+    // Mark this tab as the one initiating login BEFORE calling Supabase, so
+    // that the onAuthStateChange(SIGNED_IN) handler (which may fire during
+    // signInWithPassword) sees the flag and proceeds rather than ignoring it.
+    sessionStorage.setItem(ADMIN_TAB_KEY, '1');
+
+    // Primary path: Supabase client
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -179,41 +229,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const adminUser = await resolveAdminUser(data.user);
         if (!adminUser) {
           await supabase.auth.signOut();
+          sessionStorage.removeItem(ADMIN_TAB_KEY);
           return { error: { message: 'Access denied. You are not authorized to access the admin panel.' } };
         }
         setUser(adminUser);
-        localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
+        sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
         return { error: null };
       }
 
-      // If not an auth credential error, fall through to server which can auto-confirm
       const isCredentialError = error?.message?.toLowerCase().includes('invalid login credentials');
       if (isCredentialError) {
+        sessionStorage.removeItem(ADMIN_TAB_KEY);
         return { error: { message: 'Invalid email or password.' } };
       }
-      // email not confirmed or other — let server handle it
     } catch (supaErr: any) {
       console.warn('[AUTH] Supabase client error, trying server:', supaErr?.message);
     }
 
-    // Server-side login: has service role key, auto-confirms email, returns role from admin_users
+    // Server-side fallback
     try {
       const result = await api.auth.login(email, password);
       if (result.user) {
-        // Now try Supabase client sign-in again (email should be confirmed now)
         try {
           const { data: retryData } = await supabase.auth.signInWithPassword({ email, password });
           if (retryData?.user) {
             const adminUser = await resolveAdminUser(retryData.user);
             if (adminUser) {
               setUser(adminUser);
-              localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
+              sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(adminUser));
               return { error: null };
             }
           }
         } catch {}
 
-        // Use server profile directly if Supabase session still not available
         const mapped: AdminUser = {
           id: result.user.id,
           email: result.user.email || '',
@@ -222,21 +270,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isActive: true,
         };
         setUser(mapped);
-        localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(mapped));
+        sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(mapped));
         return { error: null };
       }
     } catch (apiError: any) {
+      sessionStorage.removeItem(ADMIN_TAB_KEY);
       return { error: { message: apiError.message || 'Invalid email or password' } };
     }
 
+    sessionStorage.removeItem(ADMIN_TAB_KEY);
     return { error: { message: 'Unable to sign in. Please try again.' } };
   };
 
   const signOut = async () => {
+    // Step 1: Give open editors a chance to save a recovery draft before we
+    // destroy the session. Components listen for this event.
+    window.dispatchEvent(new Event('admin-before-logout'));
+    await new Promise(r => setTimeout(r, 800));
+
+    // Step 2: Clear this tab's session
+    sessionStorage.removeItem(AUTH_CACHE_KEY);
+    sessionStorage.removeItem(ADMIN_TAB_KEY);
+    setUser(null);
+
+    // Step 3: Broadcast logout to all other open admin tabs
+    try {
+      const bc = new BroadcastChannel('admin-auth');
+      bc.postMessage({ type: 'ADMIN_LOGOUT' });
+      bc.close();
+    } catch {}
+
+    // Step 4: Invalidate the Supabase JWT and server cookie
     try { await supabase.auth.signOut(); } catch {}
     try { await api.auth.logout(); } catch {}
-    setUser(null);
-    localStorage.removeItem(AUTH_CACHE_KEY);
   };
 
   return (
