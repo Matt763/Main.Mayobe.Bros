@@ -35,18 +35,52 @@ interface InArticleLinkPanelProps {
 
 const SITE_URL = 'https://www.mayobebros.com';
 
-function escapeRegex(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** Replace the first occurrence of anchorText in HTML content with a hyperlink */
+/**
+ * Replace the first occurrence of anchorText in HTML with a hyperlink.
+ * Uses DOM TreeWalker so it only touches text nodes — never corrupts
+ * HTML tag attributes (e.g. href, src) that might contain the same phrase.
+ */
 function insertLinkInContent(html: string, anchorText: string, href: string): string {
-  const escaped = escapeRegex(anchorText);
-  // Match the anchor text in text nodes only (not inside existing tags)
-  // We use a regex that avoids matching inside HTML tags
-  const pattern = new RegExp(`(?<!<[^>]*)\\b${escaped}\\b`, 'i');
-  const linked = `<a href="${href}" target="_blank" rel="noopener">${anchorText}</a>`;
-  return html.replace(pattern, linked);
+  if (!anchorText.trim()) return html;
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<div id="__root__">${html}</div>`, 'text/html');
+    const root = doc.getElementById('__root__');
+    if (!root) return html;
+
+    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const needle = anchorText.toLowerCase();
+
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      // Skip text inside existing <a> tags
+      if ((node.parentElement as HTMLElement | null)?.closest('a')) continue;
+
+      const text = node.textContent || '';
+      const idx = text.toLowerCase().indexOf(needle);
+      if (idx === -1) continue;
+
+      // Split: [before][anchor][after]
+      const before = doc.createTextNode(text.slice(0, idx));
+      const after  = doc.createTextNode(text.slice(idx + anchorText.length));
+      const a = doc.createElement('a');
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = text.slice(idx, idx + anchorText.length); // preserves original casing
+
+      const parent = node.parentNode!;
+      parent.insertBefore(before, node);
+      parent.insertBefore(a, node);
+      parent.insertBefore(after, node);
+      parent.removeChild(node);
+      break; // only first occurrence
+    }
+
+    return root.innerHTML;
+  } catch {
+    return html; // fallback: return unchanged
+  }
 }
 
 /** Apply all selected link suggestions to the content */

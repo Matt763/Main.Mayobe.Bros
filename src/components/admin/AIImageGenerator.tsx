@@ -10,6 +10,7 @@ interface GeneratedImage {
   url: string;
   prompt: string;
   headingTitle?: string;
+  uploadError?: string;
 }
 
 interface AIImageGeneratorProps {
@@ -190,12 +191,15 @@ export default function AIImageGenerator({
       // Upload each image to media library
       const uploaded: GeneratedImage[] = [];
       for (const img of data.images || []) {
-        if (!img.imageBase64) { uploaded.push({ url: '', prompt: img.prompt, headingTitle: img.heading }); continue; }
+        if (!img.imageBase64) {
+          uploaded.push({ url: '', prompt: img.prompt || '', headingTitle: img.heading, uploadError: 'No image data returned' });
+          continue;
+        }
         try {
           const url = await uploadBase64(img.imageBase64, img.mimeType || 'image/png', 'ai-bulk');
-          uploaded.push({ url, prompt: img.prompt, headingTitle: img.heading });
-        } catch {
-          uploaded.push({ url: '', prompt: img.prompt, headingTitle: img.heading });
+          uploaded.push({ url, prompt: img.prompt || '', headingTitle: img.heading });
+        } catch (uploadErr: any) {
+          uploaded.push({ url: '', prompt: img.prompt || '', headingTitle: img.heading, uploadError: uploadErr?.message || 'Upload failed' });
         }
       }
       setBulkResults(uploaded);
@@ -208,16 +212,48 @@ export default function AIImageGenerator({
 
   const insertBulkImages = () => {
     if (!bulkResults.length) return;
-    // Insert each image before its corresponding H2 heading
-    let updatedContent = content;
-    for (const img of bulkResults) {
-      if (!img.url || !img.headingTitle) continue;
-      const escapedHeading = img.headingTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`(<h2[^>]*>[^<]*${escapedHeading}[^<]*<\/h2>)`, 'i');
-      const imgHtml = `<img src="${img.url}" alt="${img.headingTitle.slice(0, 80)}" class="max-w-full h-auto rounded-xl my-6 w-full object-cover" style="aspect-ratio:16/9" />\n`;
-      updatedContent = updatedContent.replace(regex, imgHtml + '$1');
+    // Use DOMParser to find each H2 by plain-text content, then prepend the image.
+    // This handles H2s that contain nested tags like <strong>, <em>, <span>.
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<div id="__root__">${content}</div>`, 'text/html');
+      const root = doc.getElementById('__root__')!;
+      const h2s = Array.from(root.querySelectorAll('h2'));
+      const applied = new Set<string>();
+
+      for (const img of bulkResults) {
+        if (!img.url || !img.headingTitle) continue;
+        const targetText = img.headingTitle.trim().toLowerCase();
+        if (applied.has(targetText)) continue;
+
+        const matchingH2 = h2s.find(h =>
+          (h.textContent || '').trim().toLowerCase() === targetText
+        );
+        if (!matchingH2) continue;
+
+        const imgEl = doc.createElement('img');
+        imgEl.src = img.url;
+        imgEl.alt = img.headingTitle.slice(0, 80);
+        imgEl.className = 'max-w-full h-auto rounded-xl my-6 w-full object-cover';
+        imgEl.style.aspectRatio = '16/9';
+
+        matchingH2.parentNode?.insertBefore(imgEl, matchingH2);
+        applied.add(targetText);
+      }
+
+      onInsertContent(root.innerHTML, true);
+    } catch {
+      // Fallback: attempt simple string-based insert if DOM approach fails
+      let updatedContent = content;
+      for (const img of bulkResults) {
+        if (!img.url || !img.headingTitle) continue;
+        const escaped = img.headingTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(<h2[^>]*>[\\s\\S]*?${escaped}[\\s\\S]*?<\\/h2>)`, 'i');
+        const imgHtml = `<img src="${img.url}" alt="${img.headingTitle.slice(0, 80)}" class="max-w-full h-auto rounded-xl my-6 w-full object-cover" style="aspect-ratio:16/9" />\n`;
+        updatedContent = updatedContent.replace(regex, imgHtml + '$1');
+      }
+      onInsertContent(updatedContent, true);
     }
-    onInsertContent(updatedContent, true);
     setBulkInserted(true);
   };
 
@@ -548,8 +584,9 @@ export default function AIImageGenerator({
                         {img.url ? (
                           <img src={img.url} alt={img.headingTitle || img.prompt} className="w-full h-24 object-cover" />
                         ) : (
-                          <div className="w-full h-24 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                            <AlertCircle size={16} className="text-gray-400" />
+                          <div className="w-full h-24 bg-red-50 dark:bg-red-900/20 flex flex-col items-center justify-center gap-1 px-2">
+                            <AlertCircle size={14} className="text-red-400 shrink-0" />
+                            <span className="text-[10px] text-red-500 dark:text-red-400 text-center leading-tight">{img.uploadError || 'Upload failed'}</span>
                           </div>
                         )}
                         <p className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400 truncate">{img.headingTitle}</p>

@@ -716,7 +716,7 @@ img{max-width:100%;border-radius:6px;display:block;margin:1em auto}
           </div>
 
           {sidebarOpen && (
-            <div className="space-y-4">
+            <div className="space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto admin-scroll xl:pr-1">
               <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Publishing</h3>
                 <div className="space-y-3">

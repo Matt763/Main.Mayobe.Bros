@@ -163,32 +163,35 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
     if (!editor) return;
 
     const makeDraggable = (el: Element) => {
-      if ((el as HTMLElement).matches?.('figure, .video-figure')) {
+      if ((el as HTMLElement).matches?.('figure, .video-figure, .chart-figure')) {
         const elem = el as HTMLElement;
         elem.draggable = true;
       }
     };
 
     // Seed existing elements
-    editor.querySelectorAll('figure, .video-figure').forEach(makeDraggable);
+    editor.querySelectorAll('figure, .video-figure, .chart-figure').forEach(makeDraggable);
 
     // Watch for new elements inserted by the editor (paste, toolbar insert, etc.)
     const observer = new MutationObserver(mutations => {
       mutations.forEach(m => m.addedNodes.forEach(n => {
         if (n instanceof HTMLElement) {
           makeDraggable(n);
-          n.querySelectorAll?.('figure, .video-figure').forEach(makeDraggable);
+          n.querySelectorAll?.('figure, .video-figure, .chart-figure').forEach(makeDraggable);
         }
       }));
     });
     observer.observe(editor, { childList: true, subtree: true });
 
     const onDragStart = (e: DragEvent) => {
+      // Skip if the user is dragging a text selection (browser handles that natively)
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.toString().length > 0) return;
+
       const t = e.target as HTMLElement;
-      const block = t.closest('figure, .video-figure') as HTMLElement | null;
+      const block = t.closest('figure, .video-figure, .chart-figure') as HTMLElement | null;
       if (block && editor.contains(block)) {
         draggedElement.current = block;
-        e.dataTransfer?.setData('application/x-editor-element', '1');
         if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
         // Fade element while dragging
         setTimeout(() => { if (draggedElement.current) draggedElement.current.style.opacity = '0.4'; }, 0);
@@ -425,7 +428,7 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
           const src = ev.target?.result as string;
           withRestoredSelection(() => {
             document.execCommand('insertHTML', false,
-              `<figure class="chart-figure"><img src="${src}" alt="Pasted image" /><figcaption contenteditable="true">Caption</figcaption></figure><p></p>`
+              `<figure class="chart-figure" contenteditable="false" draggable="true"><img src="${src}" alt="Pasted image" /><figcaption contenteditable="true">Caption</figcaption></figure><p></p>`
             );
             setTimeout(updateContent, 10);
           });
@@ -467,8 +470,9 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
   // ── DROP ────────────────────────────────────────────────────────────────
   const handleDrop = (e: React.DragEvent) => {
     // ── Internal element move (figures, video wrappers) ────────────────────
-    const isElementMove = e.dataTransfer.types.includes('application/x-editor-element');
-    if (isElementMove && draggedElement.current) {
+    // Use ref directly — dataTransfer custom types are unreliable for
+    // browser-controlled contentEditable drag operations.
+    if (draggedElement.current) {
       e.preventDefault();
       const elementHtml = draggedElement.current.outerHTML;
       const toRemove = draggedElement.current;
@@ -533,7 +537,7 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
         sel.addRange(dropRange);
       }
       document.execCommand('insertHTML', false,
-        `<figure class="chart-figure"><img src="${src}" alt="Dropped image" /><figcaption contenteditable="true">Caption</figcaption></figure><p></p>`
+        `<figure class="chart-figure" contenteditable="false" draggable="true"><img src="${src}" alt="Dropped image" /><figcaption contenteditable="true">Caption</figcaption></figure><p></p>`
       );
       setTimeout(updateContent, 10);
     };
@@ -1045,18 +1049,18 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
         .callout-btn-danger  { color:#ef4444; }
         .callout-btn-tip     { color:#a855f7; }
 
-        /* Video figure — non-editable atomic block, draggable */
-        [contenteditable] figure.video-figure {
-          margin:1.5rem 0;
-          border-radius:12px;
-          overflow:hidden;
+        /* Figure blocks (images + videos) — draggable atomic blocks */
+        [contenteditable] figure.video-figure,
+        [contenteditable] figure.chart-figure {
           cursor:grab;
           outline:2px solid transparent;
           transition:outline-color 0.15s ease;
-          user-select:none;
         }
-        [contenteditable] figure.video-figure:hover { outline-color:rgba(59,130,246,0.45); }
-        [contenteditable] figure.video-figure:active { cursor:grabbing; }
+        [contenteditable] figure.video-figure { margin:1.5rem 0; border-radius:12px; overflow:hidden; user-select:none; }
+        [contenteditable] figure.video-figure:hover,
+        [contenteditable] figure.chart-figure:hover { outline-color:rgba(59,130,246,0.45); }
+        [contenteditable] figure.video-figure:active,
+        [contenteditable] figure.chart-figure:active { cursor:grabbing; }
 
         /* Drag ghost: dim dragged element */
         [contenteditable] figure[draggable="true"] { position:relative; }
