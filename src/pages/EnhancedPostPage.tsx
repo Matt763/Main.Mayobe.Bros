@@ -458,10 +458,13 @@ export default function EnhancedPostPage() {
 
   const scrollToSection = (id: string) => {
     const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setActiveSection(id);
-    }
+    if (!element) return;
+    const headerH = (document.querySelector('header') as HTMLElement)?.offsetHeight ?? 64;
+    const tocEl   = document.getElementById('mobile-toc-bar');
+    const tocH    = window.innerWidth < 1024 && tocEl ? tocEl.offsetHeight : 0;
+    const offset  = headerH + tocH + 4; // 4px breathing room below sticky bars
+    window.scrollTo({ top: element.getBoundingClientRect().top + window.scrollY - offset, behavior: 'smooth' });
+    setActiveSection(id);
   };
 
   if (loading) {
@@ -614,6 +617,110 @@ export default function EnhancedPostPage() {
       </section>
 
       <div className="container mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-8 md:py-12 max-w-7xl">
+        {/* ── Mobile TOC ── must be OUTSIDE the grid; sticky inside a grid row is
+            constrained to that row's own height and barely works at all.        */}
+        {tableOfContents.length > 1 && (
+          <div id="mobile-toc-bar" className="lg:hidden sticky top-16 sm:top-20 z-30 -mx-4 sm:-mx-6 md:-mx-8">
+            <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+              {/* Collapsed header — scroll-aware 3-item preview */}
+              <button
+                onClick={() => setMobileTocOpen(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-2 min-h-[44px]"
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1 overflow-hidden">
+                  <List size={15} style={{ color: TOC_ACTIVE, flexShrink: 0 }} />
+                  {(() => {
+                    const idx = tableOfContents.findIndex(h => h.id === activeSection);
+                    if (idx === -1) {
+                      return (
+                        <span className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
+                          Table of Contents
+                        </span>
+                      );
+                    }
+                    const prev = idx > 0 ? tableOfContents[idx - 1] : null;
+                    const curr = tableOfContents[idx];
+                    const next = idx < tableOfContents.length - 1 ? tableOfContents[idx + 1] : null;
+                    return (
+                      <div className="flex flex-col min-w-0 flex-1 leading-tight gap-px">
+                        {prev && (
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                            {prev.text}
+                          </span>
+                        )}
+                        <span className="text-[13px] font-semibold truncate" style={{ color: TOC_ACTIVE }}>
+                          {curr.text}
+                        </span>
+                        {next && (
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                            {next.text}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  {/* Reading progress dots */}
+                  {(() => {
+                    const activeIdx = tableOfContents.findIndex(h => h.id === activeSection);
+                    return (
+                      <div className="hidden sm:flex items-center gap-[3px]">
+                        {tableOfContents.map((h, i) => (
+                          <div
+                            key={h.id}
+                            className="rounded-full transition-all duration-300"
+                            style={{
+                              width: h.id === activeSection ? '6px' : '4px',
+                              height: h.id === activeSection ? '6px' : '4px',
+                              background: h.id === activeSection
+                                ? TOC_ACTIVE
+                                : i < activeIdx ? '#a3d99a' : '#d1d5db',
+                            }}
+                          />
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  <ChevronDown
+                    size={16}
+                    className={`text-gray-400 transition-transform duration-200 ${mobileTocOpen ? 'rotate-180' : ''}`}
+                  />
+                </div>
+              </button>
+
+              {/* Expandable full list */}
+              {mobileTocOpen && (
+                <nav className="max-h-64 overflow-y-auto border-t border-gray-100 dark:border-gray-700 py-1.5">
+                  {tableOfContents.map((heading) => {
+                    const isActive = activeSection === heading.id;
+                    return (
+                      <button
+                        key={heading.id}
+                        onClick={() => { scrollToSection(heading.id); setMobileTocOpen(false); }}
+                        className={`block w-full text-left text-[13px] py-2.5 border-l-2 transition-all duration-150 ${
+                          heading.level === 2 ? 'pl-5' : heading.level === 3 ? 'pl-9' : 'pl-12'
+                        } ${
+                          isActive
+                            ? 'font-semibold'
+                            : 'text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
+                        }`}
+                        style={isActive ? {
+                          color: TOC_ACTIVE,
+                          borderLeftColor: TOC_ACTIVE,
+                          background: 'rgba(52,124,37,0.06)',
+                        } : {}}
+                      >
+                        {heading.text}
+                      </button>
+                    );
+                  })}
+                </nav>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
           {tableOfContents.length > 1 && (
             <aside className="lg:col-span-1 hidden lg:block">
@@ -660,58 +767,6 @@ export default function EnhancedPostPage() {
                 </nav>
               </div>
             </aside>
-          )}
-
-          {tableOfContents.length > 1 && (
-            <div className="lg:hidden col-span-full sticky top-0 z-30">
-              <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
-                {/* Always-visible header — shows active section name */}
-                <button
-                  onClick={() => setMobileTocOpen(v => !v)}
-                  className="w-full flex items-center justify-between px-4 py-3 min-h-[48px]"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <List size={15} style={{ color: TOC_ACTIVE, flexShrink: 0 }} />
-                    <span className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
-                      {tableOfContents.find(h => h.id === activeSection)?.text || 'Table of Contents'}
-                    </span>
-                  </div>
-                  <ChevronDown
-                    size={16}
-                    className={`text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${mobileTocOpen ? 'rotate-180' : ''}`}
-                  />
-                </button>
-
-                {/* Expandable list */}
-                {mobileTocOpen && (
-                  <nav className="max-h-64 overflow-y-auto border-t border-gray-100 dark:border-gray-700 py-1.5">
-                    {tableOfContents.map((heading) => {
-                      const isActive = activeSection === heading.id;
-                      return (
-                        <button
-                          key={heading.id}
-                          onClick={() => { scrollToSection(heading.id); setMobileTocOpen(false); }}
-                          className={`block w-full text-left text-[13px] py-2.5 border-l-2 transition-all duration-150 ${
-                            heading.level === 2 ? 'pl-5' : heading.level === 3 ? 'pl-9' : 'pl-12'
-                          } ${
-                            isActive
-                              ? 'font-semibold'
-                              : 'text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-50 dark:hover:bg-gray-800'
-                          }`}
-                          style={isActive ? {
-                            color: TOC_ACTIVE,
-                            borderLeftColor: TOC_ACTIVE,
-                            background: 'rgba(52,124,37,0.06)',
-                          } : {}}
-                        >
-                          {heading.text}
-                        </button>
-                      );
-                    })}
-                  </nav>
-                )}
-              </div>
-            </div>
           )}
 
           <article className={tableOfContents.length > 1 ? 'lg:col-span-3' : 'lg:col-span-4'}>

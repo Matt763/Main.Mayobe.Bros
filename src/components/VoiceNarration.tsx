@@ -27,22 +27,44 @@ const LANGUAGES = [
 ];
 
 export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [muted, setMuted] = useState(false);
-  const [supported, setSupported] = useState(false);
+  const [isPlaying, setIsPlaying]     = useState(false);
+  const [isPaused, setIsPaused]       = useState(false);
+  const [progress, setProgress]       = useState(0);
+  const [muted, setMuted]             = useState(false);
+  const [supported, setSupported]     = useState(false);
   const [selectedLang, setSelectedLang] = useState('en-US');
-  const [langOpen, setLangOpen] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const totalCharsRef = useRef(0);
-  const langDropRef = useRef<HTMLDivElement>(null);
+  const [langOpen, setLangOpen]       = useState(false);
+  const [voices, setVoices]           = useState<SpeechSynthesisVoice[]>([]);
 
+  // Refs — survive re-renders without triggering them
+  const utteranceRef     = useRef<SpeechSynthesisUtterance | null>(null);
+  const totalCharsRef    = useRef(0);
+  const langDropRef      = useRef<HTMLDivElement>(null);
+  const keepAliveRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPausedRef      = useRef(false);   // source-of-truth for paused state (speechSynthesis.paused unreliable on iOS)
+  const mutedRef         = useRef(false);
+  const startTimeRef     = useRef(0);
+  const estimatedMsRef   = useRef(0);
+  const boundaryFiredRef = useRef(false);   // true when onboundary works (not iOS)
+
+  // ── Initialise speech synthesis & load voices ────────────────────────────
   useEffect(() => {
-    setSupported('speechSynthesis' in window);
-    return () => { window.speechSynthesis?.cancel(); };
+    if (!('speechSynthesis' in window)) return;
+    setSupported(true);
+
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices(); // synchronous on Chrome desktop
+    window.speechSynthesis.addEventListener('voiceschanged', loadVoices); // async on others
+
+    return () => {
+      window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
+      window.speechSynthesis.cancel();
+      clearTimers();
+    };
   }, []);
 
+  // ── Close language dropdown on outside click ─────────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (langDropRef.current && !langDropRef.current.contains(e.target as Node)) {
@@ -53,75 +75,112 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const clearTimers = () => {
+    if (keepAliveRef.current)     { clearInterval(keepAliveRef.current);     keepAliveRef.current = null; }
+    if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+  };
+
   const cleanText = (html: string): string => {
     const div = document.createElement('div');
     div.innerHTML = html;
     return div.textContent || div.innerText || '';
   };
 
+  // ── Playback controls ────────────────────────────────────────────────────
   const startNarration = () => {
     if (!('speechSynthesis' in window)) return;
+    clearTimers();
     window.speechSynthesis.cancel();
 
     const plain = cleanText(text);
-    totalCharsRef.current = plain.length;
+    totalCharsRef.current    = plain.length;
+    boundaryFiredRef.current = false;
 
     const utterance = new SpeechSynthesisUtterance(plain);
-    utterance.lang = selectedLang;
-    utterance.rate = 0.95;
-    utterance.pitch = 1.0;
-    utterance.volume = muted ? 0 : 1;
+    utterance.lang   = selectedLang;
+    utterance.rate   = 0.95;
+    utterance.pitch  = 1.0;
+    utterance.volume = mutedRef.current ? 0 : 1;
 
-    const voices = window.speechSynthesis.getVoices();
+    // Voice selection
     const preferred =
       voices.find(v => v.lang === selectedLang && (v.name.includes('Google') || v.name.includes('Natural'))) ||
       voices.find(v => v.lang.startsWith(selectedLang.split('-')[0])) ||
       voices.find(v => v.lang === selectedLang);
     if (preferred) utterance.voice = preferred;
 
+    // Desktop / Android Chrome: word boundary events give accurate progress
     utterance.onboundary = (e) => {
-      if (e.name === 'word') {
-        const pct = totalCharsRef.current > 0 ? (e.charIndex / totalCharsRef.current) * 100 : 0;
-        setProgress(Math.min(pct, 100));
-      }
+      if (e.name !== 'word') return;
+      boundaryFiredRef.current = true;
+      const pct = totalCharsRef.current > 0 ? (e.charIndex / totalCharsRef.current) * 100 : 0;
+      setProgress(Math.min(pct, 100));
     };
 
     utterance.onend = () => {
+      clearTimers();
+      isPausedRef.current = false;
       setIsPlaying(false);
       setIsPaused(false);
       setProgress(100);
     };
 
-    utterance.onerror = () => {
+    utterance.onerror = (e: any) => {
+      // 'interrupted' / 'canceled' fire when cancel() is called intentionally — not an error
+      if (e.error === 'interrupted' || e.error === 'canceled') return;
+      clearTimers();
+      isPausedRef.current = false;
       setIsPlaying(false);
       setIsPaused(false);
     };
 
     utteranceRef.current = utterance;
     window.speechSynthesis.speak(utterance);
+    isPausedRef.current  = false;
+    startTimeRef.current = Date.now();
+
+    // Estimate reading duration: ~2.8 words/sec at rate 0.95
+    const wordCount = plain.split(/\s+/).filter(Boolean).length;
+    estimatedMsRef.current = Math.max((wordCount / 2.8) * 1000, 1000);
+
+    // iOS fallback: onboundary never fires — drive progress with a timer instead
+    progressTimerRef.current = setInterval(() => {
+      if (boundaryFiredRef.current || isPausedRef.current) return;
+      const elapsed = Date.now() - startTimeRef.current;
+      setProgress(Math.min((elapsed / estimatedMsRef.current) * 100, 97));
+    }, 500);
+
+    // iOS 14-second speech cutoff fix: periodic pause+resume keeps synthesis alive
+    keepAliveRef.current = setInterval(() => {
+      if (!window.speechSynthesis.speaking || isPausedRef.current) return;
+      window.speechSynthesis.pause();
+      window.speechSynthesis.resume();
+    }, 10_000);
+
     setIsPlaying(true);
     setIsPaused(false);
     setProgress(0);
   };
 
   const pauseNarration = () => {
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.pause();
-      setIsPaused(true);
-      setIsPlaying(false);
-    }
+    window.speechSynthesis.pause();
+    isPausedRef.current = true; // don't rely on speechSynthesis.paused (broken on iOS)
+    setIsPaused(true);
+    setIsPlaying(false);
   };
 
   const resumeNarration = () => {
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-      setIsPlaying(true);
-      setIsPaused(false);
-    }
+    window.speechSynthesis.resume();
+    isPausedRef.current = false;
+    setIsPlaying(true);
+    setIsPaused(false);
   };
 
   const stopNarration = () => {
+    clearTimers();
     window.speechSynthesis.cancel();
+    isPausedRef.current = false;
     setIsPlaying(false);
     setIsPaused(false);
     setProgress(0);
@@ -129,6 +188,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
 
   const toggleMute = () => {
     const newMuted = !muted;
+    mutedRef.current = newMuted;
     setMuted(newMuted);
     if (utteranceRef.current) utteranceRef.current.volume = newMuted ? 0 : 1;
   };
@@ -149,6 +209,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Language picker */}
           <div className="relative" ref={langDropRef}>
             <button
               onClick={() => setLangOpen(!langOpen)}
@@ -182,9 +243,11 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
             )}
           </div>
 
+          {/* Mute toggle */}
           <button
             onClick={toggleMute}
             className="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+            aria-label={muted ? 'Unmute' : 'Mute'}
           >
             {muted ? (
               <VolumeX size={16} className="text-gray-400" />
@@ -195,6 +258,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
         </div>
       </div>
 
+      {/* Progress bar */}
       <div className="h-1.5 bg-blue-100 dark:bg-blue-900/40 rounded-full mb-3 overflow-hidden">
         <div
           className="h-full bg-blue-500 rounded-full transition-all duration-300"
@@ -202,6 +266,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
         />
       </div>
 
+      {/* Controls */}
       <div className="flex items-center gap-2">
         {!isPlaying && !isPaused && (
           <button
