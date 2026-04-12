@@ -3377,4 +3377,49 @@ CREATE POLICY "Anon server can manage send log"
   USING (true)
   WITH CHECK (true);
 
+-- ─────────────────────────────────────────────────────────────
+-- RESULTS SYSTEM (Phase 1)
+-- ─────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS results (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title             TEXT NOT NULL,
+  slug              TEXT UNIQUE NOT NULL,
+  year              INT NOT NULL,
+  exam_type         TEXT NOT NULL,
+  source_url        TEXT,
+  content           TEXT,
+  structured_data   JSONB,
+  meta_title        TEXT,
+  meta_description  TEXT,
+  meta_keywords     TEXT,
+  status            TEXT NOT NULL DEFAULT 'draft',
+  bridge_post_id    UUID REFERENCES posts(id) ON DELETE SET NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_results_slug       ON results(slug);
+CREATE INDEX IF NOT EXISTS idx_results_year       ON results(year);
+CREATE INDEX IF NOT EXISTS idx_results_exam_type  ON results(exam_type);
+CREATE INDEX IF NOT EXISTS idx_results_status     ON results(status);
+
+ALTER TABLE results ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "results_public_read"
+  ON results FOR SELECT
+  USING (status = 'published');
+
+CREATE POLICY "results_auth_all"
+  ON results FOR ALL
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
+
+-- Ensure "Results" label exists under Educational category
+INSERT INTO labels (name, slug, category_id, display_order)
+SELECT 'Results', 'results', c.id, 99
+FROM categories c
+WHERE c.slug = 'educational'
+ON CONFLICT (slug) DO NOTHING;
+
 
