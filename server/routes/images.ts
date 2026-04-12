@@ -2,7 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
 import { requireAuth } from '../middleware/auth.js';
-import { getSupabaseClient } from '../utils/supabase.js';
+import { getSupabaseClient, getSupabaseAdmin } from '../utils/supabase.js';
 
 const router = Router();
 
@@ -25,7 +25,7 @@ router.post('/upload', requireAuth, upload.single('image'), async (req, res) => 
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = getSupabaseAdmin();
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const ext = req.file.originalname.split('.').pop();
     const filename = `${uniqueSuffix}.${ext}`;
@@ -89,7 +89,7 @@ router.post('/upload-base64', requireAuth, async (req, res) => {
       .webp({ quality: 90 })
       .toBuffer();
 
-    const supabase = getSupabaseClient();
+    const supabase = getSupabaseAdmin();
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     const filename = `${label}-${uniqueSuffix}.webp`;
 

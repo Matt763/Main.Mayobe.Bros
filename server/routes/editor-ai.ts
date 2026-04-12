@@ -1,12 +1,15 @@
 import { Router, Request, Response } from 'express';
+import { requireAuth } from '../middleware/auth.js';
+import { getApiKeys } from '../utils/api-keys.js';
 
 const router = Router();
 
 // ── AI PROVIDER HELPERS ──────────────────────────────────────────────────────
 
 async function callClaude(prompt: string, systemPrompt: string, maxTokens = 4096): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('No Anthropic API key configured');
+  const dbKeys = await getApiKeys();
+  const apiKey = process.env.ANTHROPIC_API_KEY || dbKeys.claudeKey;
+  if (!apiKey) throw new Error('No Anthropic API key configured. Add your Claude key in Settings → AI Keys.');
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -33,8 +36,9 @@ async function callClaude(prompt: string, systemPrompt: string, maxTokens = 4096
 }
 
 async function callOpenAI(prompt: string, systemPrompt: string, maxTokens = 4096, userApiKey?: string): Promise<string> {
-  const apiKey = userApiKey || process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('No OpenAI API key configured. Add your OpenAI key in the SEO Assistant settings.');
+  const dbKeys = await getApiKeys();
+  const apiKey = userApiKey || process.env.OPENAI_API_KEY || dbKeys.openaiKey;
+  if (!apiKey) throw new Error('No OpenAI API key configured. Add your OpenAI key in Settings → AI Keys.');
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -1252,6 +1256,50 @@ Return ONLY valid JSON:
     return res.json(result);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── TEXT-TO-SPEECH (server-side fallback for browsers without Web Speech API) ─
+router.post('/tts', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { text, voice = 'alloy' } = req.body as { text: string; voice?: string };
+    if (!text) return res.status(400).json({ error: 'text is required' });
+
+    const dbKeys = await getApiKeys();
+    const apiKey = process.env.OPENAI_API_KEY || dbKeys.openaiKey;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'No OpenAI API key configured. Add your OpenAI key in Settings → AI Keys.' });
+    }
+
+    // Truncate to 4096 chars (OpenAI TTS limit)
+    const plain = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 4096);
+
+    const ttsRes = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'tts-1',
+        input: plain,
+        voice,
+        response_format: 'mp3',
+      }),
+    });
+
+    if (!ttsRes.ok) {
+      const err = await ttsRes.json().catch(() => ({})) as any;
+      return res.status(ttsRes.status).json({ error: err?.error?.message || `TTS error ${ttsRes.status}` });
+    }
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+
+    const arrayBuffer = await ttsRes.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

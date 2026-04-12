@@ -19,9 +19,10 @@ import {
   Image,
   Video,
   Play,
+  Key,
 } from 'lucide-react';
 
-type TabType = 'general' | 'appearance' | 'hero' | 'seo' | 'social' | 'advanced' | 'monetization';
+type TabType = 'general' | 'appearance' | 'hero' | 'seo' | 'social' | 'advanced' | 'monetization' | 'aikeys';
 
 interface AdSlot {
   id: string;
@@ -92,6 +93,12 @@ export default function SettingsPage() {
   const [adSaving, setAdSaving] = useState(false);
   const [previewSlot, setPreviewSlot] = useState<string | null>(null);
 
+  // AI Keys
+  const [claudeKey, setClaudeKey] = useState('');
+  const [openaiKey, setOpenaiKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
+  const [aiKeysSaving, setAiKeysSaving] = useState(false);
+
   useEffect(() => {
     loadSettings();
     loadAdSlots();
@@ -125,6 +132,10 @@ export default function SettingsPage() {
       setHeroImageUrl(settings.hero?.imageUrl || '');
       setHeroVideoUrl(settings.hero?.videoUrl || '');
       setHeroMediaType(settings.hero?.mediaType || 'image');
+      // AI keys — show masked placeholder if a key is stored
+      setClaudeKey(settings.aiKeys?.claudeKey ? '••••••••••••••••' : '');
+      setOpenaiKey(settings.aiKeys?.openaiKey  ? '••••••••••••••••' : '');
+      setGeminiKey(settings.aiKeys?.geminiKey  ? '••••••••••••••••' : '');
     } catch {
       setToast({ message: 'Failed to load settings', type: 'error' });
     } finally {
@@ -183,6 +194,25 @@ export default function SettingsPage() {
     setAdSlots((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
   };
 
+  const saveAiKeys = async () => {
+    setAiKeysSaving(true);
+    try {
+      // Load current settings first so we don't overwrite other fields
+      const current = await api.settings.get();
+      await api.settings.update({
+        ...current,
+        aiKeys: { claudeKey, openaiKey, geminiKey },
+      });
+      // Reload to get fresh masked values from server
+      await loadSettings();
+      setToast({ message: 'AI keys saved', type: 'success' });
+    } catch {
+      setToast({ message: 'Failed to save AI keys', type: 'error' });
+    } finally {
+      setAiKeysSaving(false);
+    }
+  };
+
   const tabs: { key: TabType; label: string; icon: any }[] = [
     { key: 'general', label: 'General', icon: SettingsIcon },
     { key: 'appearance', label: 'Appearance', icon: Palette },
@@ -191,6 +221,7 @@ export default function SettingsPage() {
     { key: 'social', label: 'Social', icon: Share2 },
     ...(isCEO || isAdmin ? [{ key: 'monetization' as TabType, label: 'Monetization', icon: DollarSign }] : []),
     { key: 'advanced', label: 'Advanced', icon: Code },
+    { key: 'aikeys', label: 'AI Keys', icon: Key },
   ];
 
   const inputClass = 'w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent';
@@ -214,7 +245,7 @@ export default function SettingsPage() {
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Settings</h1>
             <p className="text-gray-600 dark:text-gray-400">Configure your site settings and preferences</p>
           </div>
-          {activeTab !== 'monetization' && (
+          {activeTab !== 'monetization' && activeTab !== 'aikeys' && (
             <button
               onClick={saveSettings}
               disabled={saving}
@@ -232,6 +263,16 @@ export default function SettingsPage() {
             >
               <Save size={20} />
               <span>{adSaving ? 'Saving...' : 'Save Ad Settings'}</span>
+            </button>
+          )}
+          {activeTab === 'aikeys' && (
+            <button
+              onClick={saveAiKeys}
+              disabled={aiKeysSaving}
+              className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2 rounded-lg hover:bg-violet-700 transition-colors disabled:opacity-50"
+            >
+              <Save size={20} />
+              <span>{aiKeysSaving ? 'Saving...' : 'Save AI Keys'}</span>
             </button>
           )}
         </div>
@@ -557,6 +598,64 @@ export default function SettingsPage() {
                     <p>No ad slots configured yet.</p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'aikeys' && (
+              <div className="space-y-6">
+                <div className="flex items-start gap-3 p-4 bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-xl">
+                  <Key size={18} className="text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-violet-800 dark:text-violet-300 mb-1">Server-side AI Keys</p>
+                    <p className="text-xs text-violet-700 dark:text-violet-400 leading-relaxed">
+                      Keys stored here are used server-side for all AI features (content generation, NECTA crawl, image generation, text-to-speech).
+                      Environment variables take priority if set. Keys are never exposed to the browser.
+                      Existing keys are shown as ••••••••—paste a new value to update, or leave as-is to keep the current key.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Claude API Key (Anthropic)</label>
+                  <input
+                    type="password"
+                    value={claudeKey}
+                    onChange={e => setClaudeKey(e.target.value)}
+                    onFocus={e => { if (e.target.value.startsWith('•')) setClaudeKey(''); }}
+                    placeholder="sk-ant-..."
+                    autoComplete="new-password"
+                    className={inputClass}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Used for article writing, NECTA result titles, and all Claude-powered features.</p>
+                </div>
+
+                <div>
+                  <label className={labelClass}>OpenAI API Key</label>
+                  <input
+                    type="password"
+                    value={openaiKey}
+                    onChange={e => setOpenaiKey(e.target.value)}
+                    onFocus={e => { if (e.target.value.startsWith('•')) setOpenaiKey(''); }}
+                    placeholder="sk-..."
+                    autoComplete="new-password"
+                    className={inputClass}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Used as Claude fallback, image generation (DALL-E), and text-to-speech audio narration.</p>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Gemini API Key (Google)</label>
+                  <input
+                    type="password"
+                    value={geminiKey}
+                    onChange={e => setGeminiKey(e.target.value)}
+                    onFocus={e => { if (e.target.value.startsWith('•')) setGeminiKey(''); }}
+                    placeholder="AIza..."
+                    autoComplete="new-password"
+                    className={inputClass}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Reserved for Gemini-powered features (future use).</p>
+                </div>
               </div>
             )}
           </div>

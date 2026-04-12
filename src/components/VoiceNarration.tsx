@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Square, Volume2, VolumeX, Languages, ChevronDown } from 'lucide-react';
+import { Play, Pause, Square, Volume2, VolumeX, Languages, ChevronDown, Loader2 } from 'lucide-react';
 
 interface VoiceNarrationProps {
   text: string;
@@ -193,7 +193,124 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
     if (utteranceRef.current) utteranceRef.current.volume = newMuted ? 0 : 1;
   };
 
-  if (!supported) return null;
+  // ── Server TTS fallback (browsers without Web Speech API) ───────────────────
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [ttsLoading, setTtsLoading]     = useState(false);
+  const [ttsPlaying, setTtsPlaying]     = useState(false);
+  const [ttsError,   setTtsError]       = useState('');
+  const [ttsProgress, setTtsProgress]   = useState(0);
+
+  const startServerTts = async () => {
+    setTtsError('');
+    setTtsLoading(true);
+    setTtsProgress(0);
+    try {
+      const plain = cleanText(text).substring(0, 4096);
+      const res = await fetch('/api/editor-ai/tts', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: plain }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as any;
+        throw new Error(err.error || `TTS error ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        URL.revokeObjectURL(audioRef.current.src);
+      }
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      audio.addEventListener('timeupdate', () => {
+        if (audio.duration) setTtsProgress((audio.currentTime / audio.duration) * 100);
+      });
+      audio.addEventListener('ended', () => { setTtsPlaying(false); setTtsProgress(100); });
+      audio.addEventListener('error', () => { setTtsPlaying(false); setTtsError('Playback error'); });
+
+      await audio.play();
+      setTtsPlaying(true);
+    } catch (e: any) {
+      setTtsError(e.message || 'Failed to generate audio');
+    } finally {
+      setTtsLoading(false);
+    }
+  };
+
+  const toggleServerTts = () => {
+    if (!audioRef.current) { startServerTts(); return; }
+    if (ttsPlaying) {
+      audioRef.current.pause();
+      setTtsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setTtsPlaying(true);
+    }
+  };
+
+  const stopServerTts = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setTtsPlaying(false);
+    setTtsProgress(0);
+  };
+
+  if (!supported) {
+    return (
+      <div className="bg-gradient-to-r from-blue-50 to-sky-50 dark:from-blue-900/20 dark:to-sky-900/20 border border-blue-100 dark:border-blue-800/40 rounded-xl p-4 mb-6">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+            <Volume2 size={15} className="text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Listen to this article</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{title}</p>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-1.5 bg-blue-100 dark:bg-blue-900/40 rounded-full mb-3 overflow-hidden">
+          <div
+            className="h-full bg-blue-500 rounded-full transition-all duration-300"
+            style={{ width: `${ttsProgress}%` }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={toggleServerTts}
+            disabled={ttsLoading}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            {ttsLoading ? <Loader2 size={14} className="animate-spin" /> : ttsPlaying ? <Pause size={14} /> : <Play size={14} />}
+            {ttsLoading ? 'Generating...' : ttsPlaying ? 'Pause' : ttsProgress > 0 ? 'Resume' : 'Play Audio'}
+          </button>
+          {(ttsPlaying || ttsProgress > 0) && (
+            <button
+              onClick={stopServerTts}
+              className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Square size={14} /> Stop
+            </button>
+          )}
+          {ttsProgress > 0 && ttsProgress < 100 && (
+            <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">{Math.round(ttsProgress)}%</span>
+          )}
+          {ttsProgress >= 100 && <span className="text-xs text-green-500 ml-auto">Finished</span>}
+        </div>
+
+        {ttsError && (
+          <p className="text-xs text-red-500 mt-2">{ttsError}</p>
+        )}
+      </div>
+    );
+  }
 
   const currentLang = LANGUAGES.find(l => l.code === selectedLang) || LANGUAGES[0];
 

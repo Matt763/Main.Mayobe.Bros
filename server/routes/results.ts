@@ -281,7 +281,8 @@ router.post('/crawl', requireAuth, async (req, res) => {
       exam_type:        crawled.exam_type,
       source_url:       crawled.source_url,
       content:          crawled.content,
-      structured_data:  crawled.structured_data,
+      // Strip schools array — HTML content already has student data; full JSON is too large for Supabase
+      structured_data:  { total_schools: crawled.structured_data.total_schools, total_students: crawled.structured_data.total_students },
       meta_title:       crawled.meta_title,
       meta_description: crawled.meta_description,
       status:           'draft',

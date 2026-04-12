@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { getSupabaseClient } from '../utils/supabase.js';
+import { invalidateApiKeyCache } from '../utils/api-keys.js';
 
 const router = Router();
 
@@ -32,12 +33,37 @@ router.get('/', async (req, res) => {
 router.put('/', requireAuth, async (req, res) => {
   try {
     const supabase = getSupabaseClient();
-    const settingsJson = JSON.stringify(req.body);
+    const incoming = req.body;
+
+    // Preserve existing aiKeys when the incoming value is masked (••••) or empty
+    if (incoming.aiKeys) {
+      const { data: existing } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('key', SETTINGS_KEY)
+        .maybeSingle();
+
+      const stored = existing?.value ? JSON.parse(existing.value) : {};
+      const storedKeys: Record<string, string> = stored.aiKeys || {};
+
+      const mask = (val: string | undefined, stored: string) =>
+        !val || val.startsWith('•') ? stored : val;
+
+      incoming.aiKeys = {
+        claudeKey: mask(incoming.aiKeys.claudeKey, storedKeys.claudeKey || ''),
+        openaiKey:  mask(incoming.aiKeys.openaiKey,  storedKeys.openaiKey  || ''),
+        geminiKey:  mask(incoming.aiKeys.geminiKey,  storedKeys.geminiKey  || ''),
+      };
+    }
+
+    const settingsJson = JSON.stringify(incoming);
     const { error } = await supabase
       .from('site_settings')
       .upsert({ key: SETTINGS_KEY, value: settingsJson, updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (error) throw error;
-    res.json(req.body);
+
+    invalidateApiKeyCache();
+    res.json(incoming);
   } catch (error) {
     console.error('Error updating settings:', error);
     res.status(500).json({ error: 'Failed to update settings' });

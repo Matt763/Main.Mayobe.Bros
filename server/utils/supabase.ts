@@ -11,3 +11,11 @@ export function getSupabaseClient() {
   _client = createClient(url, key, { auth: { persistSession: false } });
   return _client;
 }
+
+/** Admin client that REQUIRES the service role key — use for storage operations that bypass RLS */
+export function getSupabaseAdmin() {
+  const url = process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for storage operations. Add it to your environment variables.');
+  return createClient(url, key, { auth: { persistSession: false } });
+}
