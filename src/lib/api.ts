@@ -161,6 +161,24 @@ function normalizePage(p: any): any {
   };
 }
 
+export interface Result {
+  id: string;
+  title: string;
+  slug: string;
+  year: number;
+  exam_type: string;
+  source_url: string | null;
+  content: string | null;
+  structured_data: any | null;
+  meta_title: string | null;
+  meta_description: string | null;
+  meta_keywords: string | null;
+  status: string;
+  bridge_post_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export const api = {
   auth: {
     login: (email: string, password: string) =>
@@ -986,5 +1004,110 @@ export const api = {
       fetchAPI(`/newsletter/${id}`, { method: 'DELETE' }),
 
     exportUrl: () => `${API_BASE_URL}/newsletter/export`,
+  },
+
+  results: {
+    list: async (params?: { status?: string; year?: number; exam_type?: string }): Promise<Result[]> => {
+      const cacheKey = `results:${JSON.stringify(params || {})}`;
+      const cached = getCached(cacheKey);
+      if (cached !== null) return cached as Result[];
+
+      let query = supabase
+        .from('results')
+        .select('id, title, slug, year, exam_type, status, source_url, meta_title, meta_description, created_at, updated_at')
+        .order('year', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      const s = params?.status;
+      if (s === 'all') { /* no filter */ }
+      else if (s) query = query.eq('status', s);
+      else query = query.eq('status', 'published');
+
+      if (params?.year)       query = query.eq('year', params.year);
+      if (params?.exam_type)  query = query.eq('exam_type', params.exam_type.toLowerCase());
+
+      const { data, error } = await query;
+      if (error) throw error;
+      const result = (data || []) as Result[];
+      setCached(cacheKey, result);
+      return result;
+    },
+
+    get: async (slug: string): Promise<Result | null> => {
+      const cacheKey = `result:${slug}`;
+      const cached = getCached(cacheKey);
+      if (cached !== null) return cached as Result;
+
+      const { data, error } = await supabase
+        .from('results')
+        .select('*')
+        .eq('slug', slug)
+        .eq('status', 'published')
+        .maybeSingle();
+      if (error) throw error;
+      setCached(cacheKey, data);
+      return data as Result | null;
+    },
+
+    getById: async (id: string): Promise<Result | null> => {
+      const { data, error } = await supabase
+        .from('results')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (error) throw error;
+      return data as Result | null;
+    },
+
+    create: async (body: Partial<Result>): Promise<Result> => {
+      invalidateCache('results:');
+      const { data, error } = await supabase
+        .from('results')
+        .insert({
+          title:            body.title,
+          slug:             body.slug,
+          year:             body.year,
+          exam_type:        body.exam_type?.toLowerCase(),
+          source_url:       body.source_url || null,
+          content:          body.content || '',
+          structured_data:  body.structured_data || null,
+          meta_title:       body.meta_title || null,
+          meta_description: body.meta_description || null,
+          meta_keywords:    body.meta_keywords || null,
+          status:           body.status || 'draft',
+          updated_at:       new Date().toISOString(),
+        })
+        .select('*')
+        .single();
+      if (error) throw new Error(error.message);
+      return data as Result;
+    },
+
+    update: async (id: string, body: Partial<Result>): Promise<Result> => {
+      invalidateCache('results:');
+      invalidateCache(`result:`);
+      // Bridge post + status logic handled server-side via PUT /api/results/:id
+      const response = await fetch(`/api/results/${id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({})) as any;
+        throw new Error(err.error || 'Update failed');
+      }
+      return response.json() as Promise<Result>;
+    },
+
+    delete: async (id: string): Promise<void> => {
+      invalidateCache('results:');
+      invalidateCache(`result:`);
+      const response = await fetch(`/api/results/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error('Delete failed');
+    },
   },
 };
