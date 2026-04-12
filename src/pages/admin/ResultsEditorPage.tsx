@@ -62,18 +62,9 @@ export default function ResultsEditorPage() {
     if (!isEditing) setSlug(slugify(val));
   };
 
-  // Called by AIResultsAssistant when crawl completes
+  // Called by AIResultsAssistant when crawl saves as draft — navigate to edit mode
   const handleCrawlComplete = (result: any) => {
-    setTitle(result.title);
-    setSlug(result.slug);
-    setYear(result.year);
-    setExamType(result.exam_type);
-    setSourceUrl(result.source_url);
-    setStructuredData(result.structured_data);
-    setMetaTitle(result.meta_title);
-    setMetaDesc(result.meta_description);
-    setContent(result.content);
-    showToast('Content loaded from NECTA. Review and save.', 'success');
+    navigate(`/admin/results/${result.id}`, { replace: true });
   };
 
   const handleSave = async (saveStatus: 'draft' | 'published') => {
@@ -84,16 +75,16 @@ export default function ResultsEditorPage() {
 
     setSaving(true);
     try {
-      const body = {
+      const body: Record<string, any> = {
         title, slug, year, exam_type: examType,
         source_url: sourceUrl || null,
         content,
-        structured_data: structuredData,
         meta_title: metaTitle || null,
         meta_description: metaDesc || null,
         meta_keywords: metaKeys || null,
         status: saveStatus,
       };
+      if (structuredData !== null) body.structured_data = structuredData;
 
       if (isEditing) {
         await api.results.update(id!, body);

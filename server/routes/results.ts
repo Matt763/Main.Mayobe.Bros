@@ -115,13 +115,16 @@ router.put('/:id', requireAuth, async (req, res) => {
       exam_type: b.exam_type?.toLowerCase(),
       source_url: b.source_url || null,
       content: b.content || '',
-      structured_data: b.structured_data || null,
       meta_title: b.meta_title || null,
       meta_description: b.meta_description || null,
       meta_keywords: b.meta_keywords || null,
       status: b.status || 'draft',
       updated_at: new Date().toISOString(),
     };
+    // Only update structured_data when explicitly provided — avoids wiping crawled data
+    if (Object.prototype.hasOwnProperty.call(b, 'structured_data')) {
+      update.structured_data = b.structured_data;
+    }
 
     const { data: result, error: updateErr } = await supabase
       .from('results')
@@ -246,28 +249,73 @@ router.post('/crawl', requireAuth, async (req, res) => {
   };
 
   try {
-    // Duplicate check
-    if (!overwrite) {
-      const supabase = getSupabaseClient();
-      const { data: existing } = await supabase
-        .from('results')
-        .select('id, title')
-        .eq('source_url', url)
-        .maybeSingle();
+    const supabase = getSupabaseClient();
+    let existingId: string | null = null;
 
-      if (existing) {
-        send({
-          stage: 'duplicate',
-          message: `"${existing.title}" already exists.`,
-          existingTitle: existing.title,
-          existingId: existing.id,
-        });
-        return res.end();
-      }
+    // Duplicate check
+    const { data: existing } = await supabase
+      .from('results')
+      .select('id, title')
+      .eq('source_url', url)
+      .maybeSingle();
+
+    if (existing && !overwrite) {
+      send({
+        stage: 'duplicate',
+        message: `"${existing.title}" already exists.`,
+        existingTitle: existing.title,
+        existingId: existing.id,
+      });
+      return res.end();
     }
 
-    const result = await crawlNectaResults(url, send);
-    send({ stage: 'done', message: 'Complete!', result });
+    if (existing) existingId = existing.id;
+
+    const crawled = await crawlNectaResults(url, send);
+
+    // Save server-side to avoid sending huge payload over SSE
+    const record = {
+      title:            crawled.title,
+      slug:             crawled.slug,
+      year:             crawled.year,
+      exam_type:        crawled.exam_type,
+      source_url:       crawled.source_url,
+      content:          crawled.content,
+      structured_data:  crawled.structured_data,
+      meta_title:       crawled.meta_title,
+      meta_description: crawled.meta_description,
+      status:           'draft',
+      updated_at:       new Date().toISOString(),
+    };
+
+    let savedId: string;
+    if (existingId) {
+      const { data: saved, error } = await supabase
+        .from('results').update(record).eq('id', existingId).select('id').single();
+      if (error) throw error;
+      savedId = saved.id;
+    } else {
+      const { data: saved, error } = await supabase
+        .from('results').insert(record).select('id').single();
+      if (error) throw error;
+      savedId = saved.id;
+    }
+
+    // Lightweight done event — no content, no schools array
+    send({
+      stage: 'done',
+      message: 'Saved as draft!',
+      result: {
+        id:               savedId,
+        title:            crawled.title,
+        slug:             crawled.slug,
+        year:             crawled.year,
+        exam_type:        crawled.exam_type,
+        source_url:       crawled.source_url,
+        meta_title:       crawled.meta_title,
+        meta_description: crawled.meta_description,
+      },
+    });
   } catch (err: any) {
     send({ stage: 'error', message: err.message || 'Crawl failed' });
   }

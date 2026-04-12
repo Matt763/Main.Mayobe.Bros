@@ -15,13 +15,12 @@ interface CrawlEvent {
 
 interface Props {
   onComplete: (result: {
+    id: string;
     title: string;
     slug: string;
     year: number;
     exam_type: string;
     source_url: string;
-    content: string;
-    structured_data: any;
     meta_title: string;
     meta_description: string;
   }) => void;
@@ -181,7 +180,7 @@ export default function AIResultsAssistant({ onComplete }: Props) {
       {stage === 'done' && (
         <div className="mt-3 flex items-center gap-2 text-green-700 dark:text-green-400 text-sm">
           <CheckCircle2 size={15} />
-          <span>Content loaded into editor. Review and publish.</span>
+          <span>Saved as draft. Opening editor...</span>
           <button onClick={reset} className="ml-auto text-xs underline">Reset</button>
         </div>
       )}

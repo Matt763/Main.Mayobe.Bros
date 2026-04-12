@@ -4,8 +4,8 @@ import type { CrawlEvent, CrawlResult, School, Student, StructuredData } from '.
 
 const NECTA_ORIGIN = 'https://onlinesys.necta.go.tz';
 const SITE_ORIGIN  = 'https://www.mayobebros.com';
-const BATCH_SIZE   = 10;
-const BATCH_DELAY  = 500; // ms between batches
+const BATCH_SIZE   = 25;
+const BATCH_DELAY  = 0; // ms between batches
 
 function slugify(text: string): string {
   return text
@@ -16,7 +16,7 @@ function slugify(text: string): string {
 
 async function fetchHtml(url: string): Promise<string> {
   const { data } = await axios.get(url, {
-    timeout: 15_000,
+    timeout: 8_000,
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MayobeBros/1.0)' },
     responseType: 'text',
   });
