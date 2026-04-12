@@ -53,37 +53,36 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     const epoch = '1970-01-01T00:00:00Z';
 
+    const safe = async (q: Promise<{ count: number | null; error: any }>) => {
+      try { const r = await q; return r.error ? 0 : (r.count || 0); } catch { return 0; }
+    };
+
     const [
-      { count: commentsCount },
-      { count: subsCount },
-      { count: pubsCount },
-      { count: reviewsCount },
-      { count: postsCount },
-      { count: pagesCount },
-      { count: messagesCount },
+      commentsCount, subsCount, pubsCount, reviewsCount,
+      postsCount, pagesCount, messagesCount,
     ] = await Promise.all([
-      supabase.from('comments').select('*', { count: 'exact', head: true })
+      safe(supabase.from('comments').select('id', { count: 'exact', head: true })
         .gte('created_at', seen['comments'] || epoch)
-        .eq('status', 'pending'),
-      supabase.from('newsletter_subscribers').select('*', { count: 'exact', head: true })
-        .gte('created_at', seen['subscribers'] || epoch),
+        .eq('status', 'pending')),
+      safe(supabase.from('newsletter_subscribers').select('id', { count: 'exact', head: true })
+        .gte('created_at', seen['subscribers'] || epoch)),
       (isCEO
-        ? supabase.from('admin_users').select('*', { count: 'exact', head: true })
+        ? safe(supabase.from('admin_users').select('id', { count: 'exact', head: true })
             .gte('created_at', seen['publishers'] || epoch)
-            .neq('role', 'ceo')
-        : Promise.resolve({ count: 0 })),
-      supabase.from('reviews').select('*', { count: 'exact', head: true })
+            .neq('role', 'ceo'))
+        : Promise.resolve(0)),
+      safe(supabase.from('reviews').select('id', { count: 'exact', head: true })
         .gte('created_at', seen['reviews'] || epoch)
-        .eq('status', 'pending'),
-      supabase.from('posts').select('*', { count: 'exact', head: true })
-        .gte('created_at', seen['posts'] || epoch),
-      supabase.from('static_pages').select('*', { count: 'exact', head: true })
-        .gte('created_at', seen['pages'] || epoch),
+        .eq('status', 'pending')),
+      safe(supabase.from('posts').select('id', { count: 'exact', head: true })
+        .gte('created_at', seen['posts'] || epoch)),
+      safe(supabase.from('static_pages').select('id', { count: 'exact', head: true })
+        .gte('created_at', seen['pages'] || epoch)),
       (isCEO
-        ? supabase.from('contact_submissions').select('*', { count: 'exact', head: true })
+        ? safe(supabase.from('contact_submissions').select('id', { count: 'exact', head: true })
             .eq('type', 'advertising')
-            .eq('is_read', false)
-        : Promise.resolve({ count: 0 })),
+            .eq('is_read', false))
+        : Promise.resolve(0)),
     ]);
 
     setCounts({

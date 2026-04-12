@@ -178,6 +178,41 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
+// POST /api/auth/exchange — take a Supabase access_token, verify it server-side,
+// and issue an admin_auth cookie so requireAuth works for all subsequent API calls.
+// Called by the frontend after every successful Supabase sign-in or session restore.
+router.post('/exchange', async (req, res) => {
+  try {
+    const { access_token } = req.body;
+    if (!access_token) return res.status(400).json({ error: 'access_token required' });
+
+    const supabase = getServiceRoleClient();
+    const { data: { user }, error } = await supabase.auth.getUser(access_token);
+    if (error || !user) return res.status(401).json({ error: 'Invalid Supabase token' });
+
+    const CEO_EMAIL = 'mclean@mayobebros.com';
+    const isCEO = user.email?.toLowerCase() === CEO_EMAIL;
+
+    const { data: adminRecord } = await supabase
+      .from('admin_users')
+      .select('role, is_active')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!isCEO && (!adminRecord || !adminRecord.is_active)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    req.session.userId = user.id;
+    req.session.email = user.email;
+    setAdminCookie(res, user.id, user.email || '');
+
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;

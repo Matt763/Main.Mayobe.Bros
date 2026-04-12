@@ -31,6 +31,19 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const resolveInFlight = new Map<string, Promise<AdminUser | null>>();
 
+/** Exchange a Supabase access_token for a server-side admin_auth cookie.
+ *  Silently ignored on failure — the cookie is a convenience for requireAuth. */
+async function exchangeToken(access_token: string): Promise<void> {
+  try {
+    await fetch('/api/auth/exchange', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token }),
+    });
+  } catch {}
+}
+
 async function resolveAdminUser(supabaseUser: { id: string; email?: string }): Promise<AdminUser | null> {
   const existing = resolveInFlight.get(supabaseUser.id);
   if (existing) return existing;
@@ -135,6 +148,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           if (session?.user) {
+            // Exchange Supabase JWT for server admin_auth cookie so requireAuth works
+            if (session.access_token) exchangeToken(session.access_token);
+
             const adminUser = await resolveAdminUser(session.user);
             if (adminUser) {
               setUser(adminUser);
@@ -168,6 +184,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             finishLoading();
             return;
           }
+          // Restore the server-side admin_auth cookie from the existing Supabase session
+          if (session.access_token) exchangeToken(session.access_token);
+
           const adminUser = await resolveAdminUser(session.user);
           if (adminUser) {
             setUser(adminUser);
