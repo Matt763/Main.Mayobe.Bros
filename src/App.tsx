@@ -71,6 +71,9 @@ const ITangoLoginPage = lazy(() => import('./pages/ITangoLoginPage'));
 const ITangoEditorPage = lazy(() => import('./pages/admin/ITangoEditorPage'));
 const EditorialPolicyPage = lazy(() => import('./pages/EditorialPolicyPage'));
 const FactCheckingPolicyPage = lazy(() => import('./pages/FactCheckingPolicyPage'));
+const ResultsPage       = lazy(() => import('./pages/ResultsPage'));
+const ResultsListPage   = lazy(() => import('./pages/admin/ResultsListPage'));
+const ResultsEditorPage = lazy(() => import('./pages/admin/ResultsEditorPage'));
 
 function ScrollToTop() {
   const location = useLocation();
@@ -262,6 +265,9 @@ function App() {
                             <AIHumanizerPage />
                           </ProtectedRoute>
                         } />
+                        <Route path="results" element={<ResultsListPage />} />
+                        <Route path="results/new" element={<ResultsEditorPage />} />
+                        <Route path="results/:id" element={<ResultsEditorPage />} />
                       </Routes>
                     </Suspense>
                   </ProtectedRoute>
@@ -298,6 +304,7 @@ function App() {
                           <Route path="/about" element={<AboutUsPage />} />
                           <Route path="/contact" element={<ContactUsPage />} />
                           <Route path="/page/:slug" element={<DynamicPage />} />
+                          <Route path="/results/:year/:examType/:slug" element={<ResultsPage />} />
                           <Route path="*" element={<NotFoundPage />} />
                         </Routes>
                       </Suspense>
