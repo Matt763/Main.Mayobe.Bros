@@ -31,6 +31,23 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ── SINGLE BY ID (admin) ──────────────────────────────────────────────────────
+router.get('/by-id/:id', requireAuth, async (req, res) => {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from('results')
+      .select('*')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Not found' });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── SEARCH STUB (Phase 3) ─────────────────────────────────────────────────────
 router.get('/search', (_req, res) => {
   res.json({ results: [], message: 'Live search coming in Phase 3' });

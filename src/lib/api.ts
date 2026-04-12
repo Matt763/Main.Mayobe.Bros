@@ -1050,13 +1050,12 @@ export const api = {
     },
 
     getById: async (id: string): Promise<Result | null> => {
-      const { data, error } = await supabase
-        .from('results')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-      if (error) throw error;
-      return data as Result | null;
+      const response = await fetch(`/api/results/by-id/${id}`, {
+        credentials: 'include',
+      });
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error('Failed to fetch result');
+      return response.json() as Promise<Result>;
     },
 
     create: async (body: Partial<Result>): Promise<Result> => {
