@@ -23,6 +23,7 @@ import newsletterRoutes from './server/routes/newsletter.js';
 import premiumRoutes from './server/routes/premium.js';
 import socialAutomationRoutes from './server/routes/socialAutomation.js';
 import trendingRoutes from './server/routes/trending.js';
+import resultsRoutes from './server/routes/results.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,6 +97,7 @@ async function resolveAndServe(reqPath, res, indexHtml) {
       const postMatch = reqPath.match(/^\/post\/([^/?#]+)/);
       const categoryMatch = reqPath.match(/^\/category\/([^/?#]+)/);
       const pageMatch = reqPath.match(/^\/page\/([^/?#]+)/);
+      const resultsMatch = reqPath.match(/^\/results\/(\d{4})\/([^/?#]+)\/([^/?#]+)/);
 
       if (postMatch) {
         const { data } = await supabase
@@ -134,6 +136,20 @@ async function resolveAndServe(reqPath, res, indexHtml) {
           const desc = (data.meta_description || stripHtml(data.content || '')).slice(0, 160);
           const image = data.featured_image || DEFAULT_IMAGE;
           html = injectMeta(html, title, desc, image, `${SITE_URL}/page/${data.slug}`, 'website');
+        }
+      } else if (resultsMatch) {
+        const slug = resultsMatch[3];
+        const { data } = await supabase
+          .from('results')
+          .select('title, meta_title, meta_description, slug, year, exam_type')
+          .eq('slug', slug)
+          .eq('status', 'published')
+          .maybeSingle();
+        if (data) {
+          const title = data.meta_title || `${data.title} | ${SITE_NAME}`;
+          const desc  = (data.meta_description || `NECTA ${data.exam_type?.toUpperCase()} ${data.year} results.`).slice(0, 160);
+          html = injectMeta(html, title, desc, DEFAULT_IMAGE,
+            `${SITE_URL}/results/${data.year}/${data.exam_type}/${data.slug}`, 'article');
         }
       }
     } catch (err) {
@@ -187,6 +203,7 @@ app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/premium', premiumRoutes);
 app.use('/api/social', socialAutomationRoutes);
 app.use('/api/trending', trendingRoutes);
+app.use('/api/results', resultsRoutes);
 
 app.use(express.static(path.join(__dirname, 'dist')));
 
