@@ -3420,6 +3420,6 @@ INSERT INTO labels (name, slug, category_id, display_order)
 SELECT 'Results', 'results', c.id, 99
 FROM categories c
 WHERE c.slug = 'educational'
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (category_id, slug) DO NOTHING;
 
 
