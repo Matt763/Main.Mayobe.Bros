@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api, type Result } from '../lib/api';
@@ -9,6 +9,7 @@ export default function ResultsPage() {
   const [result, setResult]   = useState<Result | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -17,7 +18,6 @@ export default function ResultsPage() {
       .then(r => {
         if (!r) { setNotFound(true); return; }
         setResult(r);
-        // Update document meta for SPA navigation (SSR handles initial load)
         document.title = r.meta_title || `${r.title} | Mayobe Bros`;
         const metaDesc = document.querySelector('meta[name="description"]');
         if (metaDesc && r.meta_description) metaDesc.setAttribute('content', r.meta_description);
@@ -25,6 +25,55 @@ export default function ResultsPage() {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [slug]);
+
+  // Wire up interactive school navigation (index → detail → back)
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container || !result) return;
+
+    const indexEl = container.querySelector<HTMLElement>('#results-index');
+    const detailContainer = container.querySelector<HTMLElement>('#results-detail-container');
+    if (!indexEl || !detailContainer) return;
+
+    const allSections = Array.from(
+      detailContainer.querySelectorAll<HTMLElement>('.results-school-detail')
+    );
+
+    // Hide all detail sections on load
+    allSections.forEach(s => { s.style.display = 'none'; });
+    detailContainer.style.display = 'none';
+
+    function showSchool(centreNumber: string) {
+      const target = container!.querySelector<HTMLElement>(`#school-${centreNumber}`);
+      if (!target) return;
+      indexEl!.style.display = 'none';
+      detailContainer!.style.display = 'block';
+      allSections.forEach(s => { s.style.display = 'none'; });
+      target.style.display = 'block';
+      container!.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function showIndex() {
+      allSections.forEach(s => { s.style.display = 'none'; });
+      detailContainer!.style.display = 'none';
+      indexEl!.style.display = 'block';
+    }
+
+    // School link clicks → show that school's detail
+    indexEl.querySelectorAll<HTMLAnchorElement>('.results-school-link').forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        const href = link.getAttribute('href') || '';
+        const centreNumber = href.replace('#school-', '');
+        if (centreNumber) showSchool(centreNumber);
+      });
+    });
+
+    // Back button clicks → return to index
+    detailContainer.querySelectorAll<HTMLButtonElement>('.results-back-btn').forEach(btn => {
+      btn.addEventListener('click', showIndex);
+    });
+  }, [result]);
 
   if (loading) {
     return (
@@ -83,11 +132,12 @@ export default function ResultsPage() {
       {/* Results content */}
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div
+          ref={contentRef}
           className="results-page-content"
           dangerouslySetInnerHTML={{
             __html: DOMPurify.sanitize(result.content || '', {
-              ADD_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'h2', 'h3', 'small', 'strong'],
-              ADD_ATTR: ['id', 'class'],
+              ADD_TAGS: ['table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'h2', 'h3', 'small', 'strong', 'button'],
+              ADD_ATTR: ['id', 'class', 'type', 'href'],
             }),
           }}
         />

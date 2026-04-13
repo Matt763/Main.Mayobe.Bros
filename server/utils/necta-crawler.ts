@@ -109,32 +109,48 @@ function parseSchoolPage(html: string, centerNumber: string): School {
 }
 
 function buildHtml(data: StructuredData, examLabel: string, year: number): string {
-  const schoolSections = data.schools.map(school => {
-    const rows = school.students.map(s => `
-      <tr id="${s.index_number}">
-        <td>${s.index_number}</td>
-        <td>${s.sex}</td>
-        <td>${s.aggregate ?? '-'}</td>
-        <td>${s.division}</td>
-        <td>${s.subjects}</td>
+  // Index table rows (NECTA-style school listing)
+  const indexRows = data.schools.map((school, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${school.center_number}</td>
+        <td><a class="results-school-link" href="#school-${school.center_number}">${school.school_name}</a></td>
+        <td>${school.summary.div1}</td>
+        <td>${school.summary.div2}</td>
+        <td>${school.summary.div3}</td>
+        <td>${school.summary.div4}</td>
+        <td>${school.summary.div0}</td>
       </tr>`).join('');
 
+  // Individual school detail sections (hidden by default, shown on click)
+  const schoolSections = data.schools.map(school => {
+    const rows = school.students.map(s => `
+        <tr id="${s.index_number}">
+          <td>${s.index_number}</td>
+          <td>${s.sex}</td>
+          <td>${s.aggregate ?? '-'}</td>
+          <td>${s.division}</td>
+          <td>${s.subjects}</td>
+        </tr>`).join('');
+
     return `
-    <div class="results-school" id="school-${school.center_number}">
-      <h2>${school.school_name} <small>(${school.center_number})</small></h2>
+    <div class="results-school results-school-detail" id="school-${school.center_number}">
+      <div class="results-school-header">
+        <h2>${school.school_name} <small>(${school.center_number})</small></h2>
+        <button class="results-back-btn" type="button">&#8592; Back to Schools List</button>
+      </div>
       <div class="results-summary">
-        DIV I: ${school.summary.div1} &nbsp;|&nbsp;
-        DIV II: ${school.summary.div2} &nbsp;|&nbsp;
-        DIV III: ${school.summary.div3} &nbsp;|&nbsp;
-        DIV IV: ${school.summary.div4} &nbsp;|&nbsp;
-        ABS/FAIL: ${school.summary.div0}
+        DIV I: <strong>${school.summary.div1}</strong> &nbsp;|&nbsp;
+        DIV II: <strong>${school.summary.div2}</strong> &nbsp;|&nbsp;
+        DIV III: <strong>${school.summary.div3}</strong> &nbsp;|&nbsp;
+        DIV IV: <strong>${school.summary.div4}</strong> &nbsp;|&nbsp;
+        ABS/FAIL: <strong>${school.summary.div0}</strong>
       </div>
       <div class="table-responsive">
         <table class="results-table">
           <thead>
             <tr>
-              <th>Index No.</th><th>Sex</th><th>Aggregate</th>
-              <th>Division</th><th>Subjects</th>
+              <th>CNO</th><th>SEX</th><th>AGGT</th><th>DIV</th><th>SUBJECTS</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -149,7 +165,30 @@ function buildHtml(data: StructuredData, examLabel: string, year: number): strin
     <strong>${data.total_schools}</strong> schools &nbsp;|&nbsp;
     <strong>${data.total_students.toLocaleString()}</strong> candidates
   </div>
-  ${schoolSections}
+
+  <div class="results-index" id="results-index">
+    <div class="table-responsive">
+      <table class="results-table results-index-table">
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th>Centre No.</th>
+            <th>School Name</th>
+            <th>Div I</th>
+            <th>Div II</th>
+            <th>Div III</th>
+            <th>Div IV</th>
+            <th>Abs/Fail</th>
+          </tr>
+        </thead>
+        <tbody>${indexRows}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="results-detail-container" id="results-detail-container">
+    ${schoolSections}
+  </div>
 </div>`.trim();
 }
 

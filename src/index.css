@@ -851,18 +851,95 @@
 }
 
 /* ── Results page tables ─────────────────────────────────────────── */
+.results-page-content .results-stats {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
+}
+.dark .results-page-content .results-stats {
+  background: #1f2937;
+  border-color: #374151;
+  color: #9ca3af;
+}
+
+/* Index table (NECTA-style school listing) */
+.results-page-content .results-index {
+  margin-bottom: 0;
+}
+.results-page-content .results-index-table td:first-child,
+.results-page-content .results-index-table th:first-child {
+  width: 3rem;
+  text-align: center;
+}
+.results-page-content .results-index-table td:nth-child(2),
+.results-page-content .results-index-table th:nth-child(2) {
+  white-space: nowrap;
+}
+.results-page-content .results-school-link {
+  color: #1d4ed8;
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 500;
+}
+.results-page-content .results-school-link:hover {
+  color: #1e40af;
+}
+.dark .results-page-content .results-school-link {
+  color: #60a5fa;
+}
+.dark .results-page-content .results-school-link:hover {
+  color: #93c5fd;
+}
+
+/* School detail section */
 .results-page-content .results-school {
   margin-bottom: 2.5rem;
+}
+.results-page-content .results-school-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #16a34a;
+  flex-wrap: wrap;
 }
 .results-page-content h2 {
   font-size: 1.1rem;
   font-weight: 700;
   color: #1a1a1a;
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #16a34a;
+  margin: 0;
 }
 .dark .results-page-content h2 { color: #f3f4f6; }
+
+.results-page-content .results-back-btn {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #16a34a;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.results-page-content .results-back-btn:hover {
+  background: #dcfce7;
+}
+.dark .results-page-content .results-back-btn {
+  background: #14532d;
+  border-color: #166534;
+  color: #86efac;
+}
+.dark .results-page-content .results-back-btn:hover {
+  background: #166534;
+}
 
 .results-page-content .results-summary {
   font-size: 0.8rem;

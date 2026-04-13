@@ -518,11 +518,11 @@ router.post('/internal-links', async (req: Request, res: Response) => {
 
     const systemPrompt = `You are an expert SEO specialist for an African news and lifestyle website. You analyze article content and identify optimal anchor text opportunities for internal linking. Return ONLY valid JSON.`;
 
-    const postsJson = posts.slice(0, 80).map(p => ({
+    const postsJson = posts.slice(0, 60).map(p => ({
       id: p.id,
       title: p.title,
       slug: p.slug,
-      excerpt: p.excerpt?.substring(0, 150) || '',
+      excerpt: p.excerpt?.substring(0, 80) || '',
       category: p.category || '',
     }));
 
@@ -533,18 +533,18 @@ Rules for link selection:
 2. Anchor text must be contextually relevant to the target post
 3. Prefer specific noun phrases, named concepts, or topic keywords — not generic phrases like "click here"
 4. Each suggestion should link to the MOST relevant post from the list
-5. Identify at least 40 linking opportunities (minimum) — be thorough and find every reasonable opportunity
+5. Identify 10-20 of the strongest linking opportunities — quality over quantity
 6. Don't repeat the same anchor text more than twice
 7. Prioritize high-relevance matches (topic overlap between anchor text and target post)
 8. Include the exact surrounding sentence for context
 
 ARTICLE CONTENT (plain text):
-${plainText.substring(0, 5000)}
+${plainText.substring(0, 4000)}
 
 AVAILABLE POSTS TO LINK TO:
 ${JSON.stringify(postsJson)}
 
-Return ONLY this JSON (find as many as possible, minimum 40):
+Return ONLY this JSON:
 {
   "suggestions": [
     {
@@ -557,11 +557,11 @@ Return ONLY this JSON (find as many as possible, minimum 40):
       "reason": "why this link is contextually relevant"
     }
   ],
-  "totalFound": 42,
+  "totalFound": 15,
   "analysisNotes": "brief note on linking strategy for this article"
 }`;
 
-    const raw = await callAI(prompt, systemPrompt, 5000);
+    const raw = await callAI(prompt, systemPrompt, 8000);
     const parsed = extractJson(raw);
     return res.json(parsed);
   } catch (err: any) {
