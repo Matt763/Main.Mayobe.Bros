@@ -518,10 +518,11 @@ router.post('/internal-links', async (req: Request, res: Response) => {
 
     const systemPrompt = `You are an expert SEO specialist for an African news and lifestyle website. You analyze article content and identify optimal anchor text opportunities for internal linking. Return ONLY valid JSON.`;
 
-    const postsJson = posts.slice(0, 60).map(p => ({
+    const postsJson = posts.slice(0, 60).map((p: any) => ({
       id: p.id,
       title: p.title,
       slug: p.slug,
+      category_slug: p.categorySlug || p.category_slug || '',
       excerpt: p.excerpt?.substring(0, 80) || '',
       category: p.category || '',
     }));

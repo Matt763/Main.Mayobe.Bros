@@ -8,6 +8,7 @@ interface Post {
   id: string;
   title: string;
   slug: string;
+  categorySlug: string;
   excerpt?: string;
   category?: string;
 }
@@ -83,20 +84,31 @@ function insertLinkInContent(html: string, anchorText: string, href: string): st
   }
 }
 
+/** Build the correct post URL from post data */
+function buildPostUrl(post: Post): string {
+  const catSlug = post.categorySlug || '';
+  if (catSlug) return `${SITE_URL}/post/${catSlug}/${post.slug}`;
+  return `${SITE_URL}/post/${post.slug}`;
+}
+
 /** Apply all selected link suggestions to the content */
 function applyLinksToContent(
   html: string,
   suggestions: LinkSuggestion[],
   selected: Set<string>,
+  postMap: Map<string, Post>,
 ): string {
   let result = html;
   const applied = new Set<string>();
 
   for (const s of suggestions) {
     if (!selected.has(s.anchorText + '|' + s.postSlug)) continue;
-    // Don't apply the same anchor text twice
     if (applied.has(s.anchorText.toLowerCase())) continue;
-    const href = `${SITE_URL}/${s.postSlug}`;
+
+    // Look up the real post URL from the post map (by id, fallback by slug match)
+    const post = postMap.get(s.postId) ?? [...postMap.values()].find(p => p.slug === s.postSlug);
+    const href = post ? buildPostUrl(post) : `${SITE_URL}/post/${s.postSlug}`;
+
     const next = insertLinkInContent(result, s.anchorText, href);
     if (next !== result) {
       result = next;
@@ -129,8 +141,9 @@ export default function InArticleLinkPanel({ content, onInsertContent }: InArtic
         id: p.id,
         title: p.title,
         slug: p.slug,
+        categorySlug: p.categories?.slug || p.categorySlug || p.category_slug || '',
         excerpt: p.excerpt || '',
-        category: p.category?.name || p.category_name || '',
+        category: p.categories?.name || p.category?.name || p.category_name || '',
       }));
       setPosts(items);
     } catch {
@@ -200,7 +213,8 @@ export default function InArticleLinkPanel({ content, onInsertContent }: InArtic
 
   const applySelected = () => {
     if (!result || selected.size === 0) return;
-    const updated = applyLinksToContent(content, result.suggestions, selected);
+    const postMap = new Map(posts.map(p => [p.id, p]));
+    const updated = applyLinksToContent(content, result.suggestions, selected, postMap);
     onInsertContent(updated, true);
     setApplied(true);
     setApplyCount(selected.size);
