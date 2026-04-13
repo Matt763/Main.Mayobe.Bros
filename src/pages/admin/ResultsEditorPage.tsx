@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import AdminLayout from '../../components/admin/AdminLayout';
@@ -31,17 +31,27 @@ export default function ResultsEditorPage() {
   const [status, setStatus]     = useState<'draft' | 'published'>('draft');
   const [saving, setSaving]     = useState(false);
   const [toast, setToast]       = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [pendingNavigateId, setPendingNavigateId] = useState<string | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
+  // Decouple navigation from async callback — useEffect fires after render, safe from batching
+  useEffect(() => {
+    if (!pendingNavigateId) return;
+    navigate(`/admin/results/${pendingNavigateId}`, { replace: true });
+  }, [pendingNavigateId, navigate]);
+
   // Load existing result when editing
   useEffect(() => {
     if (!isEditing) return;
     api.results.getById(id!).then(r => {
-      if (!r) return;
+      if (!r) {
+        showToast('Result not found or access denied', 'error');
+        return;
+      }
       setTitle(r.title);
       setSlug(r.slug);
       setYear(r.year);
@@ -53,6 +63,8 @@ export default function ResultsEditorPage() {
       setMetaDesc(r.meta_description || '');
       setMetaKeys(r.meta_keywords || '');
       setStatus(r.status as 'draft' | 'published');
+    }).catch((err: any) => {
+      showToast(err?.message || 'Failed to load result', 'error');
     });
   }, [id, isEditing]);
 
@@ -62,10 +74,14 @@ export default function ResultsEditorPage() {
     if (!isEditing) setSlug(slugify(val));
   };
 
-  // Called by AIResultsAssistant when crawl saves as draft — navigate to edit mode
-  const handleCrawlComplete = (result: any) => {
-    navigate(`/admin/results/${result.id}`, { replace: true });
-  };
+  // Called by AIResultsAssistant when crawl saves as draft
+  const handleCrawlComplete = useCallback((result: any) => {
+    if (result?.id) {
+      setPendingNavigateId(result.id);
+    } else {
+      showToast('Crawl completed but no result ID returned', 'error');
+    }
+  }, []);
 
   const handleSave = async (saveStatus: 'draft' | 'published') => {
     if (!title.trim() || !slug.trim()) {
