@@ -68,7 +68,7 @@ function insertLinkInContent(html: string, anchorText: string, href: string): st
       a.href = href;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
-      a.style.color = '#357c27';
+      a.className = 'ai-internal-link';
       a.textContent = text.slice(idx, idx + anchorText.length); // preserves original casing
 
       const parent = node.parentNode!;

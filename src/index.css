@@ -850,6 +850,16 @@
   background: rgba(52, 124, 37, 0.65);
 }
 
+/* ── AI In-Article Links ─────────────────────────────────────────── */
+a.ai-internal-link {
+  color: #357c27 !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+a.ai-internal-link:hover {
+  color: #2a6120 !important;
+}
+
 /* ── Results page tables ─────────────────────────────────────────── */
 .results-page-content .results-stats {
   font-size: 0.85rem;
