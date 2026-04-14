@@ -35,6 +35,21 @@ export default function NectaIndexPage() {
   const [showDrop, setShowDrop] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
+  // Isolate page from site-wide dark mode / theme
+  useEffect(() => {
+    const prevBodyBg  = document.body.style.background;
+    const prevBodyMin = document.body.style.minHeight;
+    const prevHtmlBg  = document.documentElement.style.background;
+    document.body.style.background  = '#ffffc0';
+    document.body.style.minHeight   = '100vh';
+    document.documentElement.style.background = '#ffffc0';
+    return () => {
+      document.body.style.background  = prevBodyBg;
+      document.body.style.minHeight   = prevBodyMin;
+      document.documentElement.style.background = prevHtmlBg;
+    };
+  }, []);
+
   useEffect(() => {
     if (!year || !examType) return;
     setLoading(true);
@@ -121,6 +136,7 @@ export default function NectaIndexPage() {
             fontSize: '13px',
             border: '1px solid #999',
             background: '#fff',
+            color: '#000',
             outline: 'none',
             boxSizing: 'border-box',
           }}
@@ -150,12 +166,12 @@ export default function NectaIndexPage() {
                   cursor: 'pointer',
                   borderBottom: '1px solid #eee',
                   fontSize: '12px',
+                  color: '#000',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#e8f0fe')}
                 onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
               >
                 <span style={{ color: '#000099', fontWeight: 'bold' }}>{s.school_name}</span>
-                <span style={{ color: '#888', marginLeft: '8px', fontSize: '11px' }}>{s.center_number}</span>
               </div>
             ))}
           </div>
@@ -192,7 +208,7 @@ export default function NectaIndexPage() {
         {query && <span style={{ color: '#cc0000' }}> for &ldquo;{query}&rdquo;</span>}
       </div>
 
-      {/* 4-column school grid */}
+      {/* 4-column school grid — school names only, no centre numbers, no division data */}
       {filtered.length === 0 ? (
         <p style={{ color: '#666' }}>No schools match your search.</p>
       ) : (
@@ -205,7 +221,7 @@ export default function NectaIndexPage() {
                     key={school.id}
                     style={{
                       background: CELL_COLORS[ci % 4],
-                      padding: '5px 7px',
+                      padding: '4px 7px',
                       width: '25%',
                       verticalAlign: 'top',
                       cursor: 'pointer',

@@ -13,15 +13,24 @@ router.get('/:year/:examType', async (req, res) => {
 
     if (!year || !examType) return res.status(400).json({ error: 'year and examType are required' });
 
-    const { data, error } = await supabase
-      .from('result_schools')
-      .select('id, center_number, center_slug, school_name, summary, total_students, year, exam_type')
-      .eq('year', year)
-      .eq('exam_type', examType)
-      .order('school_name', { ascending: true });
-
-    if (error) throw error;
-    res.json(data || []);
+    // Paginate to fetch all schools — PostgREST default caps at 1000 rows
+    const PAGE = 1000;
+    let allData: any[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('result_schools')
+        .select('id, center_number, center_slug, school_name')
+        .eq('year', year)
+        .eq('exam_type', examType)
+        .order('school_name', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      allData = allData.concat(data || []);
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+    res.json(allData);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

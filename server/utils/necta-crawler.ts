@@ -33,7 +33,7 @@ function extractSchoolsFromIndex(html: string, baseUrl: string): Array<{
 
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href') || '';
-    if (!href.match(/results\/[PS]\d+\.htm/i)) return;
+    if (!href.match(/results\/[A-Z]\d+\.htm/i)) return;
 
     const centerMatch = href.match(/([PS]\d+)\.htm/i);
     if (!centerMatch) return;

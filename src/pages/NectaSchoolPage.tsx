@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
@@ -42,6 +42,12 @@ interface SchoolData {
   total_students: number;
 }
 
+interface SchoolListItem {
+  id: string;
+  center_slug: string;
+  school_name: string;
+}
+
 function n(v: number | undefined) { return v ?? 0; }
 
 function examFullName(examType: string, year: string | number): string {
@@ -57,10 +63,34 @@ function examFullName(examType: string, year: string | number): string {
 export default function NectaSchoolPage() {
   const { year, examType, centerSlug } = useParams<{ year: string; examType: string; centerSlug: string }>();
   const navigate = useNavigate();
-  const [school, setSchool] = useState<SchoolData | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const [school, setSchool]     = useState<SchoolData | null>(null);
+  const [loading, setLoading]   = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  // Live search state
+  const [allSchools, setAllSchools]         = useState<SchoolListItem[]>([]);
+  const [searchQuery, setSearchQuery]       = useState('');
+  const [suggestions, setSuggestions]       = useState<SchoolListItem[]>([]);
+  const [showDrop, setShowDrop]             = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Isolate page from site-wide dark mode / theme
+  useEffect(() => {
+    const prevBodyBg  = document.body.style.background;
+    const prevBodyMin = document.body.style.minHeight;
+    const prevHtmlBg  = document.documentElement.style.background;
+    document.body.style.background  = '#b3d9f5';
+    document.body.style.minHeight   = '100vh';
+    document.documentElement.style.background = '#b3d9f5';
+    return () => {
+      document.body.style.background  = prevBodyBg;
+      document.body.style.minHeight   = prevBodyMin;
+      document.documentElement.style.background = prevHtmlBg;
+    };
+  }, []);
+
+  // Load this school's data
   useEffect(() => {
     if (!year || !examType || !centerSlug) return;
     setLoading(true);
@@ -73,6 +103,36 @@ export default function NectaSchoolPage() {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [year, examType, centerSlug]);
+
+  // Load all schools for live search (lightweight — name + slug only)
+  useEffect(() => {
+    if (!year || !examType) return;
+    api.resultSchools.listByExam(parseInt(year), examType)
+      .then(data => setAllSchools(data || []))
+      .catch(() => {});
+  }, [year, examType]);
+
+  // Filter suggestions from search query
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) { setSuggestions([]); setShowDrop(false); return; }
+    const matches = allSchools
+      .filter(s => s.school_name.toLowerCase().includes(q) && s.center_slug !== centerSlug)
+      .slice(0, 12);
+    setSuggestions(matches);
+    setShowDrop(matches.length > 0);
+  }, [searchQuery, allSchools, centerSlug]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDrop(false);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   const pageStyle: React.CSSProperties = {
     minHeight: '100vh',
@@ -136,6 +196,62 @@ export default function NectaSchoolPage() {
       <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold' }}>
         {school.center_number} - {school.school_name}
       </h4>
+
+      {/* Live search — find another school */}
+      <div ref={searchRef} style={{ position: 'relative', marginBottom: '10px', maxWidth: '420px' }}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search another school..."
+          style={{
+            width: '100%',
+            padding: '5px 10px',
+            fontSize: '12px',
+            border: '1px solid #999',
+            background: '#fff',
+            color: '#000',
+            outline: 'none',
+            boxSizing: 'border-box',
+          }}
+        />
+        {showDrop && (
+          <div style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            background: '#fff',
+            border: '1px solid #999',
+            borderTop: 'none',
+            zIndex: 100,
+            maxHeight: '240px',
+            overflowY: 'auto',
+          }}>
+            {suggestions.map(s => (
+              <div
+                key={s.id}
+                onMouseDown={() => {
+                  setShowDrop(false);
+                  setSearchQuery('');
+                  navigate(`/matokeo/${year}/${examType}/${s.center_slug}`);
+                }}
+                style={{
+                  padding: '5px 10px',
+                  cursor: 'pointer',
+                  borderBottom: '1px solid #eee',
+                  fontSize: '12px',
+                  color: '#000',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#e8f0fe')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+              >
+                <span style={{ color: '#000099' }}>{s.school_name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Back link */}
       <div style={{ marginBottom: '10px' }}>
