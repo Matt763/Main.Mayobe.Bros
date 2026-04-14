@@ -4,9 +4,8 @@ import type { CrawlEvent, CrawlResult, DivCount, School, Student, StructuredData
 
 const NECTA_ORIGIN = 'https://onlinesys.necta.go.tz';
 const SITE_ORIGIN  = 'https://www.mayobebros.com';
-const BATCH_SIZE          = 25;
-const BATCH_DELAY         = 0;   // ms between batches
-const MAX_SCHOOLS_CRAWL   = 150; // cap to stay within Vercel 300s + Supabase payload limits
+const BATCH_SIZE  = 20;  // parallel fetches per batch
+const BATCH_DELAY = 0;   // ms between batches
 
 function slugify(text: string): string {
   return text
@@ -257,20 +256,13 @@ export async function crawlNectaResults(
 
   onEvent({ stage: 'crawling', progress: 0, total: 0, message: 'Fetching index page...' });
 
-  const indexHtml = await fetchHtml(url);
-  const allLinks   = extractSchoolLinks(indexHtml, url);
-  const truncated  = allLinks.length > MAX_SCHOOLS_CRAWL;
-  const schoolLinks = truncated ? allLinks.slice(0, MAX_SCHOOLS_CRAWL) : allLinks;
-  const total      = schoolLinks.length;
+  const indexHtml  = await fetchHtml(url);
+  const schoolLinks = extractSchoolLinks(indexHtml, url);
+  const total       = schoolLinks.length;
 
   if (total === 0) throw new Error('No school links found on this page.');
 
-  onEvent({
-    stage: 'crawling', progress: 0, total,
-    message: truncated
-      ? `Found ${allLinks.length} schools. Crawling first ${total} (national index limit)...`
-      : `Found ${total} schools. Starting crawl...`,
-  });
+  onEvent({ stage: 'crawling', progress: 0, total, message: `Found ${total} schools. Starting crawl...` });
 
   const schools: School[] = [];
   let processed = 0;
@@ -278,35 +270,23 @@ export async function crawlNectaResults(
   for (let i = 0; i < schoolLinks.length; i += BATCH_SIZE) {
     const batch = schoolLinks.slice(i, i + BATCH_SIZE);
 
-    for (const link of batch) {
-      const centerMatch = link.match(/([PS]\d+)\.htm/i);
+    await Promise.all(batch.map(async (link) => {
+      const centerMatch  = link.match(/([PS]\d+)\.htm/i);
       const centerNumber = centerMatch ? centerMatch[1].toUpperCase() : 'UNKNOWN';
       try {
-        const html = await fetchHtml(link);
-        const school = parseSchoolPage(html, centerNumber);
+        const html    = await fetchHtml(link);
+        const school  = parseSchoolPage(html, centerNumber);
         schools.push(school);
-        processed++;
-        onEvent({
-          stage: 'crawling',
-          progress: processed,
-          total,
-          message: `Crawling schools... ${processed}/${total}`,
-        });
-        if (onSchoolCrawled) {
-          await onSchoolCrawled(school, processed, total);
-        }
+        if (onSchoolCrawled) await onSchoolCrawled(school, processed + 1, total);
       } catch {
+        // skip failed pages silently
+      } finally {
         processed++;
-        onEvent({
-          stage: 'crawling',
-          progress: processed,
-          total,
-          message: `Crawling schools... ${processed}/${total}`,
-        });
+        onEvent({ stage: 'crawling', progress: processed, total, message: `Crawling schools... ${processed}/${total}` });
       }
-    }
+    }));
 
-    if (i + BATCH_SIZE < schoolLinks.length) {
+    if (i + BATCH_SIZE < schoolLinks.length && BATCH_DELAY > 0) {
       await new Promise(r => setTimeout(r, BATCH_DELAY));
     }
   }
@@ -347,17 +327,8 @@ JSON only, no explanation.`
 
   onEvent({ stage: 'building', progress: 1, total: 1, message: 'Building HTML content...' });
 
-  // Transform NECTA URLs to site URLs in any residual links
-  let content = buildHtml(structured_data, examLabel, year)
+  const content = buildHtml(structured_data, examLabel, year)
     .replace(new RegExp(NECTA_ORIGIN, 'g'), SITE_ORIGIN);
-
-  // Append notice when crawl was capped at MAX_SCHOOLS_CRAWL
-  if (truncated) {
-    content += `\n<div class="results-note" style="margin:2rem 0;padding:1rem 1.25rem;background:#fff3cd;border:1px solid #ffc107;border-radius:0.5rem;font-size:0.875rem;">
-  <strong>⚠️ Imeonyeshwa shule ${MAX_SCHOOLS_CRAWL} kati ya ${allLinks.length}.</strong>
-  Kwa matokeo ya shule zote, <a href="${url}" target="_blank" rel="noopener noreferrer">tembelea tovuti ya NECTA →</a>
-</div>`;
-  }
 
   const slug = slugify(`${exam_type}-${year}-results`);
 

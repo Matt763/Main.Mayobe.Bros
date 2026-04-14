@@ -42,76 +42,16 @@ interface SchoolData {
   total_students: number;
 }
 
-const SITE_TITLE = 'MAYOBE BROS';
+function n(v: number | undefined) { return v ?? 0; }
 
-function divLabel(n: number | undefined) {
-  return n ?? 0;
-}
-
-function SummaryTable({ summary }: { summary: SchoolSummary }) {
-  const m = summary.male   ?? { div1: 0, div2: 0, div3: 0, div4: 0, div0: 0, total: 0 };
-  const f = summary.female ?? { div1: 0, div2: 0, div3: 0, div4: 0, div0: 0, total: 0 };
-  const t = summary.total  ?? {
-    div1: summary.div1, div2: summary.div2, div3: summary.div3,
-    div4: summary.div4, div0: summary.div0,
-    total: summary.div1 + summary.div2 + summary.div3 + summary.div4 + summary.div0,
+function examFullName(examType: string, year: string | number): string {
+  const map: Record<string, string> = {
+    ftna:  `FORM TWO NATIONAL ASSESSMENT (FTNA) ${year} RESULTS`,
+    csee:  `CERTIFICATE OF SECONDARY EDUCATION EXAMINATION (CSEE) ${year} RESULTS`,
+    acsee: `ADVANCED CERTIFICATE OF SECONDARY EDUCATION EXAMINATION (ACSEE) ${year} RESULTS`,
+    psle:  `PRIMARY SCHOOL LEAVING EXAMINATION (PSLE) ${year} RESULTS`,
   };
-
-  const thStyle: React.CSSProperties = {
-    padding: '4px 8px', border: '1px solid #555', background: '#003880',
-    color: '#fff', textAlign: 'center', fontSize: '12px',
-  };
-  const tdStyle: React.CSSProperties = {
-    padding: '4px 8px', border: '1px solid #999', textAlign: 'center', fontSize: '13px',
-  };
-  const tdLabelStyle: React.CSSProperties = {
-    ...tdStyle, fontWeight: 'bold', background: '#d0e8f8', textAlign: 'left',
-  };
-
-  return (
-    <table cellPadding={0} cellSpacing={0} style={{ borderCollapse: 'collapse', marginBottom: '16px' }}>
-      <thead>
-        <tr>
-          <th style={thStyle}>SEX</th>
-          <th style={thStyle}>DIV I</th>
-          <th style={thStyle}>DIV II</th>
-          <th style={thStyle}>DIV III</th>
-          <th style={thStyle}>DIV IV</th>
-          <th style={thStyle}>DIV 0</th>
-          <th style={thStyle}>TOTAL</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr style={{ background: '#ffffc0' }}>
-          <td style={tdLabelStyle}>MALE</td>
-          <td style={tdStyle}>{divLabel(m.div1)}</td>
-          <td style={tdStyle}>{divLabel(m.div2)}</td>
-          <td style={tdStyle}>{divLabel(m.div3)}</td>
-          <td style={tdStyle}>{divLabel(m.div4)}</td>
-          <td style={tdStyle}>{divLabel(m.div0)}</td>
-          <td style={tdStyle}><strong>{divLabel(m.total)}</strong></td>
-        </tr>
-        <tr style={{ background: '#e8f8ff' }}>
-          <td style={tdLabelStyle}>FEMALE</td>
-          <td style={tdStyle}>{divLabel(f.div1)}</td>
-          <td style={tdStyle}>{divLabel(f.div2)}</td>
-          <td style={tdStyle}>{divLabel(f.div3)}</td>
-          <td style={tdStyle}>{divLabel(f.div4)}</td>
-          <td style={tdStyle}>{divLabel(f.div0)}</td>
-          <td style={tdStyle}><strong>{divLabel(f.total)}</strong></td>
-        </tr>
-        <tr style={{ background: '#d4edda' }}>
-          <td style={{ ...tdLabelStyle, background: '#b8dfc5' }}>TOTAL</td>
-          <td style={tdStyle}><strong>{divLabel(t.div1)}</strong></td>
-          <td style={tdStyle}><strong>{divLabel(t.div2)}</strong></td>
-          <td style={tdStyle}><strong>{divLabel(t.div3)}</strong></td>
-          <td style={tdStyle}><strong>{divLabel(t.div4)}</strong></td>
-          <td style={tdStyle}><strong>{divLabel(t.div0)}</strong></td>
-          <td style={tdStyle}><strong>{divLabel(t.total)}</strong></td>
-        </tr>
-      </tbody>
-    </table>
-  );
+  return map[examType?.toLowerCase()] ?? `${examType?.toUpperCase()} ${year} RESULTS`;
 }
 
 export default function NectaSchoolPage() {
@@ -128,156 +68,170 @@ export default function NectaSchoolPage() {
       .then(data => {
         if (!data) { setNotFound(true); return; }
         setSchool(data);
-        document.title = `${data.school_name} — ${examType.toUpperCase()} ${year} | ${SITE_TITLE}`;
+        document.title = `${data.school_name} | ${examType.toUpperCase()} ${year} | Mayobe Bros`;
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [year, examType, centerSlug]);
 
-  const examLabel = examType?.toUpperCase() ?? '';
+  const pageStyle: React.CSSProperties = {
+    minHeight: '100vh',
+    background: '#b3d9f5',
+    fontFamily: 'Arial, Helvetica, sans-serif',
+    fontSize: '13px',
+    color: '#000',
+    padding: '10px 16px',
+  };
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#b3d9f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ fontFamily: 'Arial, sans-serif', color: '#003880' }}>Loading school results...</p>
+      <div style={pageStyle}>
+        <b>NATIONAL EXAMINATIONS COUNCIL OF TANZANIA</b>
+        <p>Loading school results...</p>
       </div>
     );
   }
 
   if (notFound || !school) {
     return (
-      <div style={{ minHeight: '100vh', background: '#b3d9f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>
-          <h2 style={{ color: '#003880' }}>School Not Found</h2>
-          <p style={{ color: '#333' }}>No results found for this school.</p>
-          <button
-            onClick={() => navigate(`/matokeo/${year}/${examType}`)}
-            style={{ marginTop: '12px', padding: '8px 20px', background: '#003880', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'Arial, sans-serif' }}
-          >
-            ← Back to Schools List
-          </button>
-        </div>
+      <div style={pageStyle}>
+        <b>NATIONAL EXAMINATIONS COUNCIL OF TANZANIA</b>
+        <p>School not found.</p>
+        <a
+          href={`/matokeo/${year}/${examType}`}
+          onClick={e => { e.preventDefault(); navigate(`/matokeo/${year}/${examType}`); }}
+          style={{ color: '#000099' }}
+        >
+          ← Back to Schools Index
+        </a>
       </div>
     );
   }
 
-  const thStyle: React.CSSProperties = {
-    padding: '4px 8px', border: '1px solid #555', background: '#003880',
-    color: '#fff', textAlign: 'center', fontSize: '12px', whiteSpace: 'nowrap',
+  const sm = school.summary;
+  const male   = sm.male   ?? { div1: 0, div2: 0, div3: 0, div4: 0, div0: 0, total: 0 };
+  const female = sm.female ?? { div1: 0, div2: 0, div3: 0, div4: 0, div0: 0, total: 0 };
+  const total  = sm.total  ?? {
+    div1: sm.div1, div2: sm.div2, div3: sm.div3, div4: sm.div4, div0: sm.div0,
+    total: sm.div1 + sm.div2 + sm.div3 + sm.div4 + sm.div0,
   };
 
+  // Table shared styles
+  const tbl: React.CSSProperties = { borderCollapse: 'collapse', fontSize: '12px' };
+  const th: React.CSSProperties  = { border: '1px solid #666', padding: '2px 8px', background: '#d0d0d0', textAlign: 'center', fontWeight: 'bold' };
+  const td: React.CSSProperties  = { border: '1px solid #999', padding: '2px 8px', textAlign: 'center' };
+  const tdL: React.CSSProperties = { ...td, textAlign: 'left', fontWeight: 'bold', background: '#e0e0e0' };
+
   return (
-    <div style={{ minHeight: '100vh', background: '#b3d9f5', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '14px', color: '#000' }}>
-      {/* NECTA-style top header */}
-      <table width="100%" cellPadding={0} cellSpacing={0} style={{ background: 'linear-gradient(180deg,#003880 0%,#001f5c 100%)', marginBottom: 0 }}>
-        <tbody>
-          <tr>
-            <td style={{ padding: '10px 20px', textAlign: 'center' }}>
-              <div style={{ color: '#fff', fontSize: '11px', letterSpacing: '1px', opacity: 0.8 }}>UNITED REPUBLIC OF TANZANIA</div>
-              <div style={{ color: '#ffd700', fontSize: '18px', fontWeight: 'bold', margin: '2px 0' }}>
-                NATIONAL EXAMINATIONS COUNCIL OF TANZANIA
-              </div>
-              <div style={{ color: '#fff', fontSize: '11px', letterSpacing: '0.5px', opacity: 0.8 }}>VIA MAYOBE BROS</div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div style={pageStyle}>
+      {/* NECTA plain-text header */}
+      <div style={{ marginBottom: '4px' }}>
+        <b>NATIONAL EXAMINATIONS COUNCIL OF TANZANIA</b>
+      </div>
 
-      {/* Exam + school title bar */}
-      <table width="100%" cellPadding={0} cellSpacing={0} style={{ background: '#003880', marginBottom: 0 }}>
-        <tbody>
-          <tr>
-            <td style={{ padding: '6px 20px', textAlign: 'center' }}>
-              <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '14px' }}>
-                {examLabel} {year} EXAMINATION RESULTS
-              </div>
-              <div style={{ color: '#ffd700', fontSize: '13px', marginTop: '2px' }}>
-                {school.school_name} ({school.center_number})
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <h3 style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: 'bold' }}>
+        {examFullName(examType!, year!)}
+      </h3>
 
-      <div style={{ padding: '14px 20px' }}>
-        {/* Back button */}
-        <button
-          onClick={() => navigate(`/matokeo/${year}/${examType}`)}
-          style={{
-            marginBottom: '14px', padding: '5px 14px', background: '#003880', color: '#fff',
-            border: 'none', cursor: 'pointer', fontFamily: 'Arial, sans-serif', fontSize: '13px',
-          }}
+      <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 'bold' }}>
+        {school.center_number} - {school.school_name}
+      </h4>
+
+      {/* Back link */}
+      <div style={{ marginBottom: '10px' }}>
+        <a
+          href={`/matokeo/${year}/${examType}`}
+          onClick={e => { e.preventDefault(); navigate(`/matokeo/${year}/${examType}`); }}
+          style={{ color: '#000099', fontSize: '12px' }}
         >
-          ← Back to Schools List
-        </button>
+          ← Back to Schools Index
+        </a>
+      </div>
 
-        {/* Division Performance Summary */}
-        <div style={{ marginBottom: '6px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', color: '#003880' }}>
-          Division Performance Summary
-        </div>
-        <SummaryTable summary={school.summary} />
+      {/* Division Performance Summary */}
+      <div style={{ marginBottom: '4px', fontWeight: 'bold', fontSize: '12px' }}>
+        DIVISION PERFORMANCE SUMMARY
+      </div>
+      <table style={{ ...tbl, marginBottom: '16px' }}>
+        <thead>
+          <tr>
+            <th style={th}>SEX</th>
+            <th style={th}>I</th>
+            <th style={th}>II</th>
+            <th style={th}>III</th>
+            <th style={th}>IV</th>
+            <th style={th}>0</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style={tdL}>F</td>
+            <td style={td}>{n(female.div1)}</td>
+            <td style={td}>{n(female.div2)}</td>
+            <td style={td}>{n(female.div3)}</td>
+            <td style={td}>{n(female.div4)}</td>
+            <td style={td}>{n(female.div0)}</td>
+          </tr>
+          <tr>
+            <td style={tdL}>M</td>
+            <td style={td}>{n(male.div1)}</td>
+            <td style={td}>{n(male.div2)}</td>
+            <td style={td}>{n(male.div3)}</td>
+            <td style={td}>{n(male.div4)}</td>
+            <td style={td}>{n(male.div0)}</td>
+          </tr>
+          <tr>
+            <td style={{ ...tdL, background: '#c0c0c0' }}>T</td>
+            <td style={td}><b>{n(total.div1)}</b></td>
+            <td style={td}><b>{n(total.div2)}</b></td>
+            <td style={td}><b>{n(total.div3)}</b></td>
+            <td style={td}><b>{n(total.div4)}</b></td>
+            <td style={td}><b>{n(total.div0)}</b></td>
+          </tr>
+        </tbody>
+      </table>
 
-        {/* Student results table */}
-        <div style={{ marginBottom: '6px', fontWeight: 'bold', fontSize: '13px', textTransform: 'uppercase', color: '#003880' }}>
-          Candidates Results — {school.total_students} Candidates
-        </div>
-
+      {/* Student results table */}
+      {school.students.length === 0 ? (
+        <p style={{ color: '#666', fontSize: '12px' }}>No student data available.</p>
+      ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table
-            width="100%"
-            cellPadding={0}
-            cellSpacing={0}
-            style={{ borderCollapse: 'collapse', border: '1px solid #555', background: '#fff', minWidth: '700px' }}
-          >
+          <table style={{ ...tbl, width: '100%', minWidth: '700px' }}>
             <thead>
-              <tr>
-                <th style={{ ...thStyle, width: '110px' }}>CNO</th>
-                <th style={{ ...thStyle, width: '110px' }}>PREM NO</th>
-                <th style={{ ...thStyle, width: '50px' }}>SEX</th>
-                <th style={{ ...thStyle, width: '55px' }}>AGGT</th>
-                <th style={{ ...thStyle, width: '55px' }}>DIV</th>
-                <th style={{ ...thStyle }}>DETAILED SUBJECTS</th>
+              <tr style={{ background: '#d0d0d0' }}>
+                <th style={{ ...th, width: '100px' }}>CNO</th>
+                <th style={{ ...th, width: '100px' }}>PReM NO</th>
+                <th style={{ ...th, width: '40px' }}>SEX</th>
+                <th style={{ ...th, width: '50px' }}>AGGT</th>
+                <th style={{ ...th, width: '55px' }}>DIV</th>
+                <th style={{ ...th, textAlign: 'left' }}>DETAILED SUBJECTS</th>
               </tr>
             </thead>
             <tbody>
-              {school.students.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '12px', textAlign: 'center', color: '#666' }}>
-                    No student data available.
-                  </td>
-                </tr>
-              ) : (
-                school.students.map((s, i) => (
-                  <tr
-                    key={s.index_number + i}
-                    style={{ background: i % 2 === 0 ? '#ffffc0' : '#e8f0ff' }}
-                  >
-                    <td style={{ padding: '3px 8px', border: '1px solid #ccc', fontFamily: 'monospace', fontSize: '12px' }}>
-                      {s.index_number}
-                    </td>
-                    <td style={{ padding: '3px 8px', border: '1px solid #ccc', fontFamily: 'monospace', fontSize: '12px' }}>
-                      {s.index_number}
-                    </td>
-                    <td style={{ padding: '3px 8px', border: '1px solid #ccc', textAlign: 'center' }}>{s.sex}</td>
-                    <td style={{ padding: '3px 8px', border: '1px solid #ccc', textAlign: 'center' }}>{s.aggregate ?? '-'}</td>
-                    <td style={{ padding: '3px 8px', border: '1px solid #ccc', textAlign: 'center', fontWeight: 'bold' }}>
-                      {s.division}
-                    </td>
-                    <td style={{ padding: '3px 8px', border: '1px solid #ccc', fontFamily: 'monospace', fontSize: '11px', wordBreak: 'break-word' }}>
-                      {s.subjects}
-                    </td>
+              {school.students.map((s, i) => {
+                const rowBg = i % 2 === 0 ? '#ffffc0' : '#b3d9f5';
+                const tdR: React.CSSProperties = { border: '1px solid #ccc', padding: '2px 6px', background: rowBg, textAlign: 'center', fontSize: '12px' };
+                const tdRS: React.CSSProperties = { ...tdR, textAlign: 'left', fontFamily: 'monospace' };
+                return (
+                  <tr key={s.index_number + i}>
+                    <td style={{ ...tdR, fontFamily: 'monospace' }}>{s.index_number}</td>
+                    <td style={{ ...tdR, fontFamily: 'monospace' }}>{s.index_number}</td>
+                    <td style={tdR}>{s.sex}</td>
+                    <td style={tdR}>{s.aggregate ?? 'ABS'}</td>
+                    <td style={{ ...tdR, fontWeight: 'bold' }}>{s.division || 'ABS'}</td>
+                    <td style={tdRS}>{s.subjects}</td>
                   </tr>
-                ))
-              )}
+                );
+              })}
             </tbody>
           </table>
         </div>
+      )}
 
-        {/* Footer */}
-        <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '11px', color: '#444' }}>
-          <a href="https://www.mayobebros.com" style={{ color: '#003880' }}>mayobebros.com</a>
-          {' '}&mdash; Data sourced from NECTA Tanzania
-        </div>
+      <div style={{ marginTop: '14px', fontSize: '11px', color: '#444' }}>
+        Data via{' '}
+        <a href="https://www.mayobebros.com" style={{ color: '#000099' }}>mayobebros.com</a>
+        , sourced from NECTA Tanzania
       </div>
     </div>
   );
