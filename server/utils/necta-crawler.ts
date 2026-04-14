@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import axios from 'axios';
-import type { CrawlEvent, CrawlResult, School, Student, StructuredData } from '../types/results.js';
+import type { CrawlEvent, CrawlResult, DivCount, School, Student, StructuredData } from '../types/results.js';
 
 const NECTA_ORIGIN = 'https://onlinesys.necta.go.tz';
 const SITE_ORIGIN  = 'https://www.mayobebros.com';
@@ -37,6 +37,13 @@ function extractSchoolLinks(html: string, baseUrl: string): string[] {
   return [...new Set(links)];
 }
 
+function parseDivRow(cells: cheerio.Cheerio<any>, $: cheerio.CheerioAPI, offset = 1): DivCount {
+  const n = (i: number) => parseInt($(cells[offset + i])?.text?.() ?? '') || 0;
+  const div1 = n(0); const div2 = n(1); const div3 = n(2); const div4 = n(3); const div0 = n(4);
+  const total = div1 + div2 + div3 + div4 + div0;
+  return { div1, div2, div3, div4, div0, total };
+}
+
 function parseSchoolPage(html: string, centerNumber: string): School {
   const $ = cheerio.load(html);
 
@@ -44,20 +51,41 @@ function parseSchoolPage(html: string, centerNumber: string): School {
   const rawTitle = $('title').text() || $('h1,h2,h3').first().text() || centerNumber;
   const school_name = rawTitle.replace(/results|enquir[iy]es?|necta|\d{4}/gi, '').trim() || centerNumber;
 
-  // Summary table — first table: div counts by sex
-  const summary = { div1: 0, div2: 0, div3: 0, div4: 0, div0: 0 };
+  // Summary table — first table: div counts by sex (rows: M, F, T)
+  const zeroRow = (): DivCount => ({ div1: 0, div2: 0, div3: 0, div4: 0, div0: 0, total: 0 });
+  let male = zeroRow(), female = zeroRow(), totalRow = zeroRow();
   const summaryTable = $('table').first();
   summaryTable.find('tr').each((_, row) => {
     const cells = $(row).find('td');
     if (cells.length < 6) return;
-    const div1 = parseInt($(cells[1]).text()) || 0;
-    const div2 = parseInt($(cells[2]).text()) || 0;
-    const div3 = parseInt($(cells[3]).text()) || 0;
-    const div4 = parseInt($(cells[4]).text()) || 0;
-    const div0 = parseInt($(cells[5]).text()) || 0;
-    summary.div1 += div1; summary.div2 += div2; summary.div3 += div3;
-    summary.div4 += div4; summary.div0 += div0;
+    const label = $(cells[0]).text().trim().toUpperCase();
+    if (label === 'M' || label === 'MALE' || label === 'BOYS') {
+      male = parseDivRow(cells, $);
+    } else if (label === 'F' || label === 'FEM' || label === 'FEMALE' || label === 'GIRLS') {
+      female = parseDivRow(cells, $);
+    } else if (label === 'T' || label === 'TOTAL') {
+      totalRow = parseDivRow(cells, $);
+    } else if (cells.length >= 6) {
+      // Fallback: add all rows to total
+      const r = parseDivRow(cells, $);
+      totalRow.div1 += r.div1; totalRow.div2 += r.div2; totalRow.div3 += r.div3;
+      totalRow.div4 += r.div4; totalRow.div0 += r.div0; totalRow.total += r.total;
+    }
   });
+  // If totals were computed by label, compute them from M+F if missing
+  if (totalRow.total === 0 && (male.total > 0 || female.total > 0)) {
+    totalRow = {
+      div1: male.div1 + female.div1, div2: male.div2 + female.div2,
+      div3: male.div3 + female.div3, div4: male.div4 + female.div4,
+      div0: male.div0 + female.div0,
+      total: male.total + female.total,
+    };
+  }
+  const summary = {
+    div1: totalRow.div1, div2: totalRow.div2, div3: totalRow.div3,
+    div4: totalRow.div4, div0: totalRow.div0,
+    male, female, total: totalRow,
+  };
 
   // Student results table — second table
   const students: Student[] = [];
@@ -214,6 +242,7 @@ async function callClaude(apiKey: string, prompt: string): Promise<string> {
 export async function crawlNectaResults(
   url: string,
   onEvent: (e: CrawlEvent) => void,
+  onSchoolCrawled?: (school: School, progress: number, total: number) => Promise<void>,
 ): Promise<CrawlResult> {
   // Validate origin
   if (!url.startsWith(NECTA_ORIGIN)) {
@@ -249,24 +278,33 @@ export async function crawlNectaResults(
   for (let i = 0; i < schoolLinks.length; i += BATCH_SIZE) {
     const batch = schoolLinks.slice(i, i + BATCH_SIZE);
 
-    await Promise.all(batch.map(async (link) => {
+    for (const link of batch) {
       const centerMatch = link.match(/([PS]\d+)\.htm/i);
       const centerNumber = centerMatch ? centerMatch[1].toUpperCase() : 'UNKNOWN';
       try {
         const html = await fetchHtml(link);
         const school = parseSchoolPage(html, centerNumber);
         schools.push(school);
+        processed++;
+        onEvent({
+          stage: 'crawling',
+          progress: processed,
+          total,
+          message: `Crawling schools... ${processed}/${total}`,
+        });
+        if (onSchoolCrawled) {
+          await onSchoolCrawled(school, processed, total);
+        }
       } catch {
-        // skip failed pages silently
+        processed++;
+        onEvent({
+          stage: 'crawling',
+          progress: processed,
+          total,
+          message: `Crawling schools... ${processed}/${total}`,
+        });
       }
-      processed++;
-      onEvent({
-        stage: 'crawling',
-        progress: processed,
-        total,
-        message: `Crawling schools... ${processed}/${total}`,
-      });
-    }));
+    }
 
     if (i + BATCH_SIZE < schoolLinks.length) {
       await new Promise(r => setTimeout(r, BATCH_DELAY));

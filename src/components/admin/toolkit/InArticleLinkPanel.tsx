@@ -32,6 +32,7 @@ interface LinkResult {
 interface InArticleLinkPanelProps {
   content: string;
   onInsertContent: (html: string, replace?: boolean) => void;
+  currentPostId?: string;
 }
 
 const SITE_URL = 'https://www.mayobebros.com';
@@ -119,7 +120,7 @@ function applyLinksToContent(
   return result;
 }
 
-export default function InArticleLinkPanel({ content, onInsertContent }: InArticleLinkPanelProps) {
+export default function InArticleLinkPanel({ content, onInsertContent, currentPostId }: InArticleLinkPanelProps) {
   const [posts, setPosts]             = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [result, setResult]           = useState<LinkResult | null>(null);
@@ -138,21 +139,23 @@ export default function InArticleLinkPanel({ content, onInsertContent }: InArtic
     try {
       const res = await fetch('/api/posts?status=published&limit=200');
       const data = await res.json();
-      const items: Post[] = (data.posts || data || []).map((p: any) => ({
-        id: p.id,
-        title: p.title,
-        slug: p.slug,
-        categorySlug: p.categories?.slug || p.categorySlug || p.category_slug || '',
-        excerpt: p.excerpt || '',
-        category: p.categories?.name || p.category?.name || p.category_name || '',
-      }));
+      const items: Post[] = (data.posts || data || [])
+        .filter((p: any) => !currentPostId || p.id !== currentPostId)
+        .map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          slug: p.slug,
+          categorySlug: p.categories?.slug || p.categorySlug || p.category_slug || '',
+          excerpt: p.excerpt || '',
+          category: p.categories?.name || p.category?.name || p.category_name || '',
+        }));
       setPosts(items);
     } catch {
       setPosts([]);
     } finally {
       setPostsLoading(false);
     }
-  }, []);
+  }, [currentPostId]);
 
   useEffect(() => { loadPosts(); }, [loadPosts]);
 

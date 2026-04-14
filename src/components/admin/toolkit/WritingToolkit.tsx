@@ -289,6 +289,7 @@ export default function WritingToolkit({
           <InArticleLinkPanel
             content={content}
             onInsertContent={handleInsert}
+            currentPostId={postId}
           />
         )}
 

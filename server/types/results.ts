@@ -7,12 +7,24 @@ export interface Student {
   subjects: string;
 }
 
+export interface DivCount {
+  div1: number;
+  div2: number;
+  div3: number;
+  div4: number;
+  div0: number;
+  total: number;
+}
+
 export interface SchoolSummary {
   div1: number;
   div2: number;
   div3: number;
   div4: number;
   div0: number;
+  male?: DivCount;
+  female?: DivCount;
+  total?: DivCount;
 }
 
 export interface School {
@@ -29,7 +41,7 @@ export interface StructuredData {
 }
 
 export interface CrawlEvent {
-  stage: 'checking' | 'crawling' | 'processing' | 'building' | 'done' | 'error' | 'duplicate';
+  stage: 'checking' | 'crawling' | 'processing' | 'building' | 'saving' | 'done' | 'error' | 'duplicate';
   progress?: number;
   total?: number;
   message: string;

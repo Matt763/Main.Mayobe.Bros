@@ -72,6 +72,8 @@ const ITangoEditorPage = lazy(() => import('./pages/admin/ITangoEditorPage'));
 const EditorialPolicyPage = lazy(() => import('./pages/EditorialPolicyPage'));
 const FactCheckingPolicyPage = lazy(() => import('./pages/FactCheckingPolicyPage'));
 const ResultsPage       = lazy(() => import('./pages/ResultsPage'));
+const NectaIndexPage    = lazy(() => import('./pages/NectaIndexPage'));
+const NectaSchoolPage   = lazy(() => import('./pages/NectaSchoolPage'));
 const ResultsListPage   = lazy(() => import('./pages/admin/ResultsListPage'));
 const ResultsEditorPage = lazy(() => import('./pages/admin/ResultsEditorPage'));
 
@@ -129,6 +131,22 @@ function App() {
             <GlobalSeoInit />
             <HeadAdInjector />
             <Routes>
+              {/* ── Standalone NECTA results pages (no header/footer, NECTA style) ── */}
+              <Route
+                path="/matokeo/:year/:examType"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <NectaIndexPage />
+                  </Suspense>}
+              />
+              <Route
+                path="/matokeo/:year/:examType/:centerSlug"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <NectaSchoolPage />
+                  </Suspense>}
+              />
+
               {/* ── Standalone iTango routes (independent, no header/footer) ── */}
               <Route
                 path="/itango-login"

@@ -248,6 +248,11 @@ router.post('/crawl', requireAuth, async (req, res) => {
     res.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
+  // Extract year + exam_type from URL once
+  const urlMatch  = url.match(/\/results\/(\d{4})\/([^/]+)\//);
+  const urlYear   = urlMatch ? parseInt(urlMatch[1]) : new Date().getFullYear();
+  const urlExam   = urlMatch ? urlMatch[2].toLowerCase() : 'unknown';
+
   try {
     const supabase = getSupabaseClient();
     let existingId: string | null = null;
@@ -271,9 +276,38 @@ router.post('/crawl', requireAuth, async (req, res) => {
 
     if (existing) existingId = existing.id;
 
-    const crawled = await crawlNectaResults(url, send);
+    // Per-school save callback — upserts each school to result_schools as it's crawled
+    let savedSchools = 0;
+    const onSchoolCrawled = async (school: any, progress: number, total: number) => {
+      const centerSlug = school.center_number.toLowerCase();
+      const schoolRecord = {
+        year:            urlYear,
+        exam_type:       urlExam,
+        center_number:   school.center_number,
+        center_slug:     centerSlug,
+        school_name:     school.school_name,
+        summary:         school.summary,
+        students:        school.students,
+        total_students:  school.students.length,
+        updated_at:      new Date().toISOString(),
+      };
 
-    // Save server-side to avoid sending huge payload over SSE
+      await supabase
+        .from('result_schools')
+        .upsert(schoolRecord, { onConflict: 'year,exam_type,center_number' });
+
+      savedSchools++;
+      send({
+        stage: 'saving',
+        progress: savedSchools,
+        total,
+        message: `Saving schools... ${savedSchools}/${total}`,
+      });
+    };
+
+    const crawled = await crawlNectaResults(url, send, onSchoolCrawled);
+
+    // Save main results record (metadata only — school data is in result_schools)
     const record = {
       title:            crawled.title,
       slug:             crawled.slug,
@@ -281,7 +315,6 @@ router.post('/crawl', requireAuth, async (req, res) => {
       exam_type:        crawled.exam_type,
       source_url:       crawled.source_url,
       content:          crawled.content,
-      // Strip schools array — HTML content already has student data; full JSON is too large for Supabase
       structured_data:  { total_schools: crawled.structured_data.total_schools, total_students: crawled.structured_data.total_students },
       meta_title:       crawled.meta_title,
       meta_description: crawled.meta_description,
@@ -302,7 +335,6 @@ router.post('/crawl', requireAuth, async (req, res) => {
       savedId = saved.id;
     }
 
-    // Lightweight done event — no content, no schools array
     send({
       stage: 'done',
       message: 'Saved as draft!',

@@ -1109,4 +1109,42 @@ export const api = {
       if (!response.ok) throw new Error('Delete failed');
     },
   },
+
+  resultSchools: {
+    listByExam: async (year: number, examType: string): Promise<any[]> => {
+      const cacheKey = `result-schools:${year}:${examType}`;
+      const cached = getCached(cacheKey);
+      if (cached !== null) return cached;
+
+      const { data, error } = await supabase
+        .from('result_schools')
+        .select('id, center_number, center_slug, school_name, summary, total_students, year, exam_type')
+        .eq('year', year)
+        .eq('exam_type', examType.toLowerCase())
+        .order('school_name', { ascending: true });
+
+      if (error) throw error;
+      const result = data || [];
+      setCached(cacheKey, result);
+      return result;
+    },
+
+    getSchool: async (year: number, examType: string, centerSlug: string): Promise<any | null> => {
+      const cacheKey = `result-school:${year}:${examType}:${centerSlug}`;
+      const cached = getCached(cacheKey);
+      if (cached !== null) return cached;
+
+      const { data, error } = await supabase
+        .from('result_schools')
+        .select('*')
+        .eq('year', year)
+        .eq('exam_type', examType.toLowerCase())
+        .eq('center_slug', centerSlug.toLowerCase())
+        .maybeSingle();
+
+      if (error) throw error;
+      setCached(cacheKey, data);
+      return data;
+    },
+  },
 };
