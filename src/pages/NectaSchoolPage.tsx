@@ -87,7 +87,7 @@ export default function NectaSchoolPage() {
     return (
       <div style={pageStyle}>
         <b>NATIONAL EXAMINATIONS COUNCIL OF TANZANIA</b>
-        <p>Loading school results...</p>
+        <p>Loading school results... (fetching live data from NECTA on first visit)</p>
       </div>
     );
   }
