@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Share2 } from 'lucide-react';
+import { Share2, Link2, Check } from 'lucide-react';
 
 interface Props {
   title: string;
@@ -97,18 +97,27 @@ export default function ShareButton({ title, url }: Props) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  const copyLink = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  };
+
   const handlePlatformClick = (e: React.MouseEvent, p: Platform) => {
     e.preventDefault();
     e.stopPropagation();
     if (p.copyLink) {
-      navigator.clipboard.writeText(url).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }).catch(() => {});
+      copyLink(e);
     } else if (p.getUrl) {
       window.open(p.getUrl(title, url), '_blank', 'noopener,noreferrer');
     }
   };
+
+  // Separate social platforms from the copy-link entry
+  const socialPlatforms = PLATFORMS.filter(p => !p.copyLink);
 
   return (
     <div
@@ -116,6 +125,7 @@ export default function ShareButton({ title, url }: Props) {
       className="relative flex items-center gap-1"
       onClick={e => { e.preventDefault(); e.stopPropagation(); }}
     >
+      {/* Toggle button */}
       <button
         onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o); }}
         className={`flex items-center gap-1 transition-colors duration-150 ${
@@ -128,19 +138,20 @@ export default function ShareButton({ title, url }: Props) {
         <Share2 size={14} />
       </button>
 
+      {/* Animated social icons row */}
       <div
         className="flex items-center gap-1 overflow-hidden"
         style={{
-          maxWidth: open ? `${PLATFORMS.length * 26}px` : '0',
+          maxWidth: open ? `${socialPlatforms.length * 26 + 52}px` : '0',
           opacity: open ? 1 : 0,
           transition: 'max-width 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease',
         }}
       >
-        {PLATFORMS.map((p, i) => (
+        {socialPlatforms.map((p, i) => (
           <button
             key={p.name}
             onClick={e => handlePlatformClick(e, p)}
-            title={p.copyLink ? 'Copy link (for Instagram)' : `Share on ${p.name}`}
+            title={`Share on ${p.name}`}
             className={`w-5 h-5 flex-shrink-0 p-0.5 rounded transition-transform duration-150 hover:scale-125 ${open ? 'share-icon-pop' : ''}`}
             style={{
               color: p.color,
@@ -153,13 +164,22 @@ export default function ShareButton({ title, url }: Props) {
             {ICONS[p.name]}
           </button>
         ))}
-      </div>
 
-      {copied && (
-        <span className="absolute -top-7 right-0 z-10 text-xs bg-gray-900 text-white px-2 py-0.5 rounded whitespace-nowrap pointer-events-none shadow">
-          Link copied!
-        </span>
-      )}
+        {/* Copy Link button — explicit, always last */}
+        <button
+          onClick={copyLink}
+          title="Copy link"
+          className={`flex-shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all duration-150 ${open ? 'share-icon-pop' : ''} ${
+            copied
+              ? 'bg-green-500 text-white'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+          }`}
+          style={{ animationDelay: open ? `${socialPlatforms.length * 45}ms` : '0ms' }}
+        >
+          {copied ? <Check size={10} /> : <Link2 size={10} />}
+          <span>{copied ? '✓' : 'Copy'}</span>
+        </button>
+      </div>
     </div>
   );
 }
