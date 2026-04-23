@@ -2,6 +2,10 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { serveWithMeta } from './utils/metaInjector.js';
 import authRoutes from './routes/auth.js';
 import postsRoutes from './routes/posts.js';
 import pagesRoutes from './routes/pages.js';
@@ -146,5 +150,36 @@ app.post('/api/itango/security/unblock', (req, res) => {
   if (ip) unblockIP(ip);
   res.json({ success: true });
 });
+
+// Social-crawler OG meta injection for SPA routes
+// Crawlers can't execute JS, so they'd see the default index.html meta tags.
+// We detect bots and inject post/category/page-specific OG tags server-side.
+const CRAWLER_RE = /facebookexternalhit|facebookcatalog|twitterbot|whatsapp|telegrambot|linkedinbot|slackbot|discordbot|applebot|googlebot|bingbot|yandexbot|duckduckbot|baiduspider|ia_archiver|embedly|quora link|outbrain|pinterest|vkshare|mattermost|w3c_validator|preview\.ai|curl\/|wget\/|go-http-client\/|python-requests|node-fetch|axios\/|scrapy|nutch|libwww-perl/i;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DIST_PATH = path.join(__dirname, '..', 'dist');
+
+async function spaHandler(req: express.Request, res: express.Response): Promise<void> {
+  const ua = req.headers['user-agent'] || '';
+  if (CRAWLER_RE.test(ua)) {
+    await serveWithMeta(req, res, DIST_PATH);
+    return;
+  }
+  // Non-crawler: serve index.html directly (same as CDN would)
+  const indexPath = path.join(DIST_PATH, 'index.html');
+  try {
+    const html = fs.readFileSync(indexPath, 'utf-8');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    res.send(html);
+  } catch {
+    res.status(500).send('Internal Server Error');
+  }
+}
+
+app.get('/post/*', spaHandler);
+app.get('/category/*', spaHandler);
+app.get('/page/*', spaHandler);
 
 export default app;

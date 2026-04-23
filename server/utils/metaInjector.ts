@@ -73,9 +73,9 @@ function injectMeta(html: string, tags: MetaTags): string {
 async function resolveMetaTags(urlPath: string): Promise<MetaTags | null> {
   const supabase = getSupabaseClient();
 
-  const postMatch = urlPath.match(/^\/post\/(?:[^/?#]+\/)?([^/?#]+)/);
-  if (postMatch) {
-    const slug = postMatch[1];
+  if (urlPath.startsWith('/post/')) {
+    // Grab the last URL segment as the slug (handles /post/cat/slug AND /post/cat/label/slug)
+    const slug = urlPath.split('/').filter(Boolean).pop() || '';
     const { data } = await supabase
       .from('posts')
       .select('title, excerpt, content, featured_image, meta_title, meta_description, slug, category_id, categories(slug)')
@@ -84,7 +84,8 @@ async function resolveMetaTags(urlPath: string): Promise<MetaTags | null> {
       .maybeSingle();
 
     if (data) {
-      const title = data.meta_title || `${data.title} | ${SITE_NAME}`;
+      // Use clean post title for og:title (no site name suffix — keeps social cards clean)
+      const title = data.meta_title || data.title;
       const rawDesc = data.meta_description || data.excerpt || stripHtml(data.content || '');
       const description = rawDesc.slice(0, 160);
       const rawImage = data.featured_image || DEFAULT_IMAGE;
