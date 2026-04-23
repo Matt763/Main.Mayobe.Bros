@@ -4,7 +4,6 @@ import cors from 'cors';
 import session from 'express-session';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { serveWithMeta } from './utils/metaInjector.js';
 import authRoutes from './routes/auth.js';
 import postsRoutes from './routes/posts.js';
@@ -156,9 +155,8 @@ app.post('/api/itango/security/unblock', (req, res) => {
 // We detect bots and inject post/category/page-specific OG tags server-side.
 const CRAWLER_RE = /facebookexternalhit|facebookcatalog|twitterbot|whatsapp|telegrambot|linkedinbot|slackbot|discordbot|applebot|googlebot|bingbot|yandexbot|duckduckbot|baiduspider|ia_archiver|embedly|quora link|outbrain|pinterest|vkshare|mattermost|w3c_validator|preview\.ai|curl\/|wget\/|go-http-client\/|python-requests|node-fetch|axios\/|scrapy|nutch|libwww-perl/i;
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const DIST_PATH = path.join(__dirname, '..', 'dist');
+// process.cwd() is the project root on Vercel (/var/task); dist/ is included via vercel.json includeFiles
+const DIST_PATH = path.join(process.cwd(), 'dist');
 
 async function spaHandler(req: express.Request, res: express.Response): Promise<void> {
   const ua = req.headers['user-agent'] || '';

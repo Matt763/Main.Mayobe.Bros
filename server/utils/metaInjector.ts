@@ -14,6 +14,8 @@ interface MetaTags {
   url: string;
   type: string;
   siteName: string;
+  publishedTime?: string;
+  author?: string;
 }
 
 function stripHtml(html: string): string {
@@ -35,6 +37,11 @@ function buildMetaHtml(tags: MetaTags): string {
   const u = escapeHtml(tags.url);
   const s = escapeHtml(tags.siteName);
 
+  const articleTags = tags.type === 'article' ? `
+    <meta property="article:published_time" content="${tags.publishedTime || ''}" />
+    <meta property="article:author" content="${escapeHtml(tags.author || SITE_NAME)}" />
+    <meta property="article:section" content="Blog" />` : '';
+
   return `
     <title>${t}</title>
     <meta name="description" content="${d}" />
@@ -47,13 +54,17 @@ function buildMetaHtml(tags: MetaTags): string {
     <meta property="og:image" content="${i}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="${t}" />
     <meta property="og:site_name" content="${s}" />
+    <meta property="og:locale" content="en_US" />${articleTags}
 
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@mayobebros" />
     <meta name="twitter:url" content="${u}" />
     <meta name="twitter:title" content="${t}" />
     <meta name="twitter:description" content="${d}" />
-    <meta name="twitter:image" content="${i}" />`;
+    <meta name="twitter:image" content="${i}" />
+    <meta name="twitter:image:alt" content="${t}" />`;
 }
 
 function injectMeta(html: string, tags: MetaTags): string {
@@ -64,6 +75,7 @@ function injectMeta(html: string, tags: MetaTags): string {
     .replace(/<meta\s+name="description"[^>]*>/gi, '')
     .replace(/<link\s+rel="canonical"[^>]*>/gi, '')
     .replace(/<meta\s+property="og:[^"]*"[^>]*>/gi, '')
+    .replace(/<meta\s+property="article:[^"]*"[^>]*>/gi, '')
     .replace(/<meta\s+name="twitter:[^"]*"[^>]*>/gi, '')
     .replace(/<meta\s+property="twitter:[^"]*"[^>]*>/gi, '');
 
@@ -78,7 +90,7 @@ async function resolveMetaTags(urlPath: string): Promise<MetaTags | null> {
     const slug = urlPath.split('/').filter(Boolean).pop() || '';
     const { data } = await supabase
       .from('posts')
-      .select('title, excerpt, content, featured_image, meta_title, meta_description, slug, category_id, categories(slug)')
+      .select('title, excerpt, content, featured_image, meta_title, meta_description, slug, published_at, author, category_id, categories(slug)')
       .eq('slug', slug)
       .eq('status', 'published')
       .maybeSingle();
@@ -101,6 +113,8 @@ async function resolveMetaTags(urlPath: string): Promise<MetaTags | null> {
         url: postUrl,
         type: 'article',
         siteName: SITE_NAME,
+        publishedTime: data.published_at || undefined,
+        author: data.author || undefined,
       };
     }
   }
