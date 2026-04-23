@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { ArrowRight, TrendingUp, Tag, Award, Sparkles, Star, Zap } from 'lucide-react';
+import ShareButton from '../components/ShareButton';
 import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import TrendingSection from '../components/TrendingSection';
@@ -183,7 +184,10 @@ function PostCard({ post, index, size = 'normal' }: { post: Post; index: number;
         )}
         <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 dark:text-gray-400 transition-colors">
           <span>{new Date(post.publishedAt).toLocaleDateString()}</span>
-          <span>{post.views} views</span>
+          <ShareButton
+            title={post.title}
+            url={window.location.origin + postUrl}
+          />
         </div>
       </div>
     </Link>
@@ -629,7 +633,12 @@ export default function Home() {
                   </div>
                   <div className="p-4">
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 mb-2 leading-snug">{post.title}</h3>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{post.views.toLocaleString()} views</span>
+                    <div className="flex justify-end">
+                      <ShareButton
+                        title={post.title}
+                        url={`${window.location.origin}/post/${post.categorySlug}/${post.slug}`}
+                      />
+                    </div>
                   </div>
                 </Link>
               ))}

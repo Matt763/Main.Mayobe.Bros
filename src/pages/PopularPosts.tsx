@@ -88,10 +88,7 @@ export default function PopularPosts() {
                   </p>
                   <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 dark:text-gray-400 transition-colors">
                     <span>{new Date(post.published_at).toLocaleDateString()}</span>
-                    <span className="flex items-center gap-1">
-                      <TrendingUp size={14} className="sm:w-4 sm:h-4" />
-                      {post.views} views
-                    </span>
+                    <span>{new Date(post.published_at).toLocaleDateString()}</span>
                   </div>
                 </div>
               </Link>

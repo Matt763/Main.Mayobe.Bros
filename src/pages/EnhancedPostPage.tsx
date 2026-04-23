@@ -3,7 +3,7 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { Calendar, Eye, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown, ChevronDown, List } from 'lucide-react';
+import { Calendar, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown, ChevronDown, List } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import SocialShare from '../components/SocialShare';
 import VoiceNarration from '../components/VoiceNarration';
@@ -606,10 +606,6 @@ export default function EnhancedPostPage() {
               <span className="hidden sm:inline">{new Date(post.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
               <span className="sm:hidden">{new Date(post.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Eye size={15} />
-              <span>{post.views} views</span>
-            </div>
           </div>
 
           <SocialShare title={post.title} description={post.excerpt} variant="ghost" />
@@ -1193,10 +1189,6 @@ export default function EnhancedPostPage() {
                       <h4 className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 leading-snug">
                         {relatedPost.title}
                       </h4>
-                      <span className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-1 mt-1">
-                        <Eye size={11} />
-                        {relatedPost.views} views
-                      </span>
                     </div>
                   </Link>
                 ))}
@@ -1233,11 +1225,7 @@ export default function EnhancedPostPage() {
                       <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2 leading-snug mb-2">
                         {relatedPost.title}
                       </h3>
-                      <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                        <span className="flex items-center gap-1">
-                          <Eye size={14} />
-                          {relatedPost.views} views
-                        </span>
+                      <div className="flex items-center justify-end text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                         <span>{new Date(relatedPost.published_at).toLocaleDateString()}</span>
                       </div>
                     </div>

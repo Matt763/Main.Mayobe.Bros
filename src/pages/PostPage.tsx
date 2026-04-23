@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
-import { Calendar, Eye, User, ArrowLeft, Clock } from 'lucide-react';
+import { Calendar, User, ArrowLeft, Clock } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 export default function PostPage() {
@@ -130,10 +130,6 @@ export default function PostPage() {
               <Calendar size={15} />
               <span className="hidden sm:inline">{new Date(post.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
               <span className="sm:hidden">{new Date(post.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Eye size={15} />
-              <span>{post.views} views</span>
             </div>
           </div>
         </div>
