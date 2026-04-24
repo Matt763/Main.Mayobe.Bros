@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link2, Check } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Link2, Check, Share2, X } from 'lucide-react';
 
 interface Props {
   url?: string;
@@ -94,7 +94,20 @@ const PLATFORMS = [
 /* ── Component ───────────────────────────────────────────────────────── */
 
 export default function SocialShare({ url, title, variant = 'default' }: Props) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied]   = useState(false);
+  const [open, setOpen]       = useState(false);
+  const containerRef          = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
 
   const shareUrl = url || (typeof window !== 'undefined' ? window.location.href : '');
 
@@ -123,18 +136,47 @@ export default function SocialShare({ url, title, variant = 'default' }: Props) 
   const defaultIdle =
     'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 shadow-sm hover:shadow-md hover:border-transparent hover:text-white';
 
-  return (
-    <div className="flex flex-col gap-2.5">
-      {/* Label */}
-      <p
-        className={`text-[11px] font-bold uppercase tracking-widest select-none ${
-          isGhost ? 'text-white/60' : 'text-gray-400 dark:text-gray-500'
-        }`}
-      >
-        Share this article
-      </p>
+  /* ── Collapsed: single Share button ── */
+  if (!open) {
+    return (
+      <div ref={containerRef}>
+        <button
+          onClick={() => setOpen(true)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+            isGhost
+              ? 'text-white/70 hover:text-white border border-white/30 hover:border-white/60 backdrop-blur-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-800'
+          }`}
+        >
+          <Share2 size={14} />
+          <span>Share</span>
+        </button>
+      </div>
+    );
+  }
 
-      {/* Button row — flex-wrap so it never overflows or overlaps anything */}
+  /* ── Expanded: full icons panel ── */
+  return (
+    <div ref={containerRef} className="flex flex-col gap-2.5">
+      {/* Header row: label + close */}
+      <div className="flex items-center justify-between">
+        <p className={`text-[11px] font-bold uppercase tracking-widest select-none ${
+          isGhost ? 'text-white/60' : 'text-gray-400 dark:text-gray-500'
+        }`}>
+          Share this article
+        </p>
+        <button
+          onClick={() => setOpen(false)}
+          className={`p-1 rounded-full transition-colors ${
+            isGhost ? 'text-white/50 hover:text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'
+          }`}
+          aria-label="Close share panel"
+        >
+          <X size={13} />
+        </button>
+      </div>
+
+      {/* Button row */}
       <div className="flex flex-wrap items-center gap-2">
 
         {PLATFORMS.map(({ name, color, Icon, getUrl }, idx) => {
