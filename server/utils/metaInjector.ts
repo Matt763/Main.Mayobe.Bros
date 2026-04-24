@@ -4,7 +4,7 @@ import { getSupabaseClient } from './supabase.js';
 
 const SITE_NAME = 'Mayobe Bros';
 const SITE_URL = 'https://mayobebros.com';
-const DEFAULT_IMAGE = `${SITE_URL}/mayobebrosfavicon.png`;
+const DEFAULT_IMAGE = 'https://images.pexels.com/photos/1591062/pexels-photo-1591062.jpeg?auto=compress&cs=tinysrgb&w=1200';
 const DEFAULT_DESCRIPTION = 'Your trusted source for quality content across education, business, technology, gaming, history, and career opportunities.';
 
 interface MetaTags {
@@ -52,6 +52,7 @@ function buildMetaHtml(tags: MetaTags): string {
     <meta property="og:title" content="${t}" />
     <meta property="og:description" content="${d}" />
     <meta property="og:image" content="${i}" />
+    <meta property="og:image:secure_url" content="${i}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="${t}" />
@@ -101,7 +102,7 @@ async function resolveMetaTags(urlPath: string): Promise<MetaTags | null> {
       const rawDesc = data.meta_description || data.excerpt || stripHtml(data.content || '');
       const description = rawDesc.slice(0, 160);
       const rawImage = data.featured_image || DEFAULT_IMAGE;
-      const image = rawImage.startsWith('http') ? rawImage : `${SITE_URL}${rawImage}`;
+      const image = (rawImage.startsWith('http') ? rawImage : `${SITE_URL}${rawImage}`).replace(/^http:\/\//, 'https://');
       const catSlug = (data.categories as any)?.slug || '';
       const postUrl = catSlug
         ? `${SITE_URL}/post/${catSlug}/${data.slug}`
@@ -133,7 +134,7 @@ async function resolveMetaTags(urlPath: string): Promise<MetaTags | null> {
       const description = data.meta_description || data.description
         || `Browse the latest ${data.name} articles, guides and insights on ${SITE_NAME}.`;
       const rawImage = data.featured_image || DEFAULT_IMAGE;
-      const image = rawImage.startsWith('http') ? rawImage : `${SITE_URL}${rawImage}`;
+      const image = (rawImage.startsWith('http') ? rawImage : `${SITE_URL}${rawImage}`).replace(/^http:\/\//, 'https://');
       return {
         title,
         description: description.slice(0, 160),
@@ -160,7 +161,7 @@ async function resolveMetaTags(urlPath: string): Promise<MetaTags | null> {
       const rawDesc = data.meta_description || stripHtml(data.content || '');
       const description = rawDesc.slice(0, 160);
       const rawImage = (data as any).featured_image || DEFAULT_IMAGE;
-      const image = rawImage.startsWith('http') ? rawImage : `${SITE_URL}${rawImage}`;
+      const image = (rawImage.startsWith('http') ? rawImage : `${SITE_URL}${rawImage}`).replace(/^http:\/\//, 'https://');
       return {
         title,
         description,
