@@ -65,7 +65,8 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
   // Chunk timer: drives onProgress even when onboundary doesn't fire (older Android/iOS)
   const chunkTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
   const chunkProgressRef = useRef({ charStart: 0, charLen: 0, startMs: 0, durationMs: 1000 });
-  const pausedAtRef     = useRef(0);
+  // Exposes the chunk speaker so pauseNarration/resumeNarration can re-speak from a saved index
+  const speakChunkRef   = useRef<((index: number) => void) | null>(null);
 
   // ── Initialise speech synthesis & load voices ────────────────────────────
   useEffect(() => {
@@ -137,181 +138,112 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     window.speechSynthesis.cancel();
 
     const plain = cleanText(text);
-    totalCharsRef.current    = plain.length;
-    boundaryFiredRef.current = false;
+    totalCharsRef.current = plain.length;
 
-    const utterance = new SpeechSynthesisUtterance(plain);
-    utterance.lang   = selectedLang;
-    utterance.rate   = 0.95;
-    utterance.pitch  = 1.0;
-    utterance.volume = mutedRef.current ? 0 : 1;
+    // ── Chunk-based narration for ALL platforms ─────────────────────────────
+    //   - Avoids Chrome's 14-second silent-cutoff (each chunk ≪ 14s)
+    //   - No keepAlive pause/resume → no flicker on Android/desktop
+    //   - Pause = cancel current chunk + remember index; Resume = speak that chunk again
+    const chunks = splitIntoChunks(plain, 30); // ≤30 words/chunk ≈ ≤11s at rate 0.95
+    chunksRef.current = chunks;
+    chunkIndexRef.current = 0;
 
-    // Voice selection
-    const preferred =
-      voices.find(v => v.lang === selectedLang && (v.name.includes('Google') || v.name.includes('Natural'))) ||
-      voices.find(v => v.lang.startsWith(selectedLang.split('-')[0])) ||
-      voices.find(v => v.lang === selectedLang);
-    if (preferred) utterance.voice = preferred;
+    // Cumulative char offset of each chunk in the full plain text
+    const chunkOffsets = chunks.reduce<number[]>((acc, _, i) =>
+      [...acc, i === 0 ? 0 : acc[i - 1] + chunks[i - 1].length], []);
 
-    // ── iOS & Android: chunk-based narration avoids 14-second cutoff and keepAlive flicker ──
-    if (isIOSRef.current || isAndroidRef.current) {
-      const chunks = splitIntoChunks(plain);
-      chunksRef.current = chunks;
-      chunkIndexRef.current = 0;
+    const speakChunk = (index: number) => {
+      if (index >= chunks.length) {
+        clearTimers();
+        isPausedRef.current = false;
+        setIsPlaying(false);
+        setIsPaused(false);
+        setProgress(100);
+        onProgress?.(-1);
+        return;
+      }
+      const utt = new SpeechSynthesisUtterance(chunks[index]);
+      utt.lang   = selectedLang;
+      utt.rate   = 0.95;
+      utt.pitch  = 1.0;
+      utt.volume = mutedRef.current ? 0 : 1;
+      const pref2 =
+        voices.find(v => v.lang === selectedLang && (v.name.includes('Google') || v.name.includes('Natural'))) ||
+        voices.find(v => v.lang.startsWith(selectedLang.split('-')[0])) ||
+        voices.find(v => v.lang === selectedLang);
+      if (pref2) utt.voice = pref2;
 
-      // Cumulative char offset of each chunk in the full plain text
-      const chunkOffsets = chunks.reduce<number[]>((acc, _, i) =>
-        [...acc, i === 0 ? 0 : acc[i - 1] + chunks[i - 1].length], []);
-
-      const speakChunk = (index: number) => {
-        if (index >= chunks.length) {
-          clearTimers();
-          isPausedRef.current = false;
-          setIsPlaying(false);
-          setIsPaused(false);
-          setProgress(100);
-          onProgress?.(-1);
-          return;
-        }
-        const utt = new SpeechSynthesisUtterance(chunks[index]);
-        utt.lang   = selectedLang;
-        utt.rate   = 0.95;
-        utt.pitch  = 1.0;
-        utt.volume = mutedRef.current ? 0 : 1;
-        const pref2 =
-          voices.find(v => v.lang === selectedLang && (v.name.includes('Google') || v.name.includes('Natural'))) ||
-          voices.find(v => v.lang.startsWith(selectedLang.split('-')[0])) ||
-          voices.find(v => v.lang === selectedLang);
-        if (pref2) utt.voice = pref2;
-
-        // Word boundary: accurate on Android Chrome, silent on iOS
-        utt.onboundary = (e) => {
-          if (e.name !== 'word') return;
-          onProgress?.(chunkOffsets[index] + e.charIndex);
-        };
-
-        // Timer-based fallback: fires every 120ms regardless of onboundary support
-        const wordCount = Math.max(chunks[index].trim().split(/\s+/).length, 1);
-        const durationMs = (wordCount / 2.8) * 1000;
-        chunkProgressRef.current = {
-          charStart: chunkOffsets[index],
-          charLen:   chunks[index].length,
-          startMs:   Date.now(),
-          durationMs,
-        };
-        if (chunkTimerRef.current) clearInterval(chunkTimerRef.current);
-        chunkTimerRef.current = setInterval(() => {
-          if (isPausedRef.current) return;
-          const { charStart, charLen, startMs, durationMs: dur } = chunkProgressRef.current;
-          const pct = Math.min((Date.now() - startMs) / dur, 0.99);
-          onProgress?.(charStart + Math.floor(pct * charLen));
-        }, 120);
-
-        utt.onend = () => {
-          if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null; }
-          if (chunksRef.current.length === 0) return; // stopped
-          chunkIndexRef.current = index + 1;
-          setProgress(Math.min(((index + 1) / chunks.length) * 100, 100));
-          // Android Chrome drops speak() calls made synchronously inside onend
-          if (isAndroidRef.current) {
-            setTimeout(() => speakChunk(index + 1), 50);
-          } else {
-            speakChunk(index + 1);
-          }
-        };
-        utt.onerror = (e: any) => {
-          if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null; }
-          if (e.error === 'interrupted' || e.error === 'canceled') return;
-          clearTimers();
-          isPausedRef.current = false;
-          setIsPlaying(false);
-          setIsPaused(false);
-          onProgress?.(-1);
-        };
-        utteranceRef.current = utt;
-        window.speechSynthesis.speak(utt);
+      utt.onboundary = (e) => {
+        if (e.name !== 'word') return;
+        onProgress?.(chunkOffsets[index] + e.charIndex);
       };
 
-      speakChunk(0);
-      isPausedRef.current = false;
-      setIsPlaying(true);
-      setIsPaused(false);
-      setProgress(0);
-      return; // skip non-iOS code below
-    }
+      const wordCount = Math.max(chunks[index].trim().split(/\s+/).length, 1);
+      const durationMs = (wordCount / 2.8) * 1000;
+      chunkProgressRef.current = {
+        charStart: chunkOffsets[index],
+        charLen:   chunks[index].length,
+        startMs:   Date.now(),
+        durationMs,
+      };
+      if (chunkTimerRef.current) clearInterval(chunkTimerRef.current);
+      chunkTimerRef.current = setInterval(() => {
+        if (isPausedRef.current) return;
+        const { charStart, charLen, startMs, durationMs: dur } = chunkProgressRef.current;
+        const pct = Math.min((Date.now() - startMs) / dur, 0.99);
+        onProgress?.(charStart + Math.floor(pct * charLen));
+      }, 120);
 
-    // Desktop: word boundary events give accurate progress
-    utterance.onboundary = (e) => {
-      if (e.name !== 'word') return;
-      boundaryFiredRef.current = true;
-      const pct = totalCharsRef.current > 0 ? (e.charIndex / totalCharsRef.current) * 100 : 0;
-      setProgress(Math.min(pct, 100));
-      onProgress?.(e.charIndex);
+      utt.onend = () => {
+        if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null; }
+        if (chunksRef.current.length === 0) return; // stopped
+        if (isPausedRef.current)             return; // paused — wait for resume to advance
+        chunkIndexRef.current = index + 1;
+        setProgress(Math.min(((index + 1) / chunks.length) * 100, 100));
+        // Android Chrome drops speak() calls made synchronously inside onend
+        if (isAndroidRef.current) setTimeout(() => speakChunk(index + 1), 50);
+        else speakChunk(index + 1);
+      };
+      utt.onerror = (e: any) => {
+        if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null; }
+        if (e.error === 'interrupted' || e.error === 'canceled') return;
+        clearTimers();
+        isPausedRef.current = false;
+        setIsPlaying(false);
+        setIsPaused(false);
+        onProgress?.(-1);
+      };
+      utteranceRef.current = utt;
+      chunkIndexRef.current = index;
+      window.speechSynthesis.speak(utt);
     };
 
-    utterance.onend = () => {
-      clearTimers();
-      isPausedRef.current = false;
-      setIsPlaying(false);
-      setIsPaused(false);
-      setProgress(100);
-      onProgress?.(-1);
-    };
-
-    utterance.onerror = (e: any) => {
-      // 'interrupted' / 'canceled' fire when cancel() is called intentionally — not an error
-      if (e.error === 'interrupted' || e.error === 'canceled') return;
-      clearTimers();
-      isPausedRef.current = false;
-      setIsPlaying(false);
-      setIsPaused(false);
-      onProgress?.(-1);
-    };
-
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-    isPausedRef.current  = false;
-    startTimeRef.current = Date.now();
-
-    // Estimate reading duration: ~2.8 words/sec at rate 0.95
-    const wordCount = plain.split(/\s+/).filter(Boolean).length;
-    estimatedMsRef.current = Math.max((wordCount / 2.8) * 1000, 1000);
-
-    // iOS fallback: onboundary never fires — drive progress with a timer instead
-    progressTimerRef.current = setInterval(() => {
-      if (boundaryFiredRef.current || isPausedRef.current) return;
-      const elapsed = Date.now() - startTimeRef.current;
-      setProgress(Math.min((elapsed / estimatedMsRef.current) * 100, 97));
-    }, 500);
-
-    // iOS 14-second speech cutoff fix: periodic pause+resume keeps synthesis alive
-    keepAliveRef.current = setInterval(() => {
-      if (!window.speechSynthesis.speaking || isPausedRef.current) return;
-      window.speechSynthesis.pause();
-      window.speechSynthesis.resume();
-    }, 10_000);
-
+    speakChunkRef.current = speakChunk;
+    isPausedRef.current = false;
     setIsPlaying(true);
     setIsPaused(false);
     setProgress(0);
+    speakChunk(0);
   };
 
   const pauseNarration = () => {
-    window.speechSynthesis.pause();
+    // Set the flag BEFORE cancel so chunk's onend handler doesn't auto-advance
     isPausedRef.current = true;
-    pausedAtRef.current = Date.now();
+    if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null; }
+    // Use cancel(): pause() is broken on Android Chrome and unreliable elsewhere.
+    // Resume re-speaks the saved chunk from its start.
+    window.speechSynthesis.cancel();
     setIsPaused(true);
     setIsPlaying(false);
   };
 
   const resumeNarration = () => {
-    // Shift chunk startMs forward by pause duration so timer progress stays accurate
-    const pauseDuration = Date.now() - pausedAtRef.current;
-    chunkProgressRef.current.startMs += pauseDuration;
-    window.speechSynthesis.resume();
+    if (!speakChunkRef.current) return;
     isPausedRef.current = false;
     setIsPlaying(true);
     setIsPaused(false);
+    // Re-speak the chunk we were on; speakChunk re-initialises timer and progress refs
+    speakChunkRef.current(chunkIndexRef.current);
   };
 
   const stopNarration = () => {
@@ -319,6 +251,7 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     window.speechSynthesis.cancel();
     chunksRef.current = [];
     chunkIndexRef.current = 0;
+    speakChunkRef.current = null;
     isPausedRef.current = false;
     setIsPlaying(false);
     setIsPaused(false);
