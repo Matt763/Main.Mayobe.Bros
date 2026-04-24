@@ -52,6 +52,11 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
     (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
   );
+  // Android Chrome has the same ~14-second speech cutoff and broken pause/resume as iOS
+  const isAndroidRef = useRef(
+    typeof navigator !== 'undefined' &&
+    /Android/i.test(navigator.userAgent)
+  );
   const chunksRef     = useRef<string[]>([]);
   const chunkIndexRef = useRef(0);
 
@@ -140,8 +145,8 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
       voices.find(v => v.lang === selectedLang);
     if (preferred) utterance.voice = preferred;
 
-    // ── iOS: chunk-based narration (no keepAlive pause/resume = no flicker) ──
-    if (isIOSRef.current) {
+    // ── iOS & Android: chunk-based narration avoids 14-second cutoff and keepAlive flicker ──
+    if (isIOSRef.current || isAndroidRef.current) {
       const chunks = splitIntoChunks(plain);
       chunksRef.current = chunks;
       chunkIndexRef.current = 0;
@@ -170,7 +175,12 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
           if (chunksRef.current.length === 0) return; // stopped
           chunkIndexRef.current = index + 1;
           setProgress(Math.min(((index + 1) / chunks.length) * 100, 100));
-          speakChunk(index + 1);
+          // Android Chrome drops speak() calls made synchronously inside onend
+          if (isAndroidRef.current) {
+            setTimeout(() => speakChunk(index + 1), 50);
+          } else {
+            speakChunk(index + 1);
+          }
         };
         utt.onerror = (e: any) => {
           if (e.error === 'interrupted' || e.error === 'canceled') return;
