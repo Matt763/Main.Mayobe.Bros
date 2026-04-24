@@ -65,6 +65,8 @@ export default function EnhancedPostPage() {
   const [authorProfile, setAuthorProfile] = useState<any | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [pendingReaction, setPendingReaction] = useState<string | null>(null);
+  const [commentMode, setCommentMode] = useState<'options' | 'anon'>('options');
+  const [anonDisplayName, setAnonDisplayName] = useState('Anonymous');
 
   const {
     reactions,
@@ -146,6 +148,18 @@ export default function EnhancedPostPage() {
       loadComments();
     }
   }, [post]);
+
+  useEffect(() => {
+    if (publicUser) {
+      setCommentForm(f => ({ ...f, name: publicUser.name, email: publicUser.email }));
+    }
+  }, [publicUser]);
+
+  useEffect(() => {
+    if (commentMode === 'anon') {
+      setCommentForm(f => ({ ...f, name: anonDisplayName, email: '' }));
+    }
+  }, [commentMode]);
 
   useEffect(() => {
     if (!post) return;
@@ -884,9 +898,22 @@ export default function EnhancedPostPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
+              ) : publicUser ? (
+                /* Case A: signed-in user */
                 <form onSubmit={handleCommentSubmit} className="mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-gray-200 dark:border-gray-700">
-                  <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4 transition-colors">Leave a Comment</h4>
+                  <div className="flex items-center gap-3 mb-4">
+                    {publicUser.avatar_url ? (
+                      <img src={publicUser.avatar_url} alt={publicUser.name} className="w-9 h-9 rounded-full object-cover ring-2 ring-gray-100 dark:ring-gray-700" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                        {publicUser.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{publicUser.name}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">Commenting as yourself</p>
+                    </div>
+                  </div>
 
                   <input type="text" name="phone_number" value={commentHoneypot} onChange={e => setCommentHoneypot(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} />
 
@@ -897,33 +924,13 @@ export default function EnhancedPostPage() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
-                    <input
-                      type="text"
-                      placeholder="Your Name"
-                      required
-                      maxLength={100}
-                      value={commentForm.name || (adminUser?.displayName ?? '')}
-                      onChange={(e) => setCommentForm({ ...commentForm, name: e.target.value })}
-                      className="px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm sm:text-base text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors min-h-[44px]"
-                    />
-                    <input
-                      type="email"
-                      placeholder="Your Email"
-                      required
-                      maxLength={200}
-                      value={commentForm.email || (adminUser?.email ?? '')}
-                      onChange={(e) => setCommentForm({ ...commentForm, email: e.target.value })}
-                      className="px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm sm:text-base text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors min-h-[44px]"
-                    />
-                  </div>
                   <textarea
-                    placeholder="Write your comment..."
+                    placeholder="Write your comment…"
                     required
                     rows={4}
                     maxLength={5000}
                     value={commentForm.content}
-                    onChange={(e) => setCommentForm({ ...commentForm, content: e.target.value })}
+                    onChange={e => setCommentForm({ ...commentForm, content: e.target.value })}
                     className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm sm:text-base text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent resize-none mb-3 sm:mb-4 transition-colors"
                   />
                   <button
@@ -931,7 +938,85 @@ export default function EnhancedPostPage() {
                     disabled={commentSubmitting}
                     className="bg-blue-600 dark:bg-blue-500 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-400 transition-colors font-medium text-sm sm:text-base min-h-[44px] disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {commentSubmitting ? 'Submitting...' : 'Post Comment'}
+                    {commentSubmitting ? 'Submitting…' : 'Post Comment'}
+                  </button>
+                </form>
+
+              ) : commentMode === 'options' ? (
+                /* Case B: not signed in — show options */
+                <div className="mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-gray-200 dark:border-gray-700">
+                  <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-4 transition-colors">Leave a Comment</h4>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={() => setAuthModalOpen(true)}
+                      className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-xl font-semibold text-sm transition-colors"
+                    >
+                      Sign in to comment
+                    </button>
+                    <button
+                      onClick={() => setCommentMode('anon')}
+                      className="flex-1 flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 px-4 py-3 rounded-xl font-semibold text-sm transition-colors"
+                    >
+                      Comment anonymously
+                    </button>
+                  </div>
+                </div>
+
+              ) : (
+                /* Case C: anonymous mode */
+                <form
+                  onSubmit={handleCommentSubmit}
+                  className="mb-6 sm:mb-8 pb-6 sm:pb-8 border-b border-gray-200 dark:border-gray-700"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white transition-colors">Comment anonymously</h4>
+                    <button
+                      type="button"
+                      onClick={() => setCommentMode('options')}
+                      className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:underline"
+                    >
+                      Back
+                    </button>
+                  </div>
+
+                  <input type="text" name="phone_number" value={commentHoneypot} onChange={e => setCommentHoneypot(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} />
+
+                  {commentError && (
+                    <div className="flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
+                      <AlertCircle size={16} className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-red-700 dark:text-red-400">{commentError}</p>
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <input
+                      type="text"
+                      placeholder="Display name (optional)"
+                      value={anonDisplayName}
+                      onChange={e => {
+                        const v = e.target.value || 'Anonymous';
+                        setAnonDisplayName(v);
+                        setCommentForm(f => ({ ...f, name: v }));
+                      }}
+                      maxLength={80}
+                      className="w-full sm:w-64 px-3 sm:px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent transition-colors"
+                    />
+                  </div>
+                  <textarea
+                    placeholder="Write your comment…"
+                    required
+                    rows={4}
+                    maxLength={5000}
+                    value={commentForm.content}
+                    onChange={e => setCommentForm({ ...commentForm, content: e.target.value })}
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm sm:text-base text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent resize-none mb-3 sm:mb-4 transition-colors"
+                  />
+                  <button
+                    type="submit"
+                    disabled={commentSubmitting}
+                    className="bg-blue-600 dark:bg-blue-500 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-400 transition-colors font-medium text-sm sm:text-base min-h-[44px] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {commentSubmitting ? 'Submitting…' : 'Post Comment'}
                   </button>
                 </form>
               )}
