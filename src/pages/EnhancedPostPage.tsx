@@ -5,6 +5,9 @@ import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { Calendar, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown, ChevronDown, List } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useUserAuth } from '../contexts/UserAuthContext';
+import ReaderAuthModal from '../components/ReaderAuthModal';
+import { useReactions } from '../hooks/useReactions';
 import SocialShare from '../components/SocialShare';
 import VoiceNarration from '../components/VoiceNarration';
 import NewsletterSignup from '../components/NewsletterSignup';
@@ -35,10 +38,9 @@ export default function EnhancedPostPage() {
   const location = useLocation();
   const { resolvedTheme } = useTheme();
   const { user: adminUser } = useAuth();
+  const { publicUser } = useUserAuth();
   const [post, setPost] = useState<any | null>(null);
   const [comments, setComments] = useState<any[]>([]);
-  const [reactions, setReactions] = useState<Record<string, number>>({});
-  const [userReaction, setUserReaction] = useState<string | null>(null);
   const [relatedPosts, setRelatedPosts] = useState<any[]>([]);
   const [commentForm, setCommentForm] = useState({ name: '', email: '', content: '' });
   const [commentSubmitted, setCommentSubmitted] = useState(false);
@@ -61,6 +63,16 @@ export default function EnhancedPostPage() {
   const [replyError, setReplyError] = useState('');
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [authorProfile, setAuthorProfile] = useState<any | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [pendingReaction, setPendingReaction] = useState<string | null>(null);
+
+  const {
+    reactions,
+    userReaction,
+    handleReaction,
+    animating,
+    clearAnimating,
+  } = useReactions(post?.id ?? '', publicUser?.id ?? null);
 
   const userIdentifier = useMemo(() => {
     let id = localStorage.getItem('user_id');
@@ -132,14 +144,6 @@ export default function EnhancedPostPage() {
   useEffect(() => {
     if (post) {
       loadComments();
-      const storedReactions = localStorage.getItem(`reactions-${post.id}`);
-      if (storedReactions) {
-        setReactions(JSON.parse(storedReactions));
-      }
-      const storedUserReaction = localStorage.getItem(`user-reaction-${post.id}`);
-      if (storedUserReaction) {
-        setUserReaction(storedUserReaction);
-      }
     }
   }, [post]);
 
@@ -362,33 +366,6 @@ export default function EnhancedPostPage() {
       // silent fail
     } finally {
       setDeletingCommentId(null);
-    }
-  };
-
-  const handleReaction = (type: string) => {
-    if (!post) return;
-
-    let newReactions: Record<string, number>;
-    let newUserReaction: string | null;
-
-    if (userReaction === type) {
-      newReactions = { ...reactions, [type]: Math.max((reactions[type] || 1) - 1, 0) };
-      newUserReaction = null;
-    } else {
-      newReactions = { ...reactions, [type]: (reactions[type] || 0) + 1 };
-      if (userReaction) {
-        newReactions[userReaction] = Math.max((newReactions[userReaction] || 1) - 1, 0);
-      }
-      newUserReaction = type;
-    }
-
-    setReactions(newReactions);
-    setUserReaction(newUserReaction);
-    localStorage.setItem(`reactions-${post.id}`, JSON.stringify(newReactions));
-    if (newUserReaction) {
-      localStorage.setItem(`user-reaction-${post.id}`, newUserReaction);
-    } else {
-      localStorage.removeItem(`user-reaction-${post.id}`);
     }
   };
 
@@ -792,26 +769,54 @@ export default function EnhancedPostPage() {
 
 
               <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4 transition-colors">How did you feel about this article?</h3>
-                <div className="flex flex-wrap gap-2 sm:gap-3">
-                  {Object.entries(reactionIcons).map(([type, { emoji, label }]) => (
-                    <button
-                      key={type}
-                      onClick={() => handleReaction(type)}
-                      className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-full transition-all text-sm sm:text-base min-h-[44px] ${
-                        userReaction === type
-                          ? 'bg-blue-600 dark:bg-blue-500 text-white shadow-lg scale-110'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      <span className="text-lg sm:text-xl">{emoji}</span>
-                      <span className="font-medium">{label}</span>
-                      {reactions[type] > 0 && (
-                        <span className="ml-1 text-xs sm:text-sm">({reactions[type]})</span>
-                      )}
-                    </button>
-                  ))}
+                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-4">
+                  How did you feel about this article?
+                </h3>
+                <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+                  {Object.entries(reactionIcons).map(([type, { emoji, label }]) => {
+                    const isSelected = userReaction === type;
+                    const count = reactions[type] || 0;
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          if (!publicUser) {
+                            setPendingReaction(type);
+                            setAuthModalOpen(true);
+                          } else {
+                            handleReaction(type);
+                          }
+                        }}
+                        onAnimationEnd={() => { if (animating === type) clearAnimating(); }}
+                        className={`flex-shrink-0 flex flex-col items-center gap-1 px-3 py-2.5 rounded-2xl border-2 transition-all duration-150 min-w-[60px] ${
+                          animating === type ? 'reaction-pop' : ''
+                        } ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 scale-110 shadow-sm'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                        }`}
+                      >
+                        <span className="text-2xl leading-none">{emoji}</span>
+                        <span className={`text-[11px] font-medium leading-none mt-0.5 ${
+                          isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'
+                        }`}>{label}</span>
+                        {count > 0 && (
+                          <span className={`text-[10px] font-bold leading-none ${
+                            isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
+                          }`}>{count}</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
+                {!publicUser && (
+                  <p className="mt-3 text-xs text-gray-400 dark:text-gray-500">
+                    <button
+                      onClick={() => setAuthModalOpen(true)}
+                      className="text-blue-500 dark:text-blue-400 hover:underline font-medium"
+                    >Sign in</button>{' '}to react to this article
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1111,6 +1116,17 @@ export default function EnhancedPostPage() {
                 })}
               </div>
             </div>
+
+          <ReaderAuthModal
+            open={authModalOpen}
+            onClose={() => { setAuthModalOpen(false); setPendingReaction(null); }}
+            onSuccess={() => {
+              if (pendingReaction) {
+                handleReaction(pendingReaction);
+                setPendingReaction(null);
+              }
+            }}
+          />
           </article>
         </div>
       </div>
