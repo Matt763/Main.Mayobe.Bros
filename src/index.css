@@ -1019,12 +1019,15 @@ a.ai-internal-link:hover {
 /* ── TTS word-by-word highlight (VoiceNarration) ── */
 .tts-word {
   border-radius: 3px;
+  padding: 1px 2px;
+  margin: 0 -2px;
 }
 .tts-word.tts-active {
-  background-color: rgba(59, 130, 246, 0.28);
-  outline: 1px solid rgba(59, 130, 246, 0.18);
+  background-color: #2563eb;
+  color: #ffffff !important;
+  border-radius: 4px;
 }
 .dark .tts-word.tts-active {
-  background-color: rgba(96, 165, 250, 0.32);
-  outline: 1px solid rgba(96, 165, 250, 0.2);
+  background-color: #3b82f6;
+  color: #ffffff !important;
 }

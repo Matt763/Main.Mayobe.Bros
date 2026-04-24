@@ -58,8 +58,12 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
     typeof navigator !== 'undefined' &&
     /Android/i.test(navigator.userAgent)
   );
-  const chunksRef     = useRef<string[]>([]);
-  const chunkIndexRef = useRef(0);
+  const chunksRef       = useRef<string[]>([]);
+  const chunkIndexRef   = useRef(0);
+  // Chunk timer: drives onProgress even when onboundary doesn't fire (older Android/iOS)
+  const chunkTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chunkProgressRef = useRef({ charStart: 0, charLen: 0, startMs: 0, durationMs: 1000 });
+  const pausedAtRef     = useRef(0);
 
   // ── Initialise speech synthesis & load voices ────────────────────────────
   useEffect(() => {
@@ -92,6 +96,7 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
   const clearTimers = () => {
     if (keepAliveRef.current)     { clearInterval(keepAliveRef.current);     keepAliveRef.current = null; }
     if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
+    if (chunkTimerRef.current)    { clearInterval(chunkTimerRef.current);    chunkTimerRef.current = null; }
   };
 
   const cleanText = (html: string): string => {
@@ -177,14 +182,31 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
           voices.find(v => v.lang === selectedLang);
         if (pref2) utt.voice = pref2;
 
-        // Android has working onboundary; iOS does not — fire chunk start position as fallback
+        // Word boundary: accurate on Android Chrome, silent on iOS
         utt.onboundary = (e) => {
           if (e.name !== 'word') return;
           onProgress?.(chunkOffsets[index] + e.charIndex);
         };
-        if (isIOSRef.current) onProgress?.(chunkOffsets[index]);
+
+        // Timer-based fallback: fires every 120ms regardless of onboundary support
+        const wordCount = Math.max(chunks[index].trim().split(/\s+/).length, 1);
+        const durationMs = (wordCount / 2.8) * 1000;
+        chunkProgressRef.current = {
+          charStart: chunkOffsets[index],
+          charLen:   chunks[index].length,
+          startMs:   Date.now(),
+          durationMs,
+        };
+        if (chunkTimerRef.current) clearInterval(chunkTimerRef.current);
+        chunkTimerRef.current = setInterval(() => {
+          if (isPausedRef.current) return;
+          const { charStart, charLen, startMs, durationMs: dur } = chunkProgressRef.current;
+          const pct = Math.min((Date.now() - startMs) / dur, 0.99);
+          onProgress?.(charStart + Math.floor(pct * charLen));
+        }, 120);
 
         utt.onend = () => {
+          if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null; }
           if (chunksRef.current.length === 0) return; // stopped
           chunkIndexRef.current = index + 1;
           setProgress(Math.min(((index + 1) / chunks.length) * 100, 100));
@@ -196,6 +218,7 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
           }
         };
         utt.onerror = (e: any) => {
+          if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null; }
           if (e.error === 'interrupted' || e.error === 'canceled') return;
           clearTimers();
           isPausedRef.current = false;
@@ -273,12 +296,16 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
 
   const pauseNarration = () => {
     window.speechSynthesis.pause();
-    isPausedRef.current = true; // don't rely on speechSynthesis.paused (broken on iOS)
+    isPausedRef.current = true;
+    pausedAtRef.current = Date.now();
     setIsPaused(true);
     setIsPlaying(false);
   };
 
   const resumeNarration = () => {
+    // Shift chunk startMs forward by pause duration so timer progress stays accurate
+    const pauseDuration = Date.now() - pausedAtRef.current;
+    chunkProgressRef.current.startMs += pauseDuration;
     window.speechSynthesis.resume();
     isPausedRef.current = false;
     setIsPlaying(true);
@@ -317,6 +344,7 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
     setTtsProgress(0);
     try {
       const plain = cleanText(text).substring(0, 4096);
+      const totalChars = plain.length;
       const res = await fetch('/api/editor-ai/tts', {
         method: 'POST',
         credentials: 'include',
@@ -338,10 +366,13 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
       audioRef.current = audio;
 
       audio.addEventListener('timeupdate', () => {
-        if (audio.duration) setTtsProgress((audio.currentTime / audio.duration) * 100);
+        if (!audio.duration) return;
+        const pct = audio.currentTime / audio.duration;
+        setTtsProgress(pct * 100);
+        onProgress?.(Math.floor(pct * totalChars));
       });
-      audio.addEventListener('ended', () => { setTtsPlaying(false); setTtsProgress(100); });
-      audio.addEventListener('error', () => { setTtsPlaying(false); setTtsError('Playback error'); });
+      audio.addEventListener('ended', () => { setTtsPlaying(false); setTtsProgress(100); onProgress?.(-1); });
+      audio.addEventListener('error', () => { setTtsPlaying(false); setTtsError('Playback error'); onProgress?.(-1); });
 
       await audio.play();
       setTtsPlaying(true);
@@ -370,6 +401,7 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
     }
     setTtsPlaying(false);
     setTtsProgress(0);
+    onProgress?.(-1);
   };
 
   if (!supported) {

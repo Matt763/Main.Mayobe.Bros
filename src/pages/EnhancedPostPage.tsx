@@ -51,6 +51,7 @@ export default function EnhancedPostPage() {
   const [activeCharIndex, setActiveCharIndex] = useState(-1);
   const ttsWordIndexRef  = useRef<Array<{ci: number; el: HTMLSpanElement}>>([]);
   const ttsActiveSpanRef = useRef<HTMLSpanElement | null>(null);
+  const ttsLastScrollRef = useRef(0);
   const commentTokenRef = useRef(generateToken());
   const lastCommentRef = useRef<number>(0);
 
@@ -144,9 +145,11 @@ export default function EnhancedPostPage() {
 
   // ── TTS word-span injection ──────────────────────────────────────────────
   useEffect(() => {
+    // Defer one frame to ensure dangerouslySetInnerHTML has settled in the DOM
+    const timer = setTimeout(() => {
     const container = contentRef.current;
     if (!container || !post?.content) return;
-    if (container.querySelector('.tts-word')) return; // already wrapped
+    if (container.querySelector('.tts-word')) return; // already wrapped for this content
 
     const wordSpans: Array<{ci: number; el: HTMLSpanElement}> = [];
     let charOffset = 0;
@@ -188,6 +191,8 @@ export default function EnhancedPostPage() {
 
     walk(container);
     ttsWordIndexRef.current = wordSpans;
+    }, 0);
+    return () => clearTimeout(timer);
   }, [post?.content]);
 
   // ── TTS active-word highlight + auto-scroll ──────────────────────────────
@@ -208,7 +213,17 @@ export default function EnhancedPostPage() {
     const target = arr[best].el;
     target.classList.add('tts-active');
     ttsActiveSpanRef.current = target;
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Only auto-scroll when the word is outside the visible area, throttled to 800ms
+    const now = Date.now();
+    if (now - ttsLastScrollRef.current > 800) {
+      const rect = target.getBoundingClientRect();
+      const inView = rect.top >= 80 && rect.bottom <= window.innerHeight - 80;
+      if (!inView) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        ttsLastScrollRef.current = now;
+      }
+    }
   }, [activeCharIndex]);
 
   useEffect(() => {

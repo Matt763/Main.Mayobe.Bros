@@ -134,7 +134,7 @@ export default function SocialShare({ url, title, variant = 'default' }: Props) 
 
   const ghostIdle = 'bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:border-transparent';
   const defaultIdle =
-    'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 shadow-sm hover:shadow-md hover:border-transparent hover:text-white';
+    'bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-200 shadow-sm hover:shadow-md hover:border-transparent hover:text-white';
 
   /* ── Collapsed: single Share button ── */
   if (!open) {
@@ -250,7 +250,7 @@ export default function SocialShare({ url, title, variant = 'default' }: Props) 
               ? 'bg-green-500 border-green-500 text-white scale-105 shadow-md'
               : isGhost
                 ? `${ghostIdle}`
-                : `${defaultIdle} hover:!bg-indigo-600 hover:!border-indigo-600 hover:!text-white`
+                : `bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-200 shadow-sm hover:shadow-md hover:!bg-indigo-600 hover:!border-indigo-600 hover:!text-white`
           }`}
           onMouseEnter={e => {
             if (!copied) {
