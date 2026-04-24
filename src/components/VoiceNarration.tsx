@@ -94,32 +94,6 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // ── Notify parent of play state (Web Speech API path) ───────────────────
-  useEffect(() => {
-    if (supported) onPlayStateChange?.(isPlaying, isPaused);
-  }, [isPlaying, isPaused, supported]);
-
-  // ── Notify parent of play state (server TTS path) ───────────────────────
-  useEffect(() => {
-    if (!supported) {
-      const paused = !ttsPlaying && ttsProgress > 0 && ttsProgress < 100;
-      onPlayStateChange?.(ttsPlaying, paused);
-    }
-  }, [ttsPlaying, ttsProgress, supported]);
-
-  // ── Keep controlsRef current so parent can call pause/resume ─────────────
-  useEffect(() => {
-    if (!controlsRef) return;
-    if (supported) {
-      controlsRef.current = { pause: pauseNarration, resume: resumeNarration };
-    } else {
-      controlsRef.current = {
-        pause:  () => { audioRef.current?.pause();                     setTtsPlaying(false); },
-        resume: () => { audioRef.current?.play().catch(() => void 0);  setTtsPlaying(true);  },
-      };
-    }
-  });
-
   // ── Helpers ──────────────────────────────────────────────────────────────
   const clearTimers = () => {
     if (keepAliveRef.current)     { clearInterval(keepAliveRef.current);     keepAliveRef.current = null; }
@@ -365,6 +339,32 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
   const [ttsPlaying, setTtsPlaying]     = useState(false);
   const [ttsError,   setTtsError]       = useState('');
   const [ttsProgress, setTtsProgress]   = useState(0);
+
+  // ── Notify parent of play state (Web Speech API path) ───────────────────
+  useEffect(() => {
+    if (supported) onPlayStateChange?.(isPlaying, isPaused);
+  }, [isPlaying, isPaused, supported]);
+
+  // ── Notify parent of play state (server TTS path) ───────────────────────
+  useEffect(() => {
+    if (!supported) {
+      const paused = !ttsPlaying && ttsProgress > 0 && ttsProgress < 100;
+      onPlayStateChange?.(ttsPlaying, paused);
+    }
+  }, [ttsPlaying, ttsProgress, supported]);
+
+  // ── Keep controlsRef current so parent can call pause/resume ─────────────
+  useEffect(() => {
+    if (!controlsRef) return;
+    if (supported) {
+      controlsRef.current = { pause: pauseNarration, resume: resumeNarration };
+    } else {
+      controlsRef.current = {
+        pause:  () => { audioRef.current?.pause();                     setTtsPlaying(false); },
+        resume: () => { audioRef.current?.play().catch(() => void 0);  setTtsPlaying(true);  },
+      };
+    }
+  });
 
   const startServerTts = async () => {
     setTtsError('');
