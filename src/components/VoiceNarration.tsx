@@ -4,6 +4,7 @@ import { Play, Pause, Square, Volume2, VolumeX, Languages, ChevronDown, Loader2 
 interface VoiceNarrationProps {
   text: string;
   title: string;
+  onProgress?: (charIndex: number) => void; // -1 = stopped/finished
 }
 
 const LANGUAGES = [
@@ -26,7 +27,7 @@ const LANGUAGES = [
   { code: 'tr-TR', label: 'Turkish' },
 ];
 
-export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
+export default function VoiceNarration({ text, title, onProgress }: VoiceNarrationProps) {
   const [isPlaying, setIsPlaying]     = useState(false);
   const [isPaused, setIsPaused]       = useState(false);
   const [progress, setProgress]       = useState(0);
@@ -151,6 +152,10 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
       chunksRef.current = chunks;
       chunkIndexRef.current = 0;
 
+      // Cumulative char offset of each chunk in the full plain text
+      const chunkOffsets = chunks.reduce<number[]>((acc, _, i) =>
+        [...acc, i === 0 ? 0 : acc[i - 1] + chunks[i - 1].length], []);
+
       const speakChunk = (index: number) => {
         if (index >= chunks.length) {
           clearTimers();
@@ -158,6 +163,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
           setIsPlaying(false);
           setIsPaused(false);
           setProgress(100);
+          onProgress?.(-1);
           return;
         }
         const utt = new SpeechSynthesisUtterance(chunks[index]);
@@ -170,6 +176,13 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
           voices.find(v => v.lang.startsWith(selectedLang.split('-')[0])) ||
           voices.find(v => v.lang === selectedLang);
         if (pref2) utt.voice = pref2;
+
+        // Android has working onboundary; iOS does not — fire chunk start position as fallback
+        utt.onboundary = (e) => {
+          if (e.name !== 'word') return;
+          onProgress?.(chunkOffsets[index] + e.charIndex);
+        };
+        if (isIOSRef.current) onProgress?.(chunkOffsets[index]);
 
         utt.onend = () => {
           if (chunksRef.current.length === 0) return; // stopped
@@ -188,6 +201,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
           isPausedRef.current = false;
           setIsPlaying(false);
           setIsPaused(false);
+          onProgress?.(-1);
         };
         utteranceRef.current = utt;
         window.speechSynthesis.speak(utt);
@@ -201,12 +215,13 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
       return; // skip non-iOS code below
     }
 
-    // Desktop / Android Chrome: word boundary events give accurate progress
+    // Desktop: word boundary events give accurate progress
     utterance.onboundary = (e) => {
       if (e.name !== 'word') return;
       boundaryFiredRef.current = true;
       const pct = totalCharsRef.current > 0 ? (e.charIndex / totalCharsRef.current) * 100 : 0;
       setProgress(Math.min(pct, 100));
+      onProgress?.(e.charIndex);
     };
 
     utterance.onend = () => {
@@ -215,6 +230,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
       setIsPlaying(false);
       setIsPaused(false);
       setProgress(100);
+      onProgress?.(-1);
     };
 
     utterance.onerror = (e: any) => {
@@ -224,6 +240,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
       isPausedRef.current = false;
       setIsPlaying(false);
       setIsPaused(false);
+      onProgress?.(-1);
     };
 
     utteranceRef.current = utterance;
@@ -277,6 +294,7 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
     setIsPlaying(false);
     setIsPaused(false);
     setProgress(0);
+    onProgress?.(-1);
   };
 
   const toggleMute = () => {

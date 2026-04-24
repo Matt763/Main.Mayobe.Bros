@@ -48,6 +48,9 @@ export default function EnhancedPostPage() {
   const [commentError, setCommentError] = useState('');
   const [commentHoneypot, setCommentHoneypot] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
+  const [activeCharIndex, setActiveCharIndex] = useState(-1);
+  const ttsWordIndexRef  = useRef<Array<{ci: number; el: HTMLSpanElement}>>([]);
+  const ttsActiveSpanRef = useRef<HTMLSpanElement | null>(null);
   const commentTokenRef = useRef(generateToken());
   const lastCommentRef = useRef<number>(0);
 
@@ -138,6 +141,75 @@ export default function EnhancedPostPage() {
     allHeadings.forEach(h => { if (h.id) observer.observe(h); });
     return () => observer.disconnect();
   }, [post, tableOfContents]);
+
+  // ── TTS word-span injection ──────────────────────────────────────────────
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container || !post?.content) return;
+    if (container.querySelector('.tts-word')) return; // already wrapped
+
+    const wordSpans: Array<{ci: number; el: HTMLSpanElement}> = [];
+    let charOffset = 0;
+
+    function walk(node: Node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent || '';
+        if (!text) return;
+        const parent = node.parentNode as Element | null;
+        if (!parent) return;
+        const tag = parent.tagName?.toLowerCase();
+        if (tag && ['script', 'style', 'noscript'].includes(tag)) { charOffset += text.length; return; }
+        const tokens = text.split(/(\s+)/);
+        const frag = document.createDocumentFragment();
+        let localOffset = 0;
+        for (const token of tokens) {
+          if (/\S/.test(token)) {
+            const span = document.createElement('span');
+            span.className = 'tts-word';
+            span.dataset.ci = String(charOffset + localOffset);
+            span.textContent = token;
+            frag.appendChild(span);
+            wordSpans.push({ ci: charOffset + localOffset, el: span });
+          } else if (token) {
+            frag.appendChild(document.createTextNode(token));
+          }
+          localOffset += token.length;
+        }
+        charOffset += text.length;
+        parent.replaceChild(frag, node);
+        return;
+      }
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tag = (node as Element).tagName.toLowerCase();
+        if (['script', 'style'].includes(tag)) { charOffset += (node.textContent || '').length; return; }
+        Array.from(node.childNodes).forEach(walk);
+      }
+    }
+
+    walk(container);
+    ttsWordIndexRef.current = wordSpans;
+  }, [post?.content]);
+
+  // ── TTS active-word highlight + auto-scroll ──────────────────────────────
+  useEffect(() => {
+    if (ttsActiveSpanRef.current) {
+      ttsActiveSpanRef.current.classList.remove('tts-active');
+      ttsActiveSpanRef.current = null;
+    }
+    if (activeCharIndex < 0 || ttsWordIndexRef.current.length === 0) return;
+
+    const arr = ttsWordIndexRef.current;
+    let lo = 0, hi = arr.length - 1, best = 0;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (arr[mid].ci <= activeCharIndex) { best = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    const target = arr[best].el;
+    target.classList.add('tts-active');
+    ttsActiveSpanRef.current = target;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [activeCharIndex]);
 
   useEffect(() => {
     loadPost();
@@ -757,7 +829,7 @@ export default function EnhancedPostPage() {
           )}
 
           <article className={tableOfContents.length > 1 ? 'lg:col-span-3' : 'lg:col-span-4'}>
-            <VoiceNarration text={post.content} title={post.title} />
+            <VoiceNarration text={post.content} title={post.title} onProgress={setActiveCharIndex} />
 
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 mb-6 md:mb-8 transition-colors">
               <div
