@@ -47,6 +47,13 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
   const startTimeRef     = useRef(0);
   const estimatedMsRef   = useRef(0);
   const boundaryFiredRef = useRef(false);   // true when onboundary works (not iOS)
+  const isIOSRef = useRef(
+    typeof navigator !== 'undefined' &&
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+  );
+  const chunksRef     = useRef<string[]>([]);
+  const chunkIndexRef = useRef(0);
 
   // ── Initialise speech synthesis & load voices ────────────────────────────
   useEffect(() => {
@@ -87,6 +94,29 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
     return div.textContent || div.innerText || '';
   };
 
+  const splitIntoChunks = (text: string, maxWords = 100): string[] => {
+    const parts = text.match(/[^.!?]*[.!?]+\s*/g) || [];
+    const remainder = text.slice(parts.reduce((n, p) => n + p.length, 0)).trim();
+    if (remainder) parts.push(remainder);
+    if (parts.length === 0) return [text];
+    const chunks: string[] = [];
+    let current = '';
+    let count = 0;
+    for (const part of parts) {
+      const words = part.trim().split(/\s+/).filter(Boolean).length;
+      if (count + words > maxWords && current.trim()) {
+        chunks.push(current.trim());
+        current = part;
+        count = words;
+      } else {
+        current += part;
+        count += words;
+      }
+    }
+    if (current.trim()) chunks.push(current.trim());
+    return chunks.length > 0 ? chunks : [text];
+  };
+
   // ── Playback controls ────────────────────────────────────────────────────
   const startNarration = () => {
     if (!('speechSynthesis' in window)) return;
@@ -109,6 +139,57 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
       voices.find(v => v.lang.startsWith(selectedLang.split('-')[0])) ||
       voices.find(v => v.lang === selectedLang);
     if (preferred) utterance.voice = preferred;
+
+    // ── iOS: chunk-based narration (no keepAlive pause/resume = no flicker) ──
+    if (isIOSRef.current) {
+      const chunks = splitIntoChunks(plain);
+      chunksRef.current = chunks;
+      chunkIndexRef.current = 0;
+
+      const speakChunk = (index: number) => {
+        if (index >= chunks.length) {
+          clearTimers();
+          isPausedRef.current = false;
+          setIsPlaying(false);
+          setIsPaused(false);
+          setProgress(100);
+          return;
+        }
+        const utt = new SpeechSynthesisUtterance(chunks[index]);
+        utt.lang   = selectedLang;
+        utt.rate   = 0.95;
+        utt.pitch  = 1.0;
+        utt.volume = mutedRef.current ? 0 : 1;
+        const pref2 =
+          voices.find(v => v.lang === selectedLang && (v.name.includes('Google') || v.name.includes('Natural'))) ||
+          voices.find(v => v.lang.startsWith(selectedLang.split('-')[0])) ||
+          voices.find(v => v.lang === selectedLang);
+        if (pref2) utt.voice = pref2;
+
+        utt.onend = () => {
+          if (chunksRef.current.length === 0) return; // stopped
+          chunkIndexRef.current = index + 1;
+          setProgress(Math.min(((index + 1) / chunks.length) * 100, 100));
+          speakChunk(index + 1);
+        };
+        utt.onerror = (e: any) => {
+          if (e.error === 'interrupted' || e.error === 'canceled') return;
+          clearTimers();
+          isPausedRef.current = false;
+          setIsPlaying(false);
+          setIsPaused(false);
+        };
+        utteranceRef.current = utt;
+        window.speechSynthesis.speak(utt);
+      };
+
+      speakChunk(0);
+      isPausedRef.current = false;
+      setIsPlaying(true);
+      setIsPaused(false);
+      setProgress(0);
+      return; // skip non-iOS code below
+    }
 
     // Desktop / Android Chrome: word boundary events give accurate progress
     utterance.onboundary = (e) => {
@@ -180,6 +261,8 @@ export default function VoiceNarration({ text, title }: VoiceNarrationProps) {
   const stopNarration = () => {
     clearTimers();
     window.speechSynthesis.cancel();
+    chunksRef.current = [];
+    chunkIndexRef.current = 0;
     isPausedRef.current = false;
     setIsPlaying(false);
     setIsPaused(false);
