@@ -103,25 +103,22 @@ export async function dispatchPostNewsletter(post: {
       readingTime: post.readingTime,
     };
 
-    const BATCH_SIZE = 10;
-    const BATCH_DELAY_MS = 300;
+    // Send one at a time with a 220 ms gap — 4–5 emails/sec, safely under
+    // Resend's 5 req/sec hard limit regardless of concurrent request overhead.
+    const SEND_DELAY_MS = 220;
     let sentCount = 0;
 
-    for (let i = 0; i < subscribers.length; i += BATCH_SIZE) {
-      const batch = subscribers.slice(i, i + BATCH_SIZE);
-      const results = await Promise.allSettled(
-        batch.map(async (sub) => {
-          const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${sub.unsubscribe_token}`;
-          await sendPostDigestEmail(sub.email, unsubUrl, siteUrl, postData, relatedPosts);
-        })
-      );
-      sentCount += results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected');
-      if (failed.length > 0) {
-        console.error(`[NEWSLETTER] ${failed.length} failures in batch ${Math.floor(i / BATCH_SIZE) + 1}`);
+    for (let i = 0; i < subscribers.length; i++) {
+      const sub = subscribers[i];
+      try {
+        const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${sub.unsubscribe_token}`;
+        await sendPostDigestEmail(sub.email, unsubUrl, siteUrl, postData, relatedPosts);
+        sentCount++;
+      } catch (e: any) {
+        console.error(`[NEWSLETTER] Failed to send to ${sub.email}:`, e?.message || e);
       }
-      if (i + BATCH_SIZE < subscribers.length) {
-        await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+      if (i < subscribers.length - 1) {
+        await new Promise(r => setTimeout(r, SEND_DELAY_MS));
       }
     }
 
