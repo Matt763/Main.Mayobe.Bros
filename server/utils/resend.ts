@@ -17,7 +17,8 @@ const BRAND = {
   dangerColor: '#dc2626',
 };
 
-const FROM_PRIMARY = 'Mayobe Bros <info@contact.mayobebros.com>';
+const FROM_PRIMARY  = 'Mayobe Bros <info@mayobebros.com>';
+const FROM_SUPPORT  = 'Mayobe Bros Support <support@mayobebros.com>';
 const FROM_FALLBACK = 'Mayobe Bros <onboarding@resend.dev>';
 
 function getResendClient(): Resend | null {
@@ -617,7 +618,7 @@ export function buildAccountWelcomeEmail(name: string, siteUrl: string): string 
                 <tr>
                   <td style="width:33%;padding-right:12px;vertical-align:top;">
                     <p style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:1px;margin:0 0 5px;">Support</p>
-                    <p style="font-size:12px;color:rgba(255,255,255,0.75);margin:0;">info@mayobebros.com</p>
+                    <p style="font-size:12px;color:rgba(255,255,255,0.75);margin:0;">support@mayobebros.com</p>
                   </td>
                   <td style="width:33%;padding-right:12px;vertical-align:top;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
                     <p style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:1px;margin:0 0 5px;">Website</p>
@@ -861,7 +862,7 @@ export async function sendForgotPasswordEmail(to: string, name: string, secretCo
   }
   const html = buildForgotPasswordEmail(name, secretCode, siteUrl);
   const { error } = await resend.emails.send({
-    from: getFromAddress(),
+    from: FROM_SUPPORT,
     to,
     subject: 'Reset your Mayobe Bros password',
     html,
@@ -1266,7 +1267,10 @@ export function buildContactUserEmail(contact: ContactSubmission, siteUrl: strin
 
 // ─── Contact: Send functions ──────────────────────────────────────────────────
 
-const ADMIN_EMAIL = process.env.ADMIN_CONTACT_EMAIL || 'info@mayobebros.com';
+function getAdminEmailForType(type?: string): string {
+  if (type === 'technical' || type === 'support') return 'support@mayobebros.com';
+  return process.env.ADMIN_CONTACT_EMAIL || 'info@mayobebros.com';
+}
 
 export async function sendContactAdminEmail(contact: ContactSubmission, siteUrl: string): Promise<void> {
   const resend = getResendClient();
@@ -1276,9 +1280,10 @@ export async function sendContactAdminEmail(contact: ContactSubmission, siteUrl:
   }
   const typeLabel = CONTACT_TYPE_LABELS[contact.type || 'general'] || contact.type || 'General';
   const html = buildContactAdminEmail(contact, siteUrl);
+  const adminTo = getAdminEmailForType(contact.type);
   const { error } = await resend.emails.send({
     from: getFromAddress(),
-    to: ADMIN_EMAIL,
+    to: adminTo,
     replyTo: `${contact.name} <${contact.email}>`,
     subject: `[Contact] ${typeLabel}: ${contact.subject || '(no subject)'} — from ${contact.name}`,
     html,

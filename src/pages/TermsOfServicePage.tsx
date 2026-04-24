@@ -353,10 +353,23 @@ export default function TermsOfServicePage() {
                 If you have any questions about these Terms of Service, please contact us:
               </p>
               <div className="bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 rounded-lg mt-4">
-                <div className="space-y-2 text-gray-700 dark:text-gray-300 text-sm sm:text-base">
-                  <p><strong>Email:</strong> info@mayobebros.com</p>
-                  <p><strong>Website:</strong> www.mayobebros.com</p>
-                  <p><strong>Response Time:</strong> We aim to respond to all legal inquiries within 72 hours</p>
+                <div className="space-y-3 text-gray-700 dark:text-gray-300 text-sm sm:text-base">
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white mb-1">General &amp; Business Inquiries</p>
+                    <a href="mailto:info@mayobebros.com" className="text-gray-700 dark:text-gray-300 hover:underline">info@mayobebros.com</a>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white mb-1">Technical Support &amp; Account Issues</p>
+                    <a href="mailto:support@mayobebros.com" className="text-gray-700 dark:text-gray-300 hover:underline">support@mayobebros.com</a>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white mb-1">Executive / CEO Contact</p>
+                    <a href="mailto:mclean@mayobebros.com" className="text-gray-700 dark:text-gray-300 hover:underline">mclean@mayobebros.com</a>
+                  </div>
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                    <p><strong>Website:</strong> www.mayobebros.com</p>
+                    <p className="mt-1"><strong>Response Time:</strong> We aim to respond to all legal inquiries within 72 hours</p>
+                  </div>
                 </div>
               </div>
             </div>

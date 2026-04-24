@@ -124,7 +124,7 @@ export default function ContactUsPage() {
     },
     {
       question: 'How do I report a technical issue?',
-      answer: 'Please use this contact form with "Technical Issue" in the subject line. Include as much detail as possible about the problem you are experiencing.'
+      answer: 'For technical issues or account/password help, email support@mayobebros.com directly — this reaches our technical team fastest. You can also use this form with "Technical Issue" in the subject line.'
     },
     {
       question: 'Do you offer advertising opportunities?',
@@ -294,9 +294,33 @@ export default function ContactUsPage() {
                       <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Email</div>
+                      <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">General &amp; Newsletter</div>
                       <a href="mailto:info@mayobebros.com" className="text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-sm sm:text-base">
                         info@mayobebros.com
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
+                      <Mail className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Technical Support &amp; Password Reset</div>
+                      <a href="mailto:support@mayobebros.com" className="text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-sm sm:text-base">
+                        support@mayobebros.com
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                      <Mail className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">CEO / Executive Contact</div>
+                      <a href="mailto:mclean@mayobebros.com" className="text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors text-sm sm:text-base">
+                        mclean@mayobebros.com
                       </a>
                     </div>
                   </div>
