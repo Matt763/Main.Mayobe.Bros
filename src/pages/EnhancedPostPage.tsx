@@ -3,7 +3,7 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
-import { Calendar, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown, ChevronDown, List } from 'lucide-react';
+import { Calendar, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown, ChevronDown, List, Play, Pause } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserAuth } from '../contexts/UserAuthContext';
 import ReaderAuthModal from '../components/ReaderAuthModal';
@@ -52,6 +52,9 @@ export default function EnhancedPostPage() {
   const ttsWordIndexRef  = useRef<Array<{ci: number; el: HTMLSpanElement}>>([]);
   const ttsActiveSpanRef = useRef<HTMLSpanElement | null>(null);
   const ttsLastScrollRef = useRef(0);
+  const [ttsIsPlaying, setTtsIsPlaying] = useState(false);
+  const [ttsIsPaused,  setTtsIsPaused]  = useState(false);
+  const ttsControlsRef = useRef<{ pause: () => void; resume: () => void } | null>(null);
   const commentTokenRef = useRef(generateToken());
   const lastCommentRef = useRef<number>(0);
 
@@ -844,7 +847,16 @@ export default function EnhancedPostPage() {
           )}
 
           <article className={tableOfContents.length > 1 ? 'lg:col-span-3' : 'lg:col-span-4'}>
-            <VoiceNarration text={post.content} title={post.title} onProgress={setActiveCharIndex} />
+            <VoiceNarration
+              text={post.content}
+              title={post.title}
+              onProgress={setActiveCharIndex}
+              onPlayStateChange={(playing, paused) => {
+                setTtsIsPlaying(playing);
+                setTtsIsPaused(paused);
+              }}
+              controlsRef={ttsControlsRef}
+            />
 
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 mb-6 md:mb-8 transition-colors">
               <div
@@ -1300,6 +1312,38 @@ export default function EnhancedPostPage() {
             }}
           />
           </article>
+
+      {/* ── Floating TTS pause/resume button (visible only while audio is active) ── */}
+      {(ttsIsPlaying || ttsIsPaused) && (
+        <div className="fixed top-20 right-4 z-50 flex flex-col items-center gap-1 animate-slide-in-right">
+          <div className="relative">
+            {ttsIsPlaying && (
+              <span className="absolute inset-0 rounded-full bg-blue-400 dark:bg-blue-500 animate-ping opacity-40" />
+            )}
+            <button
+              onClick={() => {
+                if (ttsIsPlaying) ttsControlsRef.current?.pause();
+                else ttsControlsRef.current?.resume();
+              }}
+              aria-label={ttsIsPlaying ? 'Pause audio' : 'Resume audio'}
+              className={`relative w-12 h-12 rounded-full shadow-xl flex items-center justify-center transition-all duration-200 active:scale-90 ${
+                ttsIsPlaying
+                  ? 'bg-blue-600 hover:bg-blue-700 text-white ring-4 ring-blue-200 dark:ring-blue-800'
+                  : 'bg-amber-500 hover:bg-amber-600 text-white ring-4 ring-amber-200 dark:ring-amber-800'
+              }`}
+            >
+              {ttsIsPlaying
+                ? <Pause size={18} strokeWidth={2.5} />
+                : <Play  size={18} strokeWidth={2.5} className="translate-x-0.5" />}
+            </button>
+          </div>
+          <span className={`text-[10px] font-bold tracking-wide select-none drop-shadow ${
+            ttsIsPlaying ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'
+          }`}>
+            {ttsIsPlaying ? 'PLAYING' : 'PAUSED'}
+          </span>
+        </div>
+      )}
         </div>
       </div>
 

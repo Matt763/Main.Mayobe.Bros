@@ -5,6 +5,8 @@ interface VoiceNarrationProps {
   text: string;
   title: string;
   onProgress?: (charIndex: number) => void; // -1 = stopped/finished
+  onPlayStateChange?: (isPlaying: boolean, isPaused: boolean) => void;
+  controlsRef?: { current: { pause: () => void; resume: () => void } | null };
 }
 
 const LANGUAGES = [
@@ -27,7 +29,7 @@ const LANGUAGES = [
   { code: 'tr-TR', label: 'Turkish' },
 ];
 
-export default function VoiceNarration({ text, title, onProgress }: VoiceNarrationProps) {
+export default function VoiceNarration({ text, title, onProgress, onPlayStateChange, controlsRef }: VoiceNarrationProps) {
   const [isPlaying, setIsPlaying]     = useState(false);
   const [isPaused, setIsPaused]       = useState(false);
   const [progress, setProgress]       = useState(0);
@@ -91,6 +93,32 @@ export default function VoiceNarration({ text, title, onProgress }: VoiceNarrati
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // ── Notify parent of play state (Web Speech API path) ───────────────────
+  useEffect(() => {
+    if (supported) onPlayStateChange?.(isPlaying, isPaused);
+  }, [isPlaying, isPaused, supported]);
+
+  // ── Notify parent of play state (server TTS path) ───────────────────────
+  useEffect(() => {
+    if (!supported) {
+      const paused = !ttsPlaying && ttsProgress > 0 && ttsProgress < 100;
+      onPlayStateChange?.(ttsPlaying, paused);
+    }
+  }, [ttsPlaying, ttsProgress, supported]);
+
+  // ── Keep controlsRef current so parent can call pause/resume ─────────────
+  useEffect(() => {
+    if (!controlsRef) return;
+    if (supported) {
+      controlsRef.current = { pause: pauseNarration, resume: resumeNarration };
+    } else {
+      controlsRef.current = {
+        pause:  () => { audioRef.current?.pause();                     setTtsPlaying(false); },
+        resume: () => { audioRef.current?.play().catch(() => void 0);  setTtsPlaying(true);  },
+      };
+    }
+  });
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   const clearTimers = () => {
