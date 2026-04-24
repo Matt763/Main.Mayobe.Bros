@@ -130,18 +130,28 @@ export function UserAuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signUpEmail = async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: name } },
-    });
-    if (error) return { error: error.message };
-    // If Supabase requires email confirmation, SIGNED_IN won't fire until the user
-    // confirms, so we sync now. If autoConfirm is on, SIGNED_IN fires and also syncs —
-    // the second call is a no-op (isNew=false) and sends no duplicate emails.
-    if (data.user) {
-      await syncRegisteredUser(data.user);
+    // Use server-side signup so the admin API auto-confirms the email — this
+    // bypasses Supabase's free-tier 4-emails/hr confirmation rate limit and
+    // ensures our Resend welcome email is sent reliably.
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password, name: name.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { error: data.error || 'Failed to create account' };
+    } catch {
+      return { error: 'Network error. Please try again.' };
     }
+
+    // Sign in immediately — the server created the user with email already confirmed.
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+    if (signInErr) return { error: signInErr.message };
+
     return { error: null };
   };
 

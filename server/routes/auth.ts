@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../utils/supabase.js';
 import { sendAccountWelcomeEmail, sendForgotPasswordEmail, sendWelcomeEmail } from '../utils/resend.js';
 import { setAdminCookie, clearAdminCookie } from '../middleware/auth.js';
@@ -23,6 +23,109 @@ function generateMemberCode(): string {
   for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return `MB-${code}`;
 }
+
+// Shared helper — subscribe email to newsletter and send welcome email if new.
+// Called after both server-side signup and client-side sync-user.
+async function autoSubscribeNewsletter(
+  supabase: SupabaseClient,
+  email: string,
+  siteUrl: string
+): Promise<void> {
+  const { data: existingSub } = await supabase
+    .from('newsletter_subscribers')
+    .select('id, is_active, unsubscribe_token')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (existingSub) {
+    if (!existingSub.is_active) {
+      await supabase
+        .from('newsletter_subscribers')
+        .update({ is_active: true, unsubscribed_at: null, confirmed_at: new Date().toISOString() })
+        .eq('id', existingSub.id);
+      if (existingSub.unsubscribe_token) {
+        const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${existingSub.unsubscribe_token}`;
+        await sendWelcomeEmail(email, unsubUrl, siteUrl);
+      }
+    }
+    // Already active — no action needed
+  } else {
+    const { data: newSub } = await supabase
+      .from('newsletter_subscribers')
+      .insert({ email, is_active: true, source: 'signup', confirmed_at: new Date().toISOString() })
+      .select('id, unsubscribe_token')
+      .single();
+
+    if (newSub?.unsubscribe_token) {
+      const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${newSub.unsubscribe_token}`;
+      await sendWelcomeEmail(email, unsubUrl, siteUrl);
+    }
+  }
+}
+
+// POST /api/auth/signup — server-side account creation that bypasses Supabase's
+// email confirmation rate limit (free tier: 4/hr). Uses admin API to create and
+// auto-confirm the user, then sends our branded Resend welcome email.
+router.post('/signup', async (req, res) => {
+  try {
+    const { email, password, name } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+    const supabase = getServiceRoleClient();
+    const siteUrl = getSiteUrl();
+    const displayName = (name || '').trim() || email.split('@')[0];
+
+    // Create user via admin API — email_confirm: true skips Supabase's confirmation
+    // email entirely, so we never hit the free-tier 4-emails/hr rate limit.
+    const { data: created, error: createErr } = await supabase.auth.admin.createUser({
+      email: email.trim().toLowerCase(),
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: displayName },
+    });
+
+    if (createErr) {
+      const msg = createErr.message || '';
+      if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered')) {
+        return res.status(409).json({ error: 'An account with this email already exists. Please sign in.' });
+      }
+      return res.status(400).json({ error: msg || 'Failed to create account' });
+    }
+
+    const userId = created.user.id;
+
+    // Insert into registered_users (idempotent — skip if already there)
+    const { data: existing } = await supabase
+      .from('registered_users')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!existing) {
+      await supabase.from('registered_users').insert({
+        id: userId,
+        email: email.trim().toLowerCase(),
+        name: displayName,
+        avatar_url: null,
+        provider: 'email',
+        last_sign_in_at: new Date().toISOString(),
+      }).catch(e => console.error('[AUTH] signup registered_users insert failed:', e));
+
+      // Send welcome emails synchronously before responding so they're guaranteed to fire
+      await Promise.allSettled([
+        sendAccountWelcomeEmail(email.trim().toLowerCase(), displayName, siteUrl)
+          .catch(e => console.error('[AUTH] signup account welcome email failed:', e)),
+        autoSubscribeNewsletter(supabase, email.trim().toLowerCase(), siteUrl)
+          .catch(e => console.error('[AUTH] signup newsletter subscription failed:', e)),
+      ]);
+    }
+
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('[AUTH] signup error:', err);
+    return res.status(500).json({ error: 'Failed to create account' });
+  }
+});
 
 // POST /api/auth/sync-user — upsert registered_users record and send welcome email for new users.
 // Called from the frontend after every sign-in/sign-up.
@@ -69,56 +172,17 @@ router.post('/sync-user', async (req, res) => {
 
     if (insertErr) throw insertErr;
 
-    res.json({ success: true, isNew: true });
-
-    // After responding: send account welcome email + auto-subscribe to newsletter
+    // Send emails synchronously before responding — guarantees delivery even on
+    // Vercel serverless where code after res.json() may not complete.
     const displayName = name || email.split('@')[0];
+    await Promise.allSettled([
+      sendAccountWelcomeEmail(email, displayName, siteUrl)
+        .catch(e => console.error('[AUTH] sync-user welcome email failed:', e)),
+      autoSubscribeNewsletter(supabase, email, siteUrl)
+        .catch(e => console.error('[AUTH] sync-user newsletter subscription failed:', e)),
+    ]);
 
-    sendAccountWelcomeEmail(email, displayName, siteUrl).catch(e =>
-      console.error('[AUTH] sync-user welcome email failed:', e)
-    );
-
-    // Auto-subscribe to newsletter (server-side: no rate limit, no double-call risk)
-    (async () => {
-      try {
-        const { data: existingSub } = await supabase
-          .from('newsletter_subscribers')
-          .select('id, is_active, unsubscribe_token')
-          .eq('email', email)
-          .maybeSingle();
-
-        if (existingSub) {
-          // Reactivate if previously unsubscribed
-          if (!existingSub.is_active) {
-            await supabase
-              .from('newsletter_subscribers')
-              .update({ is_active: true, unsubscribed_at: null, confirmed_at: new Date().toISOString() })
-              .eq('id', existingSub.id);
-            const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${existingSub.unsubscribe_token}`;
-            sendWelcomeEmail(email, unsubUrl, siteUrl).catch(e =>
-              console.error('[AUTH] Newsletter reactivation email failed:', e)
-            );
-          }
-          // Already active — no action needed
-        } else {
-          // Create new subscription
-          const { data: newSub } = await supabase
-            .from('newsletter_subscribers')
-            .insert({ email, is_active: true, source: 'signup', confirmed_at: new Date().toISOString() })
-            .select('id, unsubscribe_token')
-            .single();
-
-          if (newSub?.unsubscribe_token) {
-            const unsubUrl = `${siteUrl}/api/newsletter/unsubscribe?token=${newSub.unsubscribe_token}`;
-            sendWelcomeEmail(email, unsubUrl, siteUrl).catch(e =>
-              console.error('[AUTH] Newsletter welcome email failed:', e)
-            );
-          }
-        }
-      } catch (e) {
-        console.error('[AUTH] sync-user newsletter subscription failed:', e);
-      }
-    })();
+    return res.json({ success: true, isNew: true });
   } catch (err: any) {
     console.error('[AUTH] sync-user error:', err);
     res.status(500).json({ error: 'Failed to sync user' });

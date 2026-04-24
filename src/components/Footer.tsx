@@ -10,7 +10,7 @@ export default function Footer() {
   const [footerCategories, setFooterCategories] = useState<Category[]>([]);
   const { settings } = useSiteSettings();
   const [subscribeEmail, setSubscribeEmail] = useState('');
-  const [subscribeState, setSubscribeState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [subscribeState, setSubscribeState] = useState<'idle' | 'loading' | 'success' | 'already' | 'error'>('idle');
   const [subscribeError, setSubscribeError] = useState('');
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const location = useLocation();
@@ -43,7 +43,8 @@ export default function Footer() {
       successTimerRef.current = setTimeout(() => setSubscribeState('idle'), 8000);
     } catch (err: any) {
       if (err.message?.includes('already')) {
-        setSubscribeState('success');
+        setSubscribeState('already');
+        setSubscribeEmail('');
         successTimerRef.current = setTimeout(() => setSubscribeState('idle'), 8000);
       } else {
         setSubscribeState('error');
@@ -186,7 +187,17 @@ export default function Footer() {
                 </div>
                 <div>
                   <p className="text-green-300 font-semibold text-sm">You're subscribed!</p>
-                  <p className="text-green-400/70 text-xs mt-0.5">Check your inbox for a confirmation.</p>
+                  <p className="text-green-400/70 text-xs mt-0.5">Check your inbox — a welcome email is on its way.</p>
+                </div>
+              </div>
+            ) : subscribeState === 'already' ? (
+              <div className="bg-blue-900/30 border border-blue-700/40 rounded-xl p-4 flex items-start gap-3">
+                <div className="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+                  <CheckCircle size={16} className="text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-blue-300 font-semibold text-sm">Already subscribed!</p>
+                  <p className="text-blue-400/70 text-xs mt-0.5">This email is already on our list.</p>
                 </div>
               </div>
             ) : (
