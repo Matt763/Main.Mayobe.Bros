@@ -143,6 +143,14 @@ export default function AuthForm({ mode }: Props) {
           className={inputClass}
         />
 
+        {mode === 'signin' && (
+          <div className="flex justify-end -mt-2">
+            <Link to="/forgot-password" className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline">
+              Forgot password?
+            </Link>
+          </div>
+        )}
+
         {error && (
           <div className="rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-4 py-3 text-sm text-red-700 dark:text-red-300">
             {error}

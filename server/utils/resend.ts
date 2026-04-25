@@ -998,3 +998,175 @@ export async function sendContactUserEmail(contact: ContactSubmission, siteUrl: 
   if (error) { console.error('[RESEND] Contact user email error:', error); throw new Error((error as { message?: string }).message || 'Resend error'); }
   console.log(`[RESEND] Contact confirmation sent to ${contact.email}`);
 }
+
+// ─── Password verification code (pre-change/reset) ───────────────────────────
+
+const PURPOSE_LABELS: Record<string, { title: string; intro: string; cta: string }> = {
+  change: {
+    title: 'Confirm your password change',
+    intro: 'You requested to change your Mayobe Bros password. Use the verification code below to complete the change.',
+    cta:   'Complete password change',
+  },
+  set: {
+    title: 'Set your Mayobe Bros password',
+    intro: 'You signed in with Google or another provider and want to set a password too. Use the verification code below to complete it.',
+    cta:   'Set password',
+  },
+  reset: {
+    title: 'Reset your Mayobe Bros password',
+    intro: 'We received a request to reset your password. Use the verification code below to set a new one.',
+    cta:   'Reset password',
+  },
+};
+
+export function buildPasswordVerificationEmail(name: string, code: string, purpose: 'change' | 'set' | 'reset', siteUrl: string): string {
+  const firstName = (name || '').split(' ')[0] || 'there';
+  const labels = PURPOSE_LABELS[purpose];
+  const expiryMinutes = 15;
+
+  return htmlShell(
+    `${labels.title} — Mayobe Bros`,
+    `Hi ${firstName}, here is your one-time verification code for Mayobe Bros.`,
+    `
+    ${sharedHeader()}
+
+    <tr>
+      <td style="background:#0f1c2e;padding:12px 44px;">
+        <p style="font-size:11px;font-weight:700;color:#c9a000;text-transform:uppercase;letter-spacing:1.8px;margin:0;">
+          Security &nbsp;&middot;&nbsp; ${purpose === 'reset' ? 'Password Reset' : 'Password Verification'}
+        </p>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#ffffff;padding:48px 44px 44px;">
+        <h1 style="font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:bold;color:#0f1c2e;margin:0 0 14px;letter-spacing:-0.4px;line-height:1.3;">
+          Hi ${firstName}.
+        </h1>
+        <p style="font-size:15px;color:#374151;line-height:1.8;margin:0 0 30px;max-width:440px;">
+          ${labels.intro}
+        </p>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:30px;">
+          <tr>
+            <td style="background:#0f1c2e;border-radius:12px;padding:36px 24px;text-align:center;">
+              <p style="font-size:10px;font-weight:700;color:#c9a000;text-transform:uppercase;letter-spacing:3px;margin:0 0 18px;">Your Verification Code</p>
+              <div style="display:inline-block;background:rgba(255,255,255,0.06);border:1px solid rgba(201,160,0,0.5);border-radius:10px;padding:18px 36px;">
+                <span style="font-family:'Courier New',Courier,monospace;font-size:38px;font-weight:bold;color:#ffffff;letter-spacing:14px;">${code}</span>
+              </div>
+              <p style="font-size:12px;color:rgba(255,255,255,0.45);margin:18px 0 0;letter-spacing:0.3px;">Expires in ${expiryMinutes} minutes. Case-sensitive.</p>
+            </td>
+          </tr>
+        </table>
+
+        <p style="font-size:12px;color:#9ca3af;line-height:1.7;margin:0;border-top:1px solid #f1f3f6;padding-top:18px;">
+          If you didn't request this, you can safely ignore this email — your password will not change unless this code is used.
+          <br />
+          <a href="${siteUrl}" style="color:#0f1c2e;font-weight:600;">Open Mayobe Bros</a>
+        </p>
+      </td>
+    </tr>
+
+    ${sharedFooter('You received this because someone requested a password change for your account. Need help? Reply to this email.')}
+    `,
+  );
+}
+
+export async function sendPasswordVerificationEmail(
+  to: string,
+  name: string,
+  code: string,
+  purpose: 'change' | 'set' | 'reset',
+  siteUrl: string,
+): Promise<void> {
+  if (!resend) { console.warn(`[RESEND] RESEND_API_KEY not set — verification email skipped for ${to}`); return; }
+  const html = buildPasswordVerificationEmail(name, code, purpose, siteUrl);
+  const subject = purpose === 'reset' ? 'Reset your Mayobe Bros password' :
+                  purpose === 'set'   ? 'Set your Mayobe Bros password' :
+                                        'Confirm your password change — Mayobe Bros';
+  const { error } = await resend.emails.send({ from: getFromAddress(), to, subject, html });
+  if (error) { console.error('[RESEND] Verification email error:', error); throw new Error((error as { message?: string }).message || 'Resend error'); }
+  console.log(`[RESEND] Verification code sent to ${to} (purpose=${purpose})`);
+}
+
+// ─── Password changed confirmation (with "wasn't me" button) ─────────────────
+
+export function buildPasswordChangedEmail(name: string, revokeUrl: string, when: Date, siteUrl: string): string {
+  const firstName = (name || '').split(' ')[0] || 'there';
+  const formatted = when.toUTCString();
+
+  return htmlShell(
+    'Your password was changed — Mayobe Bros',
+    `Hi ${firstName}, this is a confirmation that your Mayobe Bros password was changed.`,
+    `
+    ${sharedHeader()}
+
+    <tr>
+      <td style="background:#059669;padding:12px 44px;">
+        <p style="font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:1.8px;margin:0;">
+          Account Activity &nbsp;&middot;&nbsp; Password Changed
+        </p>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#ffffff;padding:48px 44px 44px;">
+        <h1 style="font-family:Georgia,'Times New Roman',serif;font-size:26px;font-weight:bold;color:#0f1c2e;margin:0 0 14px;letter-spacing:-0.4px;line-height:1.3;">
+          Hi ${firstName}, your password was changed.
+        </h1>
+        <p style="font-size:15px;color:#374151;line-height:1.8;margin:0 0 28px;max-width:440px;">
+          We're letting you know that your Mayobe Bros password was just updated.
+        </p>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:10px;padding:18px 22px;margin-bottom:30px;">
+          <tr><td>
+            <p style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 6px;">When</p>
+            <p style="font-size:14px;color:#0f1c2e;margin:0 0 14px;font-weight:500;">${formatted}</p>
+          </td></tr>
+        </table>
+
+        <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 14px;font-weight:600;">
+          Wasn't you?
+        </p>
+        <p style="font-size:14px;color:#4b5563;line-height:1.8;margin:0 0 22px;">
+          If you didn't make this change, click the button below to immediately secure your account. We'll lock it and email you a fresh reset code.
+        </p>
+
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 30px;">
+          <tr>
+            <td style="background:#dc2626;border-radius:10px;">
+              <a href="${revokeUrl}" target="_blank" style="display:inline-block;padding:14px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:0.4px;">
+                This wasn't me — secure my account
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <p style="font-size:12px;color:#9ca3af;line-height:1.7;margin:0;border-top:1px solid #f1f3f6;padding-top:18px;">
+          You can also visit <a href="${siteUrl}/dashboard/account" style="color:#0f1c2e;font-weight:600;">Account &amp; Security</a> to review recent activity.
+        </p>
+      </td>
+    </tr>
+
+    ${sharedFooter('You received this because your account password was changed. If you initiated this, no action is needed.')}
+    `,
+  );
+}
+
+export async function sendPasswordChangedEmail(
+  to: string,
+  name: string,
+  revokeUrl: string,
+  siteUrl: string,
+): Promise<void> {
+  if (!resend) { console.warn(`[RESEND] RESEND_API_KEY not set — password-changed email skipped for ${to}`); return; }
+  const html = buildPasswordChangedEmail(name, revokeUrl, new Date(), siteUrl);
+  const { error } = await resend.emails.send({
+    from: getFromAddress(),
+    to,
+    subject: 'Your Mayobe Bros password was changed',
+    html,
+  });
+  if (error) { console.error('[RESEND] Password-changed email error:', error); throw new Error((error as { message?: string }).message || 'Resend error'); }
+  console.log(`[RESEND] Password-changed confirmation sent to ${to}`);
+}
