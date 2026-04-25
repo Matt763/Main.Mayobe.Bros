@@ -36,10 +36,10 @@ const GATEWAYS = [
     key: 'mobile_money',
     name: 'Mobile Money',
     icon: Smartphone,
-    description: 'M-Pesa, Airtel Money, Tigo Pesa, Halotel Money',
+    description: 'M-Pesa, Mixx by Yas, Airtel Money, HaloPesa',
     color: 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400',
     fields: [
-      { key: 'provider', label: 'Provider', placeholder: 'mpesa, airtel, tigo, halotel' },
+      { key: 'provider', label: 'Provider', placeholder: 'mpesa, yas, airtel, halopesa' },
       { key: 'mode', label: 'Mode', placeholder: 'test or live' },
     ],
   },

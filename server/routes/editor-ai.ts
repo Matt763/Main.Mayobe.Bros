@@ -641,7 +641,7 @@ Return ONLY this JSON:
 
 router.get('/trends', async (req: Request, res: Response) => {
   try {
-    const geo = (req.query.geo as string) || 'KE'; // Kenya default for Africa focus
+    const geo = (req.query.geo as string) || 'TZ'; // Tanzania default — site operates from Arusha
     const hl = (req.query.hl as string) || 'en-US';
 
     const url = `https://trends.google.com/trends/api/dailytrends?hl=${hl}&tz=-180&geo=${geo}&ns=15`;

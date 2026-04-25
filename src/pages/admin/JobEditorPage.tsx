@@ -252,7 +252,7 @@ export default function AdminJobEditorPage() {
               <input
                 value={form.location}
                 onChange={e => set('location', e.target.value)}
-                placeholder="Nairobi, Kenya"
+                placeholder="Arusha, Tanzania"
                 className={inputCls}
               />
             </Field>

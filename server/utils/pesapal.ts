@@ -95,7 +95,7 @@ export async function submitOrder(input: PesapalOrderInput): Promise<PesapalOrde
     billing_address: {
       email_address: input.email,
       phone_number: input.phone || '',
-      country_code: input.countryCode || 'KE',
+      country_code: input.countryCode || 'TZ',
       first_name: input.firstName || '',
       last_name: input.lastName || '',
     },

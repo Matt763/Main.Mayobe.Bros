@@ -187,7 +187,7 @@ export default function UpgradePage() {
                         type="tel"
                         value={phone}
                         onChange={e => setPhone(e.target.value)}
-                        placeholder="+254 7XX XXX XXX"
+                        placeholder="+255 7XX XXX XXX"
                         autoComplete="tel"
                         className="w-full bg-white/[0.03] border border-white/10 focus:border-[#d4af37]/60 rounded-xl px-4 py-3 text-sm text-[#f8f5ec] placeholder:text-[#52526a] focus:outline-none focus:ring-1 focus:ring-[#d4af37]/30 transition-colors"
                       />
@@ -202,7 +202,7 @@ export default function UpgradePage() {
                       <span>{starting ? 'Starting…' : 'Unlock Lifetime'}</span>
                     </button>
                     <p className="mt-4 text-[9px] sm:text-[10px] tracking-[0.22em] uppercase text-[#7a7a90] text-center">
-                      M-Pesa · Tigo Pesa · Airtel · Visa · Mastercard
+                      M-Pesa · Mixx by Yas · Airtel Money · Visa · Mastercard
                     </p>
                   </>
                 )}
