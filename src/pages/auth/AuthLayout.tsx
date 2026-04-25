@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, BookOpen, MessageCircle, Bell } from 'lucide-react';
+import { Sparkles, Bookmark, Flame, Rss } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -47,34 +47,34 @@ export default function AuthLayout({ children, mode }: Props) {
           <div className="relative max-w-md">
             <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black leading-tight mb-2 md:mb-4">
               {mode === 'signin'
-                ? 'Welcome back to the conversation.'
-                : 'Join a community of curious readers.'}
+                ? 'Your reading hub is waiting.'
+                : 'Build your personal reading hub.'}
             </h2>
             <p className="text-xs sm:text-sm md:text-base text-white/80 mb-4 md:mb-8">
               {mode === 'signin'
-                ? 'Sign in to react, comment, save your favorite stories, and pick up where you left off.'
-                : 'Create a free account to react to articles, leave thoughtful comments, and stay ahead of new posts.'}
+                ? 'Sign in to pick up your reading streak, access your saved articles, and continue right where you left off.'
+                : 'Get your own dashboard — track your daily reading streak, bookmark articles, and get a feed tailored to your interests. Free.'}
             </p>
 
             {/* Feature list — compact on mobile, full on md+ */}
             <ul className="hidden sm:block space-y-2.5 md:space-y-3 text-xs sm:text-sm">
               <li className="flex items-start gap-3">
                 <span className="mt-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white/15 border border-white/20 backdrop-blur-sm flex-shrink-0">
-                  <BookOpen size={14} />
+                  <Flame size={14} />
                 </span>
-                <span className="text-white/90">Save and revisit articles you love</span>
+                <span className="text-white/90">Track your daily reading streak and stats</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="mt-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white/15 border border-white/20 backdrop-blur-sm flex-shrink-0">
-                  <MessageCircle size={14} />
+                  <Bookmark size={14} />
                 </span>
-                <span className="text-white/90">React and comment on the stories that matter</span>
+                <span className="text-white/90">Save articles and pick up where you left off</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="mt-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg bg-white/15 border border-white/20 backdrop-blur-sm flex-shrink-0">
-                  <Bell size={14} />
+                  <Rss size={14} />
                 </span>
-                <span className="text-white/90">Get notified about new posts and updates</span>
+                <span className="text-white/90">Personalized feed, learning tracks &amp; job listings</span>
               </li>
             </ul>
           </div>

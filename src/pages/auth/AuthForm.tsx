@@ -81,12 +81,12 @@ export default function AuthForm({ mode }: Props) {
       </Link>
 
       <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight mb-2">
-        {mode === 'signin' ? 'Sign in' : 'Create your account'}
+        {mode === 'signin' ? 'Sign in to your dashboard' : 'Create your free account'}
       </h1>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
         {mode === 'signin'
-          ? 'Enter your details to continue reading.'
-          : "It only takes a minute. We'll never share your email."}
+          ? 'Access your reading streak, saved articles, and personalized feed.'
+          : 'Your streak, bookmarks, and personalized feed are one step away.'}
       </p>
 
       <button
