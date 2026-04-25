@@ -126,17 +126,32 @@ export interface PesapalStatusResult {
   raw: any;
 }
 
-function normalizeStatus(value: string | undefined): PesapalStatusResult['status'] {
-  switch ((value || '').trim().toLowerCase()) {
+/**
+ * Pesapal returns payment_status_description = "INVALID" for orders that
+ * simply haven't been paid yet (status_code = 0), so we cannot trust the
+ * description alone. Prefer the integer status_code:
+ *   0 = pending / not yet paid
+ *   1 = completed
+ *   2 = failed
+ *   3 = reversed
+ * Fall back to the description string only when status_code is missing.
+ */
+function normalizeStatus(raw: any): PesapalStatusResult['status'] {
+  const code = typeof raw?.status_code === 'number' ? raw.status_code : null;
+  if (code === 1) return 'completed';
+  if (code === 2) return 'failed';
+  if (code === 3) return 'reversed';
+  if (code === 0) return 'pending';
+
+  switch ((raw?.payment_status_description || '').trim().toLowerCase()) {
     case 'completed':
       return 'completed';
     case 'failed':
       return 'failed';
     case 'reversed':
       return 'reversed';
-    case 'invalid':
-      return 'invalid';
     default:
+      // 'invalid' from Pesapal often means "still pending" — treat as such.
       return 'pending';
   }
 }
@@ -152,7 +167,7 @@ export async function getOrderStatus(orderTrackingId: string): Promise<PesapalSt
     throw new Error(`Pesapal status check failed: ${data?.message || res.status}`);
   }
   return {
-    status: normalizeStatus(data?.payment_status_description),
+    status: normalizeStatus(data),
     paymentMethod: data?.payment_method ?? null,
     confirmationCode: data?.confirmation_code ?? null,
     amount: typeof data?.amount === 'number' ? data.amount : null,
