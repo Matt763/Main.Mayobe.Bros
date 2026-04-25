@@ -209,6 +209,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       ? [{
           title: 'Configuration',
           items: [
+            ...(isCEO || isAdmin ? [{ name: 'User Dashboard Management', path: '/admin/dashboard-management', icon: LayoutDashboard }] : []),
             { name: 'Settings', path: '/admin/settings', icon: Settings },
             { name: 'Subscribers', path: '/admin/subscribers', icon: Mail, badge: counts.subscribers > 0 ? counts.subscribers : undefined },
             ...(isCEO || isAdmin ? [{ name: 'Publishers', path: '/admin/publishers', icon: Users, badge: counts.publishers > 0 ? counts.publishers : undefined }] : []),

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useIsSaved } from '../hooks/useSavedPosts';
 import { useUserAuth } from '../contexts/UserAuthContext';
 import { usePlan, FREE_SAVED_POSTS_LIMIT } from '../hooks/usePlan';
+import { useDashboardSettings } from '../hooks/useDashboardSettings';
 
 interface Props {
   postId: string;
@@ -16,6 +17,9 @@ export default function SaveButton({ postId, variant = 'default', onRequireAuth 
   const { saved, loading, toggle, signedIn } = useIsSaved(postId);
   const { publicUser } = useUserAuth();
   const { isPremium } = usePlan();
+  const { config: dashboardConfig } = useDashboardSettings();
+  const savedLimit = dashboardConfig.limits.freeSavedPostsMax ?? FREE_SAVED_POSTS_LIMIT;
+  const savedFeatureEnabled = dashboardConfig.features.savedContent;
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<'saved' | 'removed' | null>(null);
   const [limitHit, setLimitHit] = useState(false);
@@ -33,7 +37,7 @@ export default function SaveButton({ postId, variant = 'default', onRequireAuth 
         .from('saved_posts')
         .select('post_id', { count: 'exact', head: true })
         .eq('user_id', publicUser.id);
-      if ((count || 0) >= FREE_SAVED_POSTS_LIMIT) {
+      if ((count || 0) >= savedLimit) {
         setLimitHit(true);
         return;
       }
@@ -48,6 +52,9 @@ export default function SaveButton({ postId, variant = 'default', onRequireAuth 
       setTimeout(() => setFeedback(null), 1600);
     }
   };
+
+  // Hide entirely when the saved-content feature is disabled by admin.
+  if (!savedFeatureEnabled) return null;
 
   const isCompact = variant === 'compact';
   const Icon = saved ? BookmarkCheck : Bookmark;

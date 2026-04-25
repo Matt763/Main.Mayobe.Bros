@@ -7,6 +7,7 @@ import {
   Briefcase,
   Sparkles,
   Settings as SettingsIcon,
+  KeyRound,
   LogOut,
   X,
 } from 'lucide-react';
@@ -15,6 +16,7 @@ import { Crown } from 'lucide-react';
 import { useUserAuth } from '../../contexts/UserAuthContext';
 import { useUnreadCount } from '../../hooks/useNotifications';
 import { usePlan } from '../../hooks/usePlan';
+import { useDashboardSettings } from '../../hooks/useDashboardSettings';
 import ThemeToggle from '../ThemeToggle';
 
 interface Props {
@@ -23,20 +25,27 @@ interface Props {
 }
 
 const NAV_ITEMS = [
-  { to: '/dashboard',                end: true,  icon: LayoutDashboard, label: 'Overview' },
-  { to: '/dashboard/saved',          end: false, icon: Bookmark,        label: 'Saved' },
-  { to: '/dashboard/reading',        end: false, icon: BookOpen,        label: 'Reading' },
-  { to: '/dashboard/jobs',           end: false, icon: Briefcase,       label: 'Jobs' },
-  { to: '/dashboard/interests',      end: false, icon: Sparkles,        label: 'Interests' },
-  { to: '/dashboard/notifications',  end: false, icon: Bell,            label: 'Notifications', badgeKey: 'unread' as const },
-  { to: '/dashboard/settings',       end: false, icon: SettingsIcon,    label: 'Settings' },
-];
+  { to: '/dashboard',                end: true,  icon: LayoutDashboard, label: 'Overview',     featureKey: null },
+  { to: '/dashboard/saved',          end: false, icon: Bookmark,        label: 'Saved',        featureKey: 'savedContent' },
+  { to: '/dashboard/reading',        end: false, icon: BookOpen,        label: 'Reading',      featureKey: 'userStats' },
+  { to: '/dashboard/jobs',           end: false, icon: Briefcase,       label: 'Jobs',         featureKey: 'jobsTracker' },
+  { to: '/dashboard/interests',      end: false, icon: Sparkles,        label: 'Interests',    featureKey: 'personalizedFeed' },
+  { to: '/dashboard/notifications',  end: false, icon: Bell,            label: 'Notifications', featureKey: 'notifications', badgeKey: 'unread' as const },
+  { to: '/dashboard/account',        end: false, icon: KeyRound,        label: 'Account',      featureKey: null },
+  { to: '/dashboard/settings',       end: false, icon: SettingsIcon,    label: 'Settings',     featureKey: null },
+] as const;
 
 export default function DashboardSidebar({ onClose, isMobile }: Props) {
   const { publicUser, publicSignOut } = useUserAuth();
   const { count: unreadCount } = useUnreadCount();
   const { isPremium } = usePlan();
+  const { config: dashConfig } = useDashboardSettings();
   const initial = publicUser?.name?.[0]?.toUpperCase() || 'U';
+
+  const navItems = NAV_ITEMS.filter(item => {
+    if (!item.featureKey) return true;
+    return Boolean((dashConfig.features as any)[item.featureKey]);
+  });
 
   return (
     <aside
@@ -90,7 +99,7 @@ export default function DashboardSidebar({ onClose, isMobile }: Props) {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-3">
         <ul className="space-y-1">
-          {NAV_ITEMS.map(item => {
+          {navItems.map(item => {
             const Icon = item.icon;
             return (
               <li key={item.to}>
@@ -125,8 +134,8 @@ export default function DashboardSidebar({ onClose, isMobile }: Props) {
         </ul>
       </nav>
 
-      {/* Upgrade CTA — free users only */}
-      {!isPremium && (
+      {/* Upgrade CTA — free users only, hidden when premium feature is disabled */}
+      {!isPremium && dashConfig.premium.enabled && (
         <div className="px-3 pb-2">
           <Link
             to="/upgrade"
@@ -138,7 +147,8 @@ export default function DashboardSidebar({ onClose, isMobile }: Props) {
               <span className="text-[11px] uppercase tracking-widest font-bold">Premium</span>
             </div>
             <p className="text-xs leading-snug">
-              Unlimited saves + premium articles. <span className="font-bold">$5 one-time.</span>
+              Unlimited saves + premium articles.{' '}
+              <span className="font-bold">{dashConfig.premium.priceUsd} {dashConfig.premium.currency} one-time.</span>
             </p>
           </Link>
         </div>

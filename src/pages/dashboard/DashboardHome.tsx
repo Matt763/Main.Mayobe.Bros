@@ -4,11 +4,16 @@ import { useUserAuth } from '../../contexts/UserAuthContext';
 import { useSavedPostsList } from '../../hooks/useSavedPosts';
 import { useReadingHistory, useReadingStats } from '../../hooks/useReadingTracking';
 import { useRecommendations } from '../../hooks/useInterests';
+import { useDashboardSettings } from '../../hooks/useDashboardSettings';
+import { usePlan } from '../../hooks/usePlan';
+import { lazy, Suspense } from 'react';
 import StatCard from '../../components/dashboard/StatCard';
 import SavedPostCard from '../../components/dashboard/SavedPostCard';
 import ReadingHistoryCard from '../../components/dashboard/ReadingHistoryCard';
 import RecommendationCard from '../../components/dashboard/RecommendationCard';
 import EmptyState from '../../components/dashboard/EmptyState';
+
+const PremiumDashboardHome = lazy(() => import('./PremiumDashboardHome'));
 
 export default function DashboardHome() {
   const { publicUser } = useUserAuth();
@@ -16,6 +21,19 @@ export default function DashboardHome() {
   const { items: history, loading: historyLoading } = useReadingHistory(4);
   const { items: recs, loading: recsLoading, hasInterests } = useRecommendations(6);
   const stats = useReadingStats();
+  const { config: dashConfig } = useDashboardSettings();
+  const { isPremium, loading: planLoading } = usePlan();
+  if (!planLoading && isPremium) {
+    return (
+      <Suspense fallback={<div className="py-20 text-center text-sm text-gray-400">Loading premium…</div>}>
+        <PremiumDashboardHome />
+      </Suspense>
+    );
+  }
+  const showStats        = dashConfig.features.userStats;
+  const showRecommended  = dashConfig.features.personalizedFeed && dashConfig.layout.sectionVisibility.recommended;
+  const showSaved        = dashConfig.features.savedContent     && dashConfig.layout.sectionVisibility.saved;
+  const showReading      = dashConfig.features.userStats;
 
   const recentSaved = saved.slice(0, 3);
   const continueReading = history.slice(0, 4);
@@ -57,6 +75,7 @@ export default function DashboardHome() {
       </section>
 
       {/* Stats */}
+      {showStats && (
       <section className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <StatCard
           icon={Bookmark}
@@ -92,8 +111,10 @@ export default function DashboardHome() {
           loading={stats.loading}
         />
       </section>
+      )}
 
       {/* For you */}
+      {showRecommended && (
       <section>
         <div className="flex items-end justify-between mb-4">
           <div>
@@ -164,8 +185,10 @@ export default function DashboardHome() {
           </div>
         )}
       </section>
+      )}
 
       {/* Continue reading */}
+      {showReading && (
       <section>
         <div className="flex items-end justify-between mb-4">
           <div>
@@ -217,8 +240,10 @@ export default function DashboardHome() {
           </div>
         )}
       </section>
+      )}
 
       {/* Recently saved */}
+      {showSaved && (
       <section>
         <div className="flex items-end justify-between mb-4">
           <div>
@@ -277,6 +302,7 @@ export default function DashboardHome() {
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }
