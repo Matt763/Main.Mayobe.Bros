@@ -80,6 +80,8 @@ const KeywordResearchPage = lazy(() => import('./pages/admin/KeywordResearchPage
 const CompetitorAnalysisPage = lazy(() => import('./pages/admin/CompetitorAnalysisPage'));
 const PaymentSettingsPage = lazy(() => import('./pages/admin/PaymentSettingsPage'));
 const DashboardManagementPage = lazy(() => import('./pages/admin/DashboardManagementPage'));
+const LearningTracksPage = lazy(() => import('./pages/admin/LearningTracksPage'));
+const DashboardLearningPage = lazy(() => import('./pages/dashboard/LearningPage'));
 const TrafficGrowthPage = lazy(() => import('./pages/admin/TrafficGrowthPage'));
 const ContentQualityPage = lazy(() => import('./pages/admin/ContentQualityPage'));
 const AdSenseReadinessPage = lazy(() => import('./pages/admin/AdSenseReadinessPage'));
@@ -289,6 +291,13 @@ function App() {
                             </Suspense>
                           </ProtectedRoute>
                         } />
+                        <Route path="learning-tracks" element={
+                          <ProtectedRoute allowedRoles={['ceo', 'admin']}>
+                            <Suspense fallback={<PageLoader />}>
+                              <LearningTracksPage />
+                            </Suspense>
+                          </ProtectedRoute>
+                        } />
                         <Route path="traffic-growth" element={
                           <ProtectedRoute allowedRoles={['ceo', 'admin']}>
                             <TrafficGrowthPage />
@@ -364,6 +373,8 @@ function App() {
                             <Route path="jobs" element={<DashboardJobsPage />} />
                             <Route path="notifications" element={<NotificationsPage />} />
                             <Route path="account" element={<DashboardAccountPage />} />
+                            <Route path="learning" element={<DashboardLearningPage />} />
+                            <Route path="learning/:slug" element={<DashboardLearningPage />} />
                             <Route path="settings" element={<DashboardSettingsPage />} />
                           </Route>
                           <Route path="/forgot-password" element={<ForgotPasswordPage />} />

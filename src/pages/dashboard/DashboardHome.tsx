@@ -8,6 +8,7 @@ import { useDashboardSettings } from '../../hooks/useDashboardSettings';
 import { usePlan } from '../../hooks/usePlan';
 import { lazy, Suspense } from 'react';
 import StatCard from '../../components/dashboard/StatCard';
+import BroadcastBanner from '../../components/dashboard/BroadcastBanner';
 import SavedPostCard from '../../components/dashboard/SavedPostCard';
 import ReadingHistoryCard from '../../components/dashboard/ReadingHistoryCard';
 import RecommendationCard from '../../components/dashboard/RecommendationCard';
@@ -23,7 +24,13 @@ export default function DashboardHome() {
   const stats = useReadingStats();
   const { config: dashConfig } = useDashboardSettings();
   const { isPremium, loading: planLoading } = usePlan();
-  if (!planLoading && isPremium) {
+
+  // Wait for the plan to resolve before rendering — prevents free dashboard
+  // flashing for premium users on cold load.
+  if (planLoading) {
+    return <div className="py-20 text-center text-sm text-gray-400">Loading your dashboard…</div>;
+  }
+  if (isPremium) {
     return (
       <Suspense fallback={<div className="py-20 text-center text-sm text-gray-400">Loading premium…</div>}>
         <PremiumDashboardHome />
@@ -41,6 +48,7 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-8">
+      <BroadcastBanner />
       {/* Greeting card */}
       <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 dark:from-blue-950 dark:via-indigo-950 dark:to-slate-900 text-white p-6 sm:p-8">
         <div

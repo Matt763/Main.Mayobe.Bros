@@ -8,6 +8,7 @@ import {
   Sparkles,
   Settings as SettingsIcon,
   KeyRound,
+  GraduationCap,
   LogOut,
   X,
 } from 'lucide-react';
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { to: '/dashboard',                end: true,  icon: LayoutDashboard, label: 'Overview',     featureKey: null },
   { to: '/dashboard/saved',          end: false, icon: Bookmark,        label: 'Saved',        featureKey: 'savedContent' },
   { to: '/dashboard/reading',        end: false, icon: BookOpen,        label: 'Reading',      featureKey: 'userStats' },
+  { to: '/dashboard/learning',       end: false, icon: GraduationCap,   label: 'Learning',     featureKey: 'learningSystem' },
   { to: '/dashboard/jobs',           end: false, icon: Briefcase,       label: 'Jobs',         featureKey: 'jobsTracker' },
   { to: '/dashboard/interests',      end: false, icon: Sparkles,        label: 'Interests',    featureKey: 'personalizedFeed' },
   { to: '/dashboard/notifications',  end: false, icon: Bell,            label: 'Notifications', featureKey: 'notifications', badgeKey: 'unread' as const },

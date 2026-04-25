@@ -30,6 +30,7 @@ function shapeJob(row: any) {
     applyUrl: row.apply_url ?? null,
     categoryId: row.category_id ?? null,
     status: row.status,
+    featured: !!row.featured,
     publishedAt: row.published_at ?? null,
     expiresAt: row.expires_at ?? null,
     createdAt: row.created_at,
@@ -52,6 +53,7 @@ router.get('/', async (req, res) => {
       .from('jobs')
       .select('*', { count: 'exact' })
       .eq('status', 'published')
+      .order('featured', { ascending: false })
       .order('published_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -150,6 +152,7 @@ router.post('/', requireAuth, async (req, res) => {
       description: body.description ?? '',
       apply_url: body.applyUrl ?? body.apply_url ?? null,
       category_id: body.categoryId ?? body.category_id ?? null,
+      featured: !!(body.featured ?? false),
       status: body.status ?? 'draft',
       published_at:
         (body.status ?? 'draft') === 'published'
@@ -191,6 +194,7 @@ router.patch('/:id', requireAuth, async (req, res) => {
       update.apply_url = body.applyUrl ?? body.apply_url;
     if (body.categoryId !== undefined || body.category_id !== undefined)
       update.category_id = body.categoryId ?? body.category_id;
+    if (body.featured !== undefined) update.featured = !!body.featured;
     if (body.status !== undefined) {
       update.status = body.status;
       if (body.status === 'published' && !body.publishedAt && !body.published_at) {

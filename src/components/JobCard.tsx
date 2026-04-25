@@ -33,7 +33,17 @@ export default function JobCard({ job, onRemove, caption }: Props) {
   const companyInitial = job.company?.[0]?.toUpperCase() || '•';
 
   return (
-    <article className="group relative flex flex-col overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800 transition-all">
+    <article className={
+      'group relative flex flex-col overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border shadow-sm hover:shadow-md transition-all ' +
+      (job.featured
+        ? 'border-amber-300 dark:border-amber-700 ring-1 ring-amber-200/40 dark:ring-amber-700/30'
+        : 'border-gray-200 dark:border-gray-800 hover:border-blue-200 dark:hover:border-blue-800')
+    }>
+      {job.featured && (
+        <span className="absolute top-3 right-3 z-10 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-sm">
+          ⭐ Featured
+        </span>
+      )}
       <div className="flex items-start gap-3 p-5">
         {job.companyLogo ? (
           <img

@@ -16,6 +16,7 @@ export interface Job {
   applyUrl: string | null;
   categoryId: string | null;
   status: 'draft' | 'published' | 'closed';
+  featured?: boolean;
   publishedAt: string | null;
   expiresAt: string | null;
   createdAt: string;

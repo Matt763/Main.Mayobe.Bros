@@ -191,6 +191,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       items: [
         { name: 'Posts', path: '/admin/posts', icon: FileText, badge: counts.posts > 0 ? counts.posts : undefined },
         { name: 'Results', path: '/admin/results', icon: GraduationCap },
+        ...(isCEO || isAdmin ? [{ name: 'Learning Tracks', path: '/admin/learning-tracks', icon: GraduationCap }] : []),
         { name: 'Jobs', path: '/admin/jobs', icon: Briefcase },
         ...(!isStaff ? [{ name: 'Pages', path: '/admin/pages', icon: FileEdit, badge: counts.pages > 0 ? counts.pages : undefined }] : []),
         ...(!isStaff ? [{ name: 'Comments', path: '/admin/comments', icon: MessageSquare, badge: counts.comments > 0 ? counts.comments : undefined }] : []),

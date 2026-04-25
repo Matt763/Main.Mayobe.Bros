@@ -13,6 +13,8 @@ const TITLES: Record<string, string> = {
   '/dashboard/interests':     'Interests',
   '/dashboard/jobs':          'Jobs',
   '/dashboard/notifications': 'Notifications',
+  '/dashboard/account':       'Account & Security',
+  '/dashboard/learning':      'Learning',
   '/dashboard/settings':      'Settings',
 };
 
@@ -23,12 +25,7 @@ export default function DashboardLayout() {
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // Premium readers get a completely different layout (custom nav, no sidebar).
-  if (!publicLoading && !planLoading && publicUser && isPremium) {
-    return <PremiumDashboardLayout />;
-  }
-
-  // Auth gate: signed-out → /signin?next=<current>
+  // Auth gate
   useEffect(() => {
     if (!publicLoading && !publicUser) {
       const next = encodeURIComponent(location.pathname + location.search);
@@ -61,7 +58,9 @@ export default function DashboardLayout() {
     };
   }, [location.pathname]);
 
-  if (publicLoading || !publicUser) {
+  // Wait for BOTH auth and plan before deciding which layout to render. This
+  // avoids briefly showing the free layout to a premium reader on /dashboard.
+  if (publicLoading || planLoading || !publicUser) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <Loader2 className="animate-spin text-blue-600" size={28} />
@@ -69,6 +68,12 @@ export default function DashboardLayout() {
     );
   }
 
+  // Premium reader → custom nav + Outlet inside PremiumDashboardLayout.
+  if (isPremium) {
+    return <PremiumDashboardLayout />;
+  }
+
+  // Free reader → existing sidebar layout.
   const pageTitle = TITLES[location.pathname] || 'Dashboard';
 
   return (

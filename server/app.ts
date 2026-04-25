@@ -34,6 +34,8 @@ import paymentsRoutes from './routes/payments.js';
 import dashboardSettingsRoutes from './routes/dashboardSettings.js';
 import accountRoutes from './routes/account.js';
 import aiReaderRoutes from './routes/aiReader.js';
+import broadcastsRoutes from './routes/broadcasts.js';
+import learningTracksRoutes from './routes/learningTracks.js';
 import { securityMonitor, getSecurityLog, unblockIP, getBlockedIPs } from './middleware/securityMonitor.js';
 
 const allowedOrigins = [
@@ -142,6 +144,8 @@ app.use('/api/payments', paymentsRoutes);
 app.use('/api/dashboard-settings', dashboardSettingsRoutes);
 app.use('/api/account', accountRoutes);
 app.use('/api/ai-reader', aiReaderRoutes);
+app.use('/api/broadcasts', broadcastsRoutes);
+app.use('/api/learning-tracks', learningTracksRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Mayobe Bros API Running' });

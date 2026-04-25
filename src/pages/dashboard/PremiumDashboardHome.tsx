@@ -5,6 +5,7 @@ import {
   Sun, Moon, Coffee, Check, Bell,
 } from 'lucide-react';
 import { useUserAuth } from '../../contexts/UserAuthContext';
+import BroadcastBanner from '../../components/dashboard/BroadcastBanner';
 import { useSavedPostsList } from '../../hooks/useSavedPosts';
 import { useReadingHistory, useReadingStats } from '../../hooks/useReadingTracking';
 import { useRecommendations } from '../../hooks/useInterests';
@@ -33,6 +34,7 @@ export default function PremiumDashboardHome() {
 
   return (
     <div className="space-y-8 pb-12">
+      <BroadcastBanner variant="premium" />
       {/* Hero greeting */}
       <section className="premium-fade-in">
         <p className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#d4af37]/30 bg-[#d4af37]/[0.05] mb-4">

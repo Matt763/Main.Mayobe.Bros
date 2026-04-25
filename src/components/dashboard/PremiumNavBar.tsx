@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Crown, Search, Bell, ChevronDown, Sparkles, Bookmark, BookOpen, Briefcase,
-  KeyRound, Settings, LogOut, Command, Home, Newspaper, Tag, Mail, ArrowRight, Compass,
+  KeyRound, Settings, LogOut, Command, Home, Newspaper, Tag, Mail, ArrowRight, Compass, GraduationCap,
 } from 'lucide-react';
 import { useUserAuth } from '../../contexts/UserAuthContext';
 import { useUnreadCount } from '../../hooks/useNotifications';
@@ -68,6 +68,7 @@ export default function PremiumNavBar() {
     { id: 'saved',         title: 'Saved articles',   hint: 'Your library',        icon: Bookmark,   href: '/dashboard/saved',          group: 'Dashboard' },
     { id: 'reading',       title: 'Reading history',  hint: 'Continue reading',   icon: BookOpen,   href: '/dashboard/reading',        group: 'Dashboard' },
     { id: 'jobs',          title: 'Jobs tracker',     hint: 'Saved & applied',    icon: Briefcase,  href: '/dashboard/jobs',           group: 'Dashboard' },
+    { id: 'learning',      title: 'Learning tracks',  hint: 'Curated reading',    icon: GraduationCap, href: '/dashboard/learning',    group: 'Dashboard' },
     { id: 'interests',     title: 'Interests',        hint: 'Followed topics',     icon: Sparkles,   href: '/dashboard/interests',      group: 'Dashboard' },
     { id: 'notifications', title: 'Notifications',    hint: 'Unread updates',      icon: Bell,       href: '/dashboard/notifications',  group: 'Dashboard' },
 

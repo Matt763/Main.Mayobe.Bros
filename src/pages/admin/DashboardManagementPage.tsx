@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LayoutDashboard, Sparkles, Bookmark, GraduationCap, Briefcase, Bell, BarChart3, Bot,
-  Save, Loader2, CheckCircle2, AlertCircle, ArrowUp, ArrowDown, Crown, Sliders,
-  Layers, Compass, DollarSign, Info,
+  Save, Loader2, CheckCircle2, AlertCircle, Crown, Sliders,
+  Layers, Compass, DollarSign, Info, GripVertical, Send, Trash2, Megaphone,
 } from 'lucide-react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import {
@@ -12,7 +12,7 @@ import {
   DASHBOARD_SECTION_LABELS,
 } from '../../lib/dashboardSettings';
 
-type TabKey = 'features' | 'limits' | 'layout' | 'personalization' | 'premium';
+type TabKey = 'features' | 'limits' | 'layout' | 'personalization' | 'premium' | 'broadcasts';
 
 const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: 'features',         label: 'Features',         icon: Sliders   },
@@ -20,6 +20,7 @@ const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: 'layout',           label: 'Layout',           icon: Layers    },
   { key: 'personalization',  label: 'Personalization',  icon: Compass   },
   { key: 'premium',          label: 'Premium',          icon: Crown     },
+  { key: 'broadcasts',       label: 'Broadcasts',       icon: Megaphone },
 ];
 
 const FEATURE_ROWS: { key: keyof DashboardSettings['features']; icon: any; label: string; description: string; futureReady?: boolean }[] = [
@@ -147,6 +148,7 @@ export default function DashboardManagementPage() {
             {tab === 'layout'          && <LayoutTab          config={config} onChange={setConfig} />}
             {tab === 'personalization' && <PersonalizationTab config={config} onChange={setConfig} />}
             {tab === 'premium'         && <PremiumTab         config={config} onChange={setConfig} />}
+            {tab === 'broadcasts'      && <BroadcastsTab />}
           </>
         )}
 
@@ -323,13 +325,17 @@ function LimitsTab({ config, onChange }: { config: DashboardSettings; onChange: 
 
 function LayoutTab({ config, onChange }: { config: DashboardSettings; onChange: (c: DashboardSettings) => void }) {
   const order = config.layout.sectionOrder;
-  const move = (idx: number, delta: -1 | 1) => {
-    const target = idx + delta;
-    if (target < 0 || target >= order.length) return;
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  const reorder = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= order.length || to >= order.length) return;
     const next = [...order];
-    [next[idx], next[target]] = [next[target], next[idx]];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
     onChange({ ...config, layout: { ...config.layout, sectionOrder: next } });
   };
+
   const toggleVisible = (key: string, v: boolean) =>
     onChange({
       ...config,
@@ -340,33 +346,47 @@ function LayoutTab({ config, onChange }: { config: DashboardSettings; onChange: 
     });
 
   return (
-    <Card title="Dashboard layout" description="Reorder sections (▲/▼) and toggle visibility globally.">
-      <ul className="space-y-2">
+    <Card title="Dashboard layout" description="Drag the handle to reorder sections. Toggle visibility globally.">
+      <ul className="space-y-2 select-none">
         {order.map((key, idx) => {
           const label = DASHBOARD_SECTION_LABELS[key] || key;
           const visible = (config.layout.sectionVisibility as any)[key] ?? true;
+          const isDragging = draggingIdx === idx;
+          const isHover = hoverIdx === idx && draggingIdx !== null && draggingIdx !== idx;
           return (
-            <li key={key} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-              <div className="flex flex-col gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => move(idx, -1)}
-                  disabled={idx === 0}
-                  className="text-gray-400 hover:text-amber-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label={`Move ${label} up`}
-                >
-                  <ArrowUp size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => move(idx, 1)}
-                  disabled={idx === order.length - 1}
-                  className="text-gray-400 hover:text-amber-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label={`Move ${label} down`}
-                >
-                  <ArrowDown size={14} />
-                </button>
-              </div>
+            <li
+              key={key}
+              draggable
+              onDragStart={(e) => {
+                setDraggingIdx(idx);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(idx));
+              }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setHoverIdx(idx); }}
+              onDragLeave={() => setHoverIdx(prev => (prev === idx ? null : prev))}
+              onDrop={(e) => {
+                e.preventDefault();
+                const from = Number(e.dataTransfer.getData('text/plain'));
+                if (Number.isFinite(from)) reorder(from, idx);
+                setDraggingIdx(null); setHoverIdx(null);
+              }}
+              onDragEnd={() => { setDraggingIdx(null); setHoverIdx(null); }}
+              className={
+                'flex items-center gap-3 px-3 py-2.5 rounded-xl border bg-gray-50 dark:bg-gray-900 transition-all ' +
+                (isDragging
+                  ? 'opacity-40 border-dashed border-amber-400'
+                  : isHover
+                    ? 'border-amber-500 ring-2 ring-amber-200 dark:ring-amber-800/50 -translate-y-0.5'
+                    : 'border-gray-200 dark:border-gray-700')
+              }
+            >
+              <span
+                className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-amber-600 px-1 -ml-1"
+                aria-label="Drag to reorder"
+                title="Drag to reorder"
+              >
+                <GripVertical size={16} />
+              </span>
               <span className="flex-1 text-sm font-medium text-gray-900 dark:text-white">{label}</span>
               <span className="text-[11px] text-gray-400 mr-2">#{idx + 1}</span>
               <Toggle checked={visible} onChange={v => toggleVisible(key, v)} />
@@ -374,7 +394,184 @@ function LayoutTab({ config, onChange }: { config: DashboardSettings; onChange: 
           );
         })}
       </ul>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-3 flex items-center gap-1.5">
+        <Info size={12} /> Tip: drag the handle to reorder. Reordering takes effect on every reader's dashboard immediately after save.
+      </p>
     </Card>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Broadcasts tab
+// ────────────────────────────────────────────────────────────────────────────
+
+type Broadcast = {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  audience: 'all' | 'free' | 'premium';
+  created_at: string;
+};
+
+function BroadcastsTab() {
+  const [list, setList] = useState<Broadcast[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [link, setLink] = useState('');
+  const [audience, setAudience] = useState<'all' | 'free' | 'premium'>('all');
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/broadcasts/admin', { credentials: 'include' });
+      const data = await res.json();
+      if (res.ok) setList(data.broadcasts || []);
+    } catch { /* noop */ }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!feedback) return;
+    const t = window.setTimeout(() => setFeedback(null), 3500);
+    return () => window.clearTimeout(t);
+  }, [feedback]);
+
+  const send = async () => {
+    if (!title.trim()) { setFeedback({ type: 'error', message: 'Title is required' }); return; }
+    setBusy(true);
+    try {
+      const res = await fetch('/api/broadcasts/admin', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim(), body: body.trim() || null, link: link.trim() || null, audience }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed');
+      setTitle(''); setBody(''); setLink(''); setAudience('all');
+      setFeedback({ type: 'success', message: 'Broadcast sent' });
+      load();
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: e?.message || 'Failed to send' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm('Delete this broadcast?')) return;
+    try {
+      const res = await fetch(`/api/broadcasts/admin/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (res.ok) setList(prev => prev.filter(b => b.id !== id));
+    } catch { /* noop */ }
+  };
+
+  return (
+    <>
+      <Card title="Send a broadcast notification" description="Composes a notification visible to all readers (or a tier subset). Stays in their feed until you delete it.">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <label className="block sm:col-span-2">
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Title</span>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="What's the headline?"
+              maxLength={200}
+              className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Audience</span>
+            <select
+              value={audience}
+              onChange={e => setAudience(e.target.value as any)}
+              className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="all">All readers</option>
+              <option value="free">Free tier</option>
+              <option value="premium">Premium only</option>
+            </select>
+          </label>
+        </div>
+        <label className="block mb-4">
+          <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Message <span className="text-gray-400 font-normal">(optional)</span></span>
+          <textarea
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            placeholder="A short message — shown beneath the title."
+            rows={3}
+            maxLength={5000}
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 resize-y"
+          />
+        </label>
+        <label className="block mb-4">
+          <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Link <span className="text-gray-400 font-normal">(optional)</span></span>
+          <input
+            type="url"
+            value={link}
+            onChange={e => setLink(e.target.value)}
+            placeholder="https://www.mayobebros.com/posts/announcement"
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={send}
+            disabled={busy || !title.trim()}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-60"
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+            {busy ? 'Sending…' : 'Send broadcast'}
+          </button>
+          {feedback && (
+            <span className={'text-sm ' + (feedback.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+              {feedback.message}
+            </span>
+          )}
+        </div>
+      </Card>
+
+      <Card title="Recent broadcasts" description="Most recent first. Delete to revoke.">
+        {loading ? (
+          <div className="py-8 flex items-center justify-center"><Loader2 className="animate-spin text-amber-600" size={20} /></div>
+        ) : list.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">No broadcasts yet.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+            {list.map(b => (
+              <li key={b.id} className="py-3 flex items-start gap-3">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 flex-shrink-0">
+                  <Megaphone size={14} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <p className="font-medium text-gray-900 dark:text-white truncate">{b.title}</p>
+                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{b.audience}</span>
+                  </div>
+                  {b.body && <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mt-0.5">{b.body}</p>}
+                  <p className="text-[11px] text-gray-400 mt-1">{new Date(b.created_at).toLocaleString()}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => remove(b.id)}
+                  aria-label="Delete broadcast"
+                  className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </>
   );
 }
 

@@ -26,6 +26,7 @@ interface FormState {
   companyLogo: string;
   location: string;
   isRemote: boolean;
+  featured: boolean;
   employmentType: Job['employmentType'];
   salaryRange: string;
   description: string;
@@ -41,6 +42,7 @@ const EMPTY: FormState = {
   companyLogo: '',
   location: '',
   isRemote: false,
+  featured: false,
   employmentType: 'full-time',
   salaryRange: '',
   description: '',
@@ -81,6 +83,7 @@ export default function AdminJobEditorPage() {
           companyLogo:    found.companyLogo || '',
           location:       found.location || '',
           isRemote:       found.isRemote,
+          featured:       Boolean((found as any).featured),
           employmentType: found.employmentType,
           salaryRange:    found.salaryRange || '',
           description:    found.description || '',
@@ -120,6 +123,7 @@ export default function AdminJobEditorPage() {
         companyLogo: form.companyLogo.trim() || null,
         location: form.location.trim() || null,
         isRemote: form.isRemote,
+        featured: form.featured,
         employmentType: form.employmentType,
         salaryRange: form.salaryRange.trim() || null,
         description: form.description,
@@ -265,6 +269,17 @@ export default function AdminJobEditorPage() {
               className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-blue-600 focus:ring-blue-500"
             />
             <span className="text-gray-700 dark:text-gray-200">This role can be done remotely</span>
+          </label>
+          <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.featured}
+              onChange={e => set('featured', e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 dark:border-gray-700 text-amber-600 focus:ring-amber-500"
+            />
+            <span className="inline-flex items-center gap-1.5 text-gray-700 dark:text-gray-200">
+              ⭐ <span>Featured — pin to top of jobs board</span>
+            </span>
           </label>
         </section>
 
