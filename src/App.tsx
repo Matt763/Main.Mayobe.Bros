@@ -43,6 +43,8 @@ const NotificationsPage = lazy(() => import('./pages/dashboard/NotificationsPage
 const DashboardSettingsPage = lazy(() => import('./pages/dashboard/SettingsPage'));
 const InterestsPage = lazy(() => import('./pages/dashboard/InterestsPage'));
 const DashboardJobsPage = lazy(() => import('./pages/dashboard/JobsPage'));
+const DashboardAccountPage = lazy(() => import('./pages/dashboard/AccountPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'));
 const PublicJobsPage = lazy(() => import('./pages/JobsPage'));
 const JobDetailPage = lazy(() => import('./pages/JobDetailPage'));
 const UpgradePage = lazy(() => import('./pages/UpgradePage'));
@@ -77,6 +79,7 @@ const AIControlCenterPage = lazy(() => import('./pages/admin/AIControlCenterPage
 const KeywordResearchPage = lazy(() => import('./pages/admin/KeywordResearchPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/admin/CompetitorAnalysisPage'));
 const PaymentSettingsPage = lazy(() => import('./pages/admin/PaymentSettingsPage'));
+const DashboardManagementPage = lazy(() => import('./pages/admin/DashboardManagementPage'));
 const TrafficGrowthPage = lazy(() => import('./pages/admin/TrafficGrowthPage'));
 const ContentQualityPage = lazy(() => import('./pages/admin/ContentQualityPage'));
 const AdSenseReadinessPage = lazy(() => import('./pages/admin/AdSenseReadinessPage'));
@@ -279,6 +282,13 @@ function App() {
                             <PaymentSettingsPage />
                           </ProtectedRoute>
                         } />
+                        <Route path="dashboard-management" element={
+                          <ProtectedRoute allowedRoles={['ceo', 'admin']}>
+                            <Suspense fallback={<PageLoader />}>
+                              <DashboardManagementPage />
+                            </Suspense>
+                          </ProtectedRoute>
+                        } />
                         <Route path="traffic-growth" element={
                           <ProtectedRoute allowedRoles={['ceo', 'admin']}>
                             <TrafficGrowthPage />
@@ -353,8 +363,10 @@ function App() {
                             <Route path="interests" element={<InterestsPage />} />
                             <Route path="jobs" element={<DashboardJobsPage />} />
                             <Route path="notifications" element={<NotificationsPage />} />
+                            <Route path="account" element={<DashboardAccountPage />} />
                             <Route path="settings" element={<DashboardSettingsPage />} />
                           </Route>
+                          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                           <Route path="/page/:slug" element={<DynamicPage />} />
                           <Route path="/results/:year/:examType/:slug" element={<ResultsPage />} />
                           <Route path="*" element={<NotFoundPage />} />

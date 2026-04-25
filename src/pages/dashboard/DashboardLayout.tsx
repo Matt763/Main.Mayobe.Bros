@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, Loader2 } from 'lucide-react';
 import { useUserAuth } from '../../contexts/UserAuthContext';
+import { usePlan } from '../../hooks/usePlan';
 import DashboardSidebar from '../../components/dashboard/DashboardSidebar';
+import PremiumDashboardLayout from './PremiumDashboardLayout';
 
 const TITLES: Record<string, string> = {
   '/dashboard':               'My Dashboard',
@@ -16,9 +18,15 @@ const TITLES: Record<string, string> = {
 
 export default function DashboardLayout() {
   const { publicUser, publicLoading } = useUserAuth();
+  const { isPremium, loading: planLoading } = usePlan();
   const navigate = useNavigate();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Premium readers get a completely different layout (custom nav, no sidebar).
+  if (!publicLoading && !planLoading && publicUser && isPremium) {
+    return <PremiumDashboardLayout />;
+  }
 
   // Auth gate: signed-out → /signin?next=<current>
   useEffect(() => {
