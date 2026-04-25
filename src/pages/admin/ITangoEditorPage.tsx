@@ -25,7 +25,7 @@ import {
   Bot, Send, Folder, ChevronRight, ChevronDown,
   Play, GitCommit, Settings, RefreshCw, CheckCircle2, AlertTriangle,
   Shield, Activity, Zap, X, Loader2, Globe, Lock,
-  Cpu, Code2, BarChart3, RotateCcw
+  Cpu, Code2, BarChart3, RotateCcw, MessageSquare, Menu
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -739,6 +739,21 @@ export default function ITangoEditorPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // ── Responsive breakpoints ────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isTablet, setIsTablet] = useState(window.innerWidth < 1024);
+  const [mobileTab, setMobileTab] = useState<'chat' | 'editor' | 'files'>('chat');
+  const [showFileTree, setShowFileTree] = useState(false); // tablet: toggled via header button
+
+  useEffect(() => {
+    const handler = () => {
+      setIsMobile(window.innerWidth < 768);
+      setIsTablet(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -958,144 +973,173 @@ export default function ITangoEditorPage() {
 
       {/* ── LUXURY HEADER ─────────────────────────────────────────────────────── */}
       <header style={{
-        height: '56px',
+        height: isMobile ? '48px' : '56px',
         flexShrink: 0,
         display: 'flex',
         alignItems: 'center',
-        padding: '0 20px',
-        gap: '12px',
+        padding: isMobile ? '0 12px' : '0 20px',
+        gap: isMobile ? '8px' : '12px',
         background: 'linear-gradient(90deg, #05060f 0%, #080c1a 50%, #05060f 100%)',
         borderBottom: `1px solid ${borderGold}`,
         boxShadow: `0 1px 30px rgba(201,168,76,0.05)`,
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+          {/* Tablet: file tree toggle */}
+          {isTablet && !isMobile && (
+            <button
+              onClick={() => setShowFileTree(v => !v)}
+              title="Toggle file tree"
+              style={{
+                width: '32px', height: '32px', borderRadius: '7px',
+                background: showFileTree ? 'rgba(201,168,76,0.1)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${showFileTree ? borderGold : borderDim}`,
+                color: showFileTree ? gold : textSecondary, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.15s', flexShrink: 0,
+              }}
+            >
+              <Menu size={14} />
+            </button>
+          )}
           <div style={{
-            width: '36px', height: '36px', borderRadius: '10px',
+            width: isMobile ? '30px' : '36px', height: isMobile ? '30px' : '36px', borderRadius: '10px',
             background: 'linear-gradient(135deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.04) 100%)',
             border: `1px solid rgba(201,168,76,0.35)`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: `0 0 24px rgba(201,168,76,0.12), inset 0 1px 0 rgba(201,168,76,0.15)`,
           }}>
-            <Cpu size={17} style={{ color: gold }} />
+            <Cpu size={isMobile ? 14 : 17} style={{ color: gold }} />
           </div>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: textPrimary, letterSpacing: '0.02em', lineHeight: 1.2 }}>
+            <div style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: 800, color: textPrimary, letterSpacing: '0.02em', lineHeight: 1.2 }}>
               iTango <span style={{ color: gold, fontWeight: 700 }}>AI</span>
             </div>
-            <div style={{ fontSize: '9px', color: textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
-              Website Editor
-            </div>
+            {!isMobile && (
+              <div style={{ fontSize: '9px', color: textMuted, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 600 }}>
+                Website Editor
+              </div>
+            )}
           </div>
-          {/* Live badge */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '5px',
-            padding: '3px 10px', borderRadius: '20px',
-            background: 'rgba(16,217,160,0.06)',
-            border: '1px solid rgba(16,217,160,0.2)',
-          }}>
+          {/* Live badge — hide on mobile */}
+          {!isMobile && (
             <div style={{
-              width: '5px', height: '5px', borderRadius: '50%',
-              background: emerald,
-              boxShadow: `0 0 6px ${emerald}`,
-              animation: 'pulse 2s infinite',
-            }} />
-            <span style={{ fontSize: '9px', fontWeight: 800, color: emerald, letterSpacing: '0.12em' }}>LIVE</span>
-          </div>
+              display: 'flex', alignItems: 'center', gap: '5px',
+              padding: '3px 10px', borderRadius: '20px',
+              background: 'rgba(16,217,160,0.06)',
+              border: '1px solid rgba(16,217,160,0.2)',
+            }}>
+              <div style={{
+                width: '5px', height: '5px', borderRadius: '50%',
+                background: emerald,
+                boxShadow: `0 0 6px ${emerald}`,
+                animation: 'pulse 2s infinite',
+              }} />
+              <span style={{ fontSize: '9px', fontWeight: 800, color: emerald, letterSpacing: '0.12em' }}>LIVE</span>
+            </div>
+          )}
         </div>
 
-        {/* Divider */}
-        <div style={{ width: '1px', height: '24px', background: borderDim, margin: '0 4px' }} />
+        {/* Divider — hide on mobile */}
+        {!isMobile && <div style={{ width: '1px', height: '24px', background: borderDim, margin: '0 4px' }} />}
 
-        {/* File path breadcrumb */}
-        {selectedFile && (
+        {/* File path breadcrumb — hide on mobile */}
+        {!isMobile && selectedFile && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: '6px',
             padding: '4px 10px', borderRadius: '6px',
             background: 'rgba(79,195,247,0.06)',
             border: '1px solid rgba(79,195,247,0.12)',
+            maxWidth: isTablet ? '160px' : '300px',
+            overflow: 'hidden',
           }}>
-            <Code2 size={11} style={{ color: '#4fc3f7' }} />
-            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4fc3f7' }}>
+            <Code2 size={11} style={{ color: '#4fc3f7', flexShrink: 0 }} />
+            <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#4fc3f7', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {selectedFile.path}
             </span>
             {isDirty && (
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fb923c' }} />
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fb923c', flexShrink: 0 }} />
             )}
           </div>
         )}
 
         <div style={{ flex: 1 }} />
 
-        {/* Model selector */}
+        {/* Model selector — always visible but compact on mobile */}
         <select
           value={selectedModel.id}
           onChange={e => setSelectedModel(MODELS.find(m => m.id === e.target.value) || MODELS[0])}
           style={{
-            padding: '6px 12px',
+            padding: isMobile ? '5px 8px' : '6px 12px',
             borderRadius: '8px',
-            fontSize: '12px',
+            fontSize: isMobile ? '11px' : '12px',
             fontWeight: 600,
             background: '#080c14',
             border: `1px solid ${PROVIDER_COLORS[selectedModel.provider]}33`,
             color: PROVIDER_COLORS[selectedModel.provider],
             outline: 'none',
             cursor: 'pointer',
+            maxWidth: isMobile ? '120px' : 'none',
           }}
         >
           {MODELS.map(m => (
-            <option key={m.id} value={m.id}>{m.label}</option>
+            <option key={m.id} value={m.id}>{isMobile ? m.label.split(' ').slice(0, 2).join(' ') : m.label}</option>
           ))}
         </select>
 
-        {/* Deploy preview */}
-        <button
-          onClick={() => handleDeploy('preview')}
-          disabled={deployLoading}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '6px 14px', borderRadius: '8px',
-            fontSize: '12px', fontWeight: 600,
-            background: 'rgba(201,168,76,0.08)',
-            border: `1px solid rgba(201,168,76,0.2)`,
-            color: gold, cursor: deployLoading ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(201,168,76,0.14)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(201,168,76,0.08)'; }}
-        >
-          {deployLoading ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-          Deploy Preview
-        </button>
+        {/* Deploy preview — hidden on mobile */}
+        {!isMobile && (
+          <button
+            onClick={() => handleDeploy('preview')}
+            disabled={deployLoading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '6px 14px', borderRadius: '8px',
+              fontSize: '12px', fontWeight: 600,
+              background: 'rgba(201,168,76,0.08)',
+              border: `1px solid rgba(201,168,76,0.2)`,
+              color: gold, cursor: deployLoading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(201,168,76,0.14)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(201,168,76,0.08)'; }}
+          >
+            {deployLoading ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+            {!isTablet && 'Deploy Preview'}
+          </button>
+        )}
 
-        {/* Deploy production */}
-        <button
-          onClick={() => {
-            if (confirm('Deploy to PRODUCTION? This will update the live website immediately.')) {
-              handleDeploy('production');
-            }
-          }}
-          disabled={deployLoading}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '6px 14px', borderRadius: '8px',
-            fontSize: '12px', fontWeight: 600,
-            background: 'rgba(239,68,68,0.08)',
-            border: '1px solid rgba(239,68,68,0.2)',
-            color: '#f87171', cursor: deployLoading ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.14)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)'; }}
-        >
-          <Lock size={12} /> Production
-        </button>
+        {/* Deploy production — hidden on mobile */}
+        {!isMobile && (
+          <button
+            onClick={() => {
+              if (confirm('Deploy to PRODUCTION? This will update the live website immediately.')) {
+                handleDeploy('production');
+              }
+            }}
+            disabled={deployLoading}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '6px 14px', borderRadius: '8px',
+              fontSize: '12px', fontWeight: 600,
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.2)',
+              color: '#f87171', cursor: deployLoading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.14)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)'; }}
+          >
+            <Lock size={12} />
+            {!isTablet && ' Production'}
+          </button>
+        )}
 
-        {/* Settings */}
+        {/* Settings — always visible */}
         <button
           onClick={() => setShowSettings(true)}
           style={{
-            width: '34px', height: '34px', borderRadius: '8px',
+            width: isMobile ? '30px' : '34px', height: isMobile ? '30px' : '34px', borderRadius: '8px',
             background: 'rgba(255,255,255,0.04)',
             border: `1px solid ${borderDim}`,
             color: textSecondary, cursor: 'pointer',
@@ -1105,22 +1149,28 @@ export default function ITangoEditorPage() {
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = textPrimary; (e.currentTarget as HTMLElement).style.borderColor = borderGold; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = textSecondary; (e.currentTarget as HTMLElement).style.borderColor = borderDim; }}
         >
-          <Settings size={15} />
+          <Settings size={14} />
         </button>
       </header>
 
       {/* ── 3-COLUMN LAYOUT ───────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', paddingBottom: isMobile ? '56px' : 0 }}>
 
         {/* ── LEFT: File Tree ──────────────────────────────────────────────────── */}
         <aside style={{
           width: '210px',
           flexShrink: 0,
-          display: 'flex',
+          display: isMobile
+            ? (mobileTab === 'files' ? 'flex' : 'none')
+            : isTablet
+              ? (showFileTree ? 'flex' : 'none')
+              : 'flex',
           flexDirection: 'column',
           background: bgPanel,
           borderRight: `1px solid ${borderDim}`,
           overflow: 'hidden',
+          // On mobile/tablet, file tree takes full available space
+          flex: (isMobile || (isTablet && showFileTree)) ? '1 1 0' : undefined,
         }}>
           {/* Tree header */}
           <div style={{
@@ -1249,9 +1299,9 @@ export default function ITangoEditorPage() {
 
         {/* ── CENTER: Chat Interface ───────────────────────────────────────────── */}
         <main style={{
-          flex: '1 1 0',
+          flex: isMobile ? '1 1 0' : isTablet ? '6 1 0' : '1 1 0',
           minWidth: 0,
-          display: 'flex',
+          display: isMobile ? (mobileTab === 'chat' ? 'flex' : 'none') : 'flex',
           flexDirection: 'column',
           background: bgBase,
           borderRight: `1px solid ${borderDim}`,
@@ -1441,9 +1491,9 @@ export default function ITangoEditorPage() {
 
         {/* ── RIGHT: Editor / Preview / Activity ──────────────────────────────── */}
         <section style={{
-          flex: '1.3 1 0',
+          flex: isMobile ? '1 1 0' : isTablet ? '4 1 0' : '1.3 1 0',
           minWidth: 0,
-          display: 'flex',
+          display: isMobile ? (mobileTab === 'editor' ? 'flex' : 'none') : 'flex',
           flexDirection: 'column',
           background: bgPanel,
         }}>
@@ -1817,6 +1867,46 @@ export default function ITangoEditorPage() {
         </section>
       </div>
 
+      {/* ── MOBILE BOTTOM TAB BAR ─────────────────────────────────────────────── */}
+      {isMobile && (
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+          height: '56px',
+          display: 'flex', alignItems: 'stretch',
+          background: 'linear-gradient(180deg, #060810 0%, #040508 100%)',
+          borderTop: `1px solid ${borderGold}`,
+          boxShadow: `0 -4px 20px rgba(0,0,0,0.5)`,
+        }}>
+          {([
+            { id: 'chat',   label: 'Chat',   Icon: MessageSquare },
+            { id: 'editor', label: 'Editor', Icon: Code2 },
+            { id: 'files',  label: 'Files',  Icon: Folder },
+          ] as { id: 'chat' | 'editor' | 'files'; label: string; Icon: React.ComponentType<{ size: number; style?: React.CSSProperties }> }[]).map(tab => {
+            const active = mobileTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setMobileTab(tab.id)}
+                style={{
+                  flex: 1,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                  border: 'none', background: 'transparent', cursor: 'pointer',
+                  color: active ? gold : textSecondary,
+                  borderTop: active ? `2px solid ${gold}` : '2px solid transparent',
+                  transition: 'all 0.15s',
+                  paddingBottom: '2px',
+                }}
+              >
+                <tab.Icon size={18} style={{ color: active ? gold : textSecondary }} />
+                <span style={{ fontSize: '10px', fontWeight: active ? 700 : 500, letterSpacing: '0.06em', color: active ? gold : textSecondary }}>
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── MODALS ────────────────────────────────────────────────────────────── */}
       {showCommitModal && selectedFile && (
         <CommitModal
@@ -1831,7 +1921,7 @@ export default function ITangoEditorPage() {
       {/* ── TOAST ─────────────────────────────────────────────────────────────── */}
       {toast && (
         <div style={{
-          position: 'fixed', bottom: '24px', right: '24px', zIndex: 60,
+          position: 'fixed', bottom: isMobile ? '68px' : '24px', right: '24px', zIndex: 60,
           display: 'flex', alignItems: 'center', gap: '10px',
           padding: '12px 18px', borderRadius: '12px',
           background: toast.type === 'success' ? 'rgba(16,217,160,0.1)' : 'rgba(239,68,68,0.1)',

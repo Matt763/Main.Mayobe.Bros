@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
 import AdminLayout from '../../components/admin/AdminLayout';
 import Toast from '../../components/admin/Toast';
+import { useTheme } from '../../contexts/ThemeContext';
 import { supabase } from '../../lib/supabase';
 import {
   Eye, Users, Activity, Globe, Monitor, Smartphone, Tablet,
@@ -226,7 +227,7 @@ async function fetchAllPageViews(fields: string, rangeStart: Date): Promise<View
 
 function SectionCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-[#0d1117]/80 border border-[#1e2a3a] rounded-2xl overflow-hidden backdrop-blur-sm ${className}`}>
+    <div className={`bg-white dark:bg-[#0d1117]/80 border border-gray-200 dark:border-[#1e2a3a] rounded-2xl overflow-hidden backdrop-blur-sm shadow-sm dark:shadow-none ${className}`}>
       {children}
     </div>
   );
@@ -245,12 +246,12 @@ function SectionHeader({ icon: Icon, title, subtitle, accent = 'emerald', right 
   return (
     <div className="flex items-start justify-between gap-3 mb-6">
       <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-xl bg-white/5 ${colors[accent]}`}>
+        <div className={`p-2 rounded-xl bg-gray-100 dark:bg-white/5 ${colors[accent]}`}>
           <Icon size={15} />
         </div>
         <div>
-          <h2 className="text-sm font-bold text-white tracking-wide">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide">{title}</h2>
+          {subtitle && <p className="text-xs text-gray-500 dark:text-slate-500 mt-0.5">{subtitle}</p>}
         </div>
       </div>
       {right}
@@ -258,7 +259,7 @@ function SectionHeader({ icon: Icon, title, subtitle, accent = 'emerald', right 
   );
 }
 
-function DualLineChart({ data }: { data: { label: string; views: number; visitors: number }[] }) {
+function DualLineChart({ data, isDark }: { data: { label: string; views: number; visitors: number }[]; isDark: boolean }) {
   if (data.length < 2) {
     return <div className="flex items-center justify-center h-48 text-slate-600 text-sm">No data for selected period</div>;
   }
@@ -297,15 +298,15 @@ function DualLineChart({ data }: { data: { label: string; views: number; visitor
         const val = Math.round((1 - frac) * maxVal);
         return (
           <g key={frac}>
-            <line x1={PAD.l} y1={y} x2={VW - PAD.r} y2={y} stroke="#1e2a3a" strokeWidth="1" />
-            <text x={PAD.l - 8} y={y + 4} textAnchor="end" fontSize="10" fill="#475569">{val.toLocaleString()}</text>
+            <line x1={PAD.l} y1={y} x2={VW - PAD.r} y2={y} stroke={isDark ? "#1e2a3a" : "#e5e7eb"} strokeWidth="1" />
+            <text x={PAD.l - 8} y={y + 4} textAnchor="end" fontSize="10" fill={isDark ? "#475569" : "#6b7280"}>{val.toLocaleString()}</text>
           </g>
         );
       })}
       {data.map((d, i) => {
         if (i % step !== 0 && i !== data.length - 1) return null;
         return (
-          <text key={i} x={xOf(i)} y={VH - 8} textAnchor="middle" fontSize="10" fill="#475569">{d.label}</text>
+          <text key={i} x={xOf(i)} y={VH - 8} textAnchor="middle" fontSize="10" fill={isDark ? "#475569" : "#6b7280"}>{d.label}</text>
         );
       })}
       <path d={areaPath('views')} fill="url(#gV)" />
@@ -340,14 +341,14 @@ function BarList({ items, accent = 'emerald', maxItems = 10 }: {
         <div key={i}>
           <div className="flex items-center justify-between mb-1.5 gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-[11px] font-mono text-slate-600 w-5 text-right flex-shrink-0">{i + 1}</span>
-              <span className="text-sm text-slate-300 truncate">{item.label}</span>
+              <span className="text-[11px] font-mono text-gray-400 dark:text-slate-600 w-5 text-right flex-shrink-0">{i + 1}</span>
+              <span className="text-sm text-gray-700 dark:text-slate-300 truncate">{item.label}</span>
             </div>
             <span className={`text-sm font-bold ${cfg.text} flex-shrink-0 tabular-nums`}>
               {item.value.toLocaleString()}
             </span>
           </div>
-          <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden ml-7">
+          <div className="h-1.5 bg-gray-200 dark:bg-slate-800/80 rounded-full overflow-hidden ml-7">
             <div
               className={`h-full bg-gradient-to-r ${cfg.bar} rounded-full transition-all duration-700`}
               style={{ width: `${(item.value / max) * 100}%` }}
@@ -364,7 +365,7 @@ function StatCard({ icon: Icon, label, value, sub, accentClass, trend }: {
   accentClass: string; trend?: { value: number; positive: boolean };
 }) {
   return (
-    <div className="bg-[#0d1117]/80 border border-[#1e2a3a] rounded-2xl p-4 hover:border-[#2a3a4a] transition-all duration-200 backdrop-blur-sm">
+    <div className="bg-white dark:bg-[#0d1117]/80 border border-gray-200 dark:border-[#1e2a3a] rounded-2xl p-4 hover:border-[#2a3a4a] transition-all duration-200 backdrop-blur-sm shadow-sm dark:shadow-none">
       <div className="flex items-start justify-between mb-3">
         <div className={`p-2.5 rounded-xl ${accentClass}`}>
           <Icon size={15} />
@@ -376,18 +377,19 @@ function StatCard({ icon: Icon, label, value, sub, accentClass, trend }: {
           </span>
         )}
       </div>
-      <div className="text-2xl font-black text-white tracking-tight tabular-nums">
+      <div className="text-2xl font-black text-gray-900 dark:text-white tracking-tight tabular-nums">
         {typeof value === 'number' ? value.toLocaleString() : value}
       </div>
-      <div className="text-xs text-slate-400 mt-0.5 font-medium">{label}</div>
-      {sub && <div className="text-[11px] text-slate-600 mt-0.5">{sub}</div>}
+      <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium">{label}</div>
+      {sub && <div className="text-[11px] text-gray-400 dark:text-slate-600 mt-0.5">{sub}</div>}
     </div>
   );
 }
 
-function WorldMapEnhanced({ countryData }: { countryData: Map<string, number> }) {
+function WorldMapEnhanced({ countryData, topCountries }: { countryData: Map<string, number>; topCountries: BarItem[] }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<MapTooltip | null>(null);
+  const [selectedCountry, setSelectedCountry] = useState<{ name: string; code: string; count: number } | null>(null);
   const maxVisits = Math.max(...Array.from(countryData.values()), 1);
 
   // Premium gradient: dark navy → teal → bright emerald
@@ -416,92 +418,157 @@ function WorldMapEnhanced({ countryData }: { countryData: Map<string, number> })
     ];
   }, [maxVisits]);
 
+  const topMax = Math.max(...topCountries.map(c => c.value), 1);
+
   return (
-    <div ref={mapRef} className="relative bg-[#060d18] rounded-xl overflow-hidden select-none"
-      onMouseLeave={() => setTooltip(null)}>
-      <ComposableMap
-        projection="geoMercator"
-        projectionConfig={{ scale: 120, center: [10, 20] }}
-        style={{ width: '100%', height: 'auto' }}
-      >
-        <Geographies geography={GEO_URL}>
-          {({ geographies }: { geographies: any[] }) =>
-            geographies.map((geo: any) => {
-              const iso2 = geo.properties.ISO_A2 || '';
-              const count = countryData.get(iso2) || 0;
-              return (
-                <Geography
-                  key={geo.rsmKey}
-                  geography={geo}
-                  fill={getColor(iso2)}
-                  stroke="#0d1f33"
-                  strokeWidth={0.4}
-                  style={{
-                    default: { outline: 'none' },
-                    hover:   { outline: 'none', fill: count > 0 ? '#f59e0b' : '#1e2a3a', cursor: count > 0 ? 'pointer' : 'default' },
-                    pressed: { outline: 'none' },
-                  }}
-                  onMouseEnter={(evt: React.MouseEvent) => {
-                    if (!mapRef.current) return;
-                    const rect = mapRef.current.getBoundingClientRect();
-                    setTooltip({
-                      name:  geo.properties.NAME || iso2,
-                      count: count,
-                      x:     evt.clientX - rect.left,
-                      y:     evt.clientY - rect.top,
-                    });
-                  }}
-                  onMouseMove={(evt: React.MouseEvent) => {
-                    if (!mapRef.current) return;
-                    const rect = mapRef.current.getBoundingClientRect();
-                    setTooltip(prev => prev ? { ...prev, x: evt.clientX - rect.left, y: evt.clientY - rect.top } : null);
-                  }}
-                  onMouseLeave={() => setTooltip(null)}
-                />
-              );
-            })
-          }
-        </Geographies>
-      </ComposableMap>
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* Map */}
+      <div className="lg:col-span-3">
+        <div ref={mapRef} className="relative bg-[#060d18] rounded-xl overflow-hidden select-none max-h-72"
+          onMouseLeave={() => setTooltip(null)}>
+          <ComposableMap
+            projection="geoMercator"
+            projectionConfig={{ scale: 120, center: [10, 20] }}
+            style={{ width: '100%', height: 'auto' }}
+          >
+            <Geographies geography={GEO_URL}>
+              {({ geographies }: { geographies: any[] }) =>
+                geographies.map((geo: any) => {
+                  const iso2 = geo.properties.ISO_A2 || '';
+                  const count = countryData.get(iso2) || 0;
+                  return (
+                    <Geography
+                      key={geo.rsmKey}
+                      geography={geo}
+                      fill={getColor(iso2)}
+                      stroke="#0d1f33"
+                      strokeWidth={0.4}
+                      style={{
+                        default: { outline: 'none' },
+                        hover:   { outline: 'none', fill: count > 0 ? '#f59e0b' : '#1e2a3a', cursor: 'pointer' },
+                        pressed: { outline: 'none' },
+                      }}
+                      onMouseEnter={(evt: React.MouseEvent) => {
+                        if (!mapRef.current) return;
+                        const rect = mapRef.current.getBoundingClientRect();
+                        setTooltip({
+                          name:  geo.properties.NAME || iso2,
+                          count: count,
+                          x:     evt.clientX - rect.left,
+                          y:     evt.clientY - rect.top,
+                        });
+                      }}
+                      onMouseMove={(evt: React.MouseEvent) => {
+                        if (!mapRef.current) return;
+                        const rect = mapRef.current.getBoundingClientRect();
+                        setTooltip(prev => prev ? { ...prev, x: evt.clientX - rect.left, y: evt.clientY - rect.top } : null);
+                      }}
+                      onMouseLeave={() => setTooltip(null)}
+                      onClick={() => {
+                        setSelectedCountry({ name: geo.properties.NAME || iso2, code: iso2, count });
+                      }}
+                    />
+                  );
+                })
+              }
+            </Geographies>
+          </ComposableMap>
 
-      {/* Tooltip */}
-      {tooltip && (
-        <div
-          className="absolute pointer-events-none z-20 bg-[#0d1117] border border-[#1e2a3a] rounded-xl px-3 py-2 shadow-2xl text-sm"
-          style={{ left: tooltip.x + 12, top: tooltip.y - 40 }}
-        >
-          <p className="font-bold text-white">{tooltip.name}</p>
-          <p className="text-emerald-400 font-mono text-xs mt-0.5">
-            {tooltip.count > 0 ? `${tooltip.count.toLocaleString()} visitor${tooltip.count !== 1 ? 's' : ''}` : 'No visits recorded'}
-          </p>
-        </div>
-      )}
-
-      {/* Legend */}
-      <div className="absolute bottom-3 left-3 bg-[#0d1117]/95 backdrop-blur-sm rounded-xl px-3 py-2.5 border border-[#1e2a3a] shadow-xl">
-        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Visitor Density</p>
-        <div className="flex items-start gap-1">
-          <div className="flex flex-col items-center gap-0.5 mr-1">
-            <div className="w-4 h-3 rounded-sm bg-[#0a1628] border border-[#1e2a3a]" />
-            <span className="text-[8px] text-slate-600">None</span>
-          </div>
-          {tiers.map(({ color }, i) => (
-            <div key={i} className="flex flex-col items-center gap-0.5">
-              <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: color }} />
-              <span className="text-[8px] text-slate-500 leading-none whitespace-nowrap">{i === 0 ? 'Low' : i === tiers.length - 1 ? 'High' : ''}</span>
+          {/* Tooltip */}
+          {tooltip && (
+            <div
+              className="absolute pointer-events-none z-20 bg-[#0d1117] border border-[#1e2a3a] rounded-xl px-3 py-2 shadow-2xl text-sm"
+              style={{ left: tooltip.x + 12, top: tooltip.y - 40 }}
+            >
+              <p className="font-bold text-white">{tooltip.name}</p>
+              <p className="text-emerald-400 font-mono text-xs mt-0.5">
+                {tooltip.count > 0 ? `${tooltip.count.toLocaleString()} visitor${tooltip.count !== 1 ? 's' : ''}` : 'No visits recorded'}
+              </p>
             </div>
-          ))}
+          )}
+
+          {/* Legend */}
+          <div className="absolute bottom-3 left-3 bg-[#0d1117]/95 backdrop-blur-sm rounded-xl px-3 py-2.5 border border-[#1e2a3a] shadow-xl">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Visitor Density</p>
+            <div className="flex items-start gap-1">
+              <div className="flex flex-col items-center gap-0.5 mr-1">
+                <div className="w-4 h-3 rounded-sm bg-[#0a1628] border border-[#1e2a3a]" />
+                <span className="text-[8px] text-slate-600">None</span>
+              </div>
+              {tiers.map(({ color }, i) => (
+                <div key={i} className="flex flex-col items-center gap-0.5">
+                  <div className="w-5 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                  <span className="text-[8px] text-slate-500 leading-none whitespace-nowrap">{i === 0 ? 'Low' : i === tiers.length - 1 ? 'High' : ''}</span>
+                </div>
+              ))}
+            </div>
+            {tiers.length > 0 && (
+              <p className="text-[9px] text-slate-600 mt-1.5">
+                Peak: <span className="text-emerald-400 font-mono">{maxVisits.toLocaleString()}</span> visits
+              </p>
+            )}
+          </div>
+
+          {/* Country count badge */}
+          <div className="absolute bottom-3 right-3 bg-[#0d1117]/95 border border-[#1e2a3a] rounded-xl px-2.5 py-1.5">
+            <span className="text-xs text-slate-400 font-medium">{countryData.size} <span className="text-slate-600">countries</span></span>
+          </div>
         </div>
-        {tiers.length > 0 && (
-          <p className="text-[9px] text-slate-600 mt-1.5">
-            Peak: <span className="text-emerald-400 font-mono">{maxVisits.toLocaleString()}</span> visits
-          </p>
-        )}
       </div>
 
-      {/* Country count badge */}
-      <div className="absolute bottom-3 right-3 bg-[#0d1117]/95 border border-[#1e2a3a] rounded-xl px-2.5 py-1.5">
-        <span className="text-xs text-slate-400 font-medium">{countryData.size} <span className="text-slate-600">countries</span></span>
+      {/* Country detail panel */}
+      <div className="lg:col-span-2 flex flex-col gap-4">
+        {selectedCountry ? (
+          <div className="bg-[#060d18] dark:bg-[#060d18] bg-opacity-100 rounded-xl p-4 border border-[#1e2a3a] flex-shrink-0">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Selected Country</p>
+                <p className="text-base font-bold text-white leading-tight">{selectedCountry.name}</p>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">{selectedCountry.code}</p>
+              </div>
+              <button onClick={() => setSelectedCountry(null)} className="p-1 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/5 transition-all">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="text-3xl font-black text-emerald-400 tabular-nums mb-1">
+              {selectedCountry.count.toLocaleString()}
+            </div>
+            <p className="text-xs text-slate-500 mb-3">visitor{selectedCountry.count !== 1 ? 's' : ''}</p>
+            <div className="h-2 bg-slate-800/80 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all duration-700"
+                style={{ width: `${(selectedCountry.count / maxVisits) * 100}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-600 mt-1.5">
+              {Math.round((selectedCountry.count / maxVisits) * 100)}% of peak traffic
+            </p>
+          </div>
+        ) : (
+          <div className="bg-[#060d18] rounded-xl p-4 border border-dashed border-[#1e2a3a] flex flex-col items-center justify-center gap-2 min-h-[120px] flex-shrink-0">
+            <MapPin size={20} className="text-slate-700" />
+            <p className="text-xs text-slate-600 text-center">Click a country on the map<br />to see details</p>
+          </div>
+        )}
+
+        {/* Top 5 countries mini-list */}
+        {topCountries.length > 0 && (
+          <div className="flex-1">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2">Top Countries</p>
+            <div className="space-y-2">
+              {topCountries.slice(0, 5).map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-slate-600 w-4 text-right flex-shrink-0">{i + 1}</span>
+                  <span className="text-xs text-slate-300 truncate flex-1">{c.label}</span>
+                  <span className="text-xs font-bold text-emerald-400 tabular-nums flex-shrink-0">{c.value.toLocaleString()}</span>
+                  <div className="w-12 h-1 bg-slate-800/80 rounded-full overflow-hidden flex-shrink-0">
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(c.value / topMax) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -546,11 +613,11 @@ function DonutChart({ returning, newVisitors }: { returning: number; newVisitors
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 flex-shrink-0" />
-              <span className="text-sm text-slate-300 font-medium">Returning</span>
+              <span className="text-sm text-gray-700 dark:text-slate-300 font-medium">Returning</span>
             </div>
             <span className="text-sm font-bold text-emerald-400 tabular-nums">{returning.toLocaleString()}</span>
           </div>
-          <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-gray-200 dark:bg-slate-800/80 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full" style={{ width: `${retPct}%`, transition: 'width 0.8s ease' }} />
           </div>
         </div>
@@ -558,11 +625,11 @@ function DonutChart({ returning, newVisitors }: { returning: number; newVisitors
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-400 flex-shrink-0" />
-              <span className="text-sm text-slate-300 font-medium">New Visitors</span>
+              <span className="text-sm text-gray-700 dark:text-slate-300 font-medium">New Visitors</span>
             </div>
             <span className="text-sm font-bold text-blue-400 tabular-nums">{newVisitors.toLocaleString()}</span>
           </div>
-          <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+          <div className="h-1.5 bg-gray-200 dark:bg-slate-800/80 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full" style={{ width: `${newPct}%`, transition: 'width 0.8s ease' }} />
           </div>
         </div>
@@ -571,7 +638,7 @@ function DonutChart({ returning, newVisitors }: { returning: number; newVisitors
   );
 }
 
-function HourlyHeatmap({ grid }: { grid: number[][] }) {
+function HourlyHeatmap({ grid, isDark }: { grid: number[][]; isDark: boolean }) {
   const dayLabels = useMemo(() => {
     const labels: string[] = [];
     for (let i = 6; i >= 0; i--) {
@@ -585,7 +652,7 @@ function HourlyHeatmap({ grid }: { grid: number[][] }) {
   const maxVal = Math.max(...grid.flat(), 1);
 
   const getCellColor = (val: number): string => {
-    if (val === 0) return '#0d1520';
+    if (val === 0) return isDark ? '#0d1520' : '#f3f4f6';
     const r = val / maxVal;
     if (r >= 0.8) return '#f59e0b';
     if (r >= 0.55) return '#d97706';
@@ -601,7 +668,7 @@ function HourlyHeatmap({ grid }: { grid: number[][] }) {
         {Array.from({ length: 24 }, (_, h) => (
           <div key={h} className="flex-1 text-center" style={{ minWidth: 0 }}>
             {h % 6 === 0 && (
-              <span className="text-[9px] text-slate-600 font-mono">
+              <span className="text-[9px] text-gray-400 dark:text-slate-600 font-mono">
                 {h === 0 ? '12a' : h === 12 ? '12p' : h < 12 ? `${h}a` : `${h - 12}p`}
               </span>
             )}
@@ -610,7 +677,7 @@ function HourlyHeatmap({ grid }: { grid: number[][] }) {
       </div>
       {grid.map((row, dayIdx) => (
         <div key={dayIdx} className="flex items-center gap-1 mb-1">
-          <div className="w-8 flex-shrink-0 text-[10px] text-slate-600 text-right pr-1.5 font-medium">
+          <div className="w-8 flex-shrink-0 text-[10px] text-gray-400 dark:text-slate-600 text-right pr-1.5 font-medium">
             {dayLabels[dayIdx]}
           </div>
           {row.map((val, hourIdx) => (
@@ -638,6 +705,9 @@ function HourlyHeatmap({ grid }: { grid: number[][] }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
   const [range,      setRange]      = useState<Range>('week');
   const [adRange,    setAdRange]    = useState<Range>('week');
   const [rows,       setRows]       = useState<ViewRow[]>([]);
@@ -912,32 +982,32 @@ export default function AnalyticsPage() {
               <div className="p-2 rounded-xl bg-emerald-500/15">
                 <BarChart2 size={18} className="text-emerald-400" />
               </div>
-              <h1 className="text-2xl font-black text-white tracking-tight">
+              <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
                 Analytics <span className="text-emerald-400">Intelligence</span>
               </h1>
             </div>
-            <p className="text-xs text-slate-500 ml-11">
+            <p className="text-xs text-gray-500 dark:text-slate-500 ml-11">
               Real visitor data · Bots & admin filtered · Updated{' '}
-              <span className="text-slate-400">{updatedAt.toLocaleTimeString()}</span>
+              <span className="text-gray-600 dark:text-slate-400">{updatedAt.toLocaleTimeString()}</span>
               {refreshing && <span className="ml-2 text-emerald-400 animate-pulse">↻ refreshing</span>}
             </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex bg-[#0d1117] border border-[#1e2a3a] rounded-xl p-1">
+            <div className="flex bg-gray-100 dark:bg-[#0d1117] border border-gray-200 dark:border-[#1e2a3a] rounded-xl p-1">
               {RANGE_BTNS.map(({ v, label }) => (
                 <button key={v} onClick={() => setRange(v)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${range === v ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}>
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${range === v ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'}`}>
                   {label}
                 </button>
               ))}
             </div>
             <button onClick={() => fetchData(true)} disabled={refreshing} title="Refresh"
-              className="p-2.5 bg-[#0d1117] border border-[#1e2a3a] rounded-xl text-slate-400 hover:text-white hover:border-[#2a3a4a] transition-all">
+              className="p-2.5 bg-white dark:bg-[#0d1117] border border-gray-200 dark:border-[#1e2a3a] rounded-xl text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:border-[#2a3a4a] transition-all">
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
             </button>
             <button onClick={() => exportCSV(rows)}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-[#0d1117] border border-[#1e2a3a] rounded-xl text-slate-300 hover:text-white hover:border-[#2a3a4a] transition-all text-xs font-semibold">
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-white dark:bg-[#0d1117] border border-gray-200 dark:border-[#1e2a3a] rounded-xl text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white hover:border-[#2a3a4a] transition-all text-xs font-semibold">
               <Download size={13} /> Export CSV
             </button>
             <button onClick={() => setShowClear(true)}
@@ -953,7 +1023,7 @@ export default function AnalyticsPage() {
           <StatCard icon={Users}     label="Unique Visitors" value={metrics.uniqueVisitors}         accentClass="bg-violet-500/15 text-violet-400" />
 
           {/* Live Online */}
-          <div className="bg-[#0d1117]/80 border border-emerald-500/20 rounded-2xl p-4 backdrop-blur-sm shadow-lg shadow-emerald-900/10">
+          <div className="bg-white dark:bg-[#0d1117]/80 border border-emerald-500/20 rounded-2xl p-4 backdrop-blur-sm shadow-sm dark:shadow-lg dark:shadow-emerald-900/10">
             <div className="flex items-start justify-between mb-3">
               <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400"><Wifi size={15} /></div>
               <span className="flex items-center gap-1">
@@ -961,8 +1031,8 @@ export default function AnalyticsPage() {
                 <span className="text-[10px] text-emerald-400 font-bold tracking-widest">LIVE</span>
               </span>
             </div>
-            <div className="text-2xl font-black text-white tabular-nums">{onlineRows.length}</div>
-            <div className="text-xs text-slate-400 mt-0.5 font-medium">Online Now</div>
+            <div className="text-2xl font-black text-gray-900 dark:text-white tabular-nums">{onlineRows.length}</div>
+            <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5 font-medium">Online Now</div>
           </div>
 
           <StatCard icon={TrendingUp} label="New Visitors"   value={metrics.newVisitors}            accentClass="bg-amber-500/15 text-amber-400" />
@@ -974,21 +1044,21 @@ export default function AnalyticsPage() {
         <SectionCard className="p-6">
           <SectionHeader icon={TrendingUp} title="Traffic Overview" subtitle="Page views & unique visitors over time" accent="blue"
             right={
-              <div className="flex items-center gap-4 text-xs text-slate-500">
+              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-500">
                 <span className="flex items-center gap-1.5"><span className="w-5 h-0.5 bg-blue-500 rounded-full inline-block" />Views</span>
                 <span className="flex items-center gap-1.5"><span className="w-5 h-0.5 bg-emerald-500 rounded-full inline-block" />Visitors</span>
               </div>
             }
           />
-          <DualLineChart data={chartData} />
+          <DualLineChart data={chartData} isDark={isDark} />
         </SectionCard>
 
         {/* ── World Map ─────────────────────────────────────────────────────── */}
         <SectionCard className="p-6">
-          <SectionHeader icon={Globe} title="Visitor World Map" subtitle="Hover a country to see exact visitor count" accent="emerald"
+          <SectionHeader icon={Globe} title="Visitor World Map" subtitle="Hover or click a country to see visitor details" accent="emerald"
             right={<span className="text-xs text-slate-500">{countryMapData.size} countries tracked</span>}
           />
-          <WorldMapEnhanced countryData={countryMapData} />
+          <WorldMapEnhanced countryData={countryMapData} topCountries={topCountries} />
         </SectionCard>
 
         {/* ── Geo Breakdown ─────────────────────────────────────────────────── */}
@@ -1070,10 +1140,10 @@ export default function AnalyticsPage() {
                 };
                 const c = engineColors[item.label] || engineColors.Other;
                 return (
-                  <div key={i} className={`rounded-2xl p-4 border border-[#1e2a3a] ${c.bg} hover:border-[#2a3a4a] transition-colors`}>
+                  <div key={i} className={`rounded-2xl p-4 border border-gray-200 dark:border-[#1e2a3a] ${c.bg} hover:border-[#2a3a4a] transition-colors`}>
                     <div className={`text-lg font-black ${c.text} tabular-nums`}>{item.value.toLocaleString()}</div>
-                    <div className="text-sm font-semibold text-white mt-0.5">{item.label}</div>
-                    <div className="mt-3 h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">{item.label}</div>
+                    <div className="mt-3 h-1.5 bg-gray-200 dark:bg-slate-800/80 rounded-full overflow-hidden">
                       <div className={`h-full bg-gradient-to-r ${c.bar} rounded-full`} style={{ width: `${pct}%` }} />
                     </div>
                     <div className={`text-xs ${c.text} mt-1.5 font-semibold`}>{pct}% of organic</div>
@@ -1114,9 +1184,9 @@ export default function AnalyticsPage() {
                 <div key={key} className={`rounded-2xl p-4 border ${c.border} ${c.bg} hover:border-opacity-40 transition-colors`}>
                   <div className={`inline-flex p-2 rounded-xl bg-black/20 ${c.text} mb-3`}><Icon size={14} /></div>
                   <div className={`text-3xl font-black ${c.text} tabular-nums`}>{pct}%</div>
-                  <div className="text-sm font-semibold text-slate-200 mt-0.5">{label}</div>
-                  <div className="text-xs text-slate-600 mb-3 mt-0.5">{desc}</div>
-                  <div className="h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
+                  <div className="text-sm font-semibold text-gray-800 dark:text-slate-200 mt-0.5">{label}</div>
+                  <div className="text-xs text-gray-500 dark:text-slate-600 mb-3 mt-0.5">{desc}</div>
+                  <div className="h-1.5 bg-gray-200 dark:bg-slate-800/80 rounded-full overflow-hidden">
                     <div className={`h-full bg-gradient-to-r ${c.bar} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
                   </div>
                   <div className={`text-xs ${c.text} mt-1.5 font-semibold tabular-nums`}>{count.toLocaleString()} visits</div>
@@ -1151,7 +1221,7 @@ export default function AnalyticsPage() {
         {/* ── Hourly Traffic Heatmap ────────────────────────────────────────── */}
         <SectionCard className="p-6">
           <SectionHeader icon={Grid3X3} title="Traffic Activity Heatmap" subtitle="Hourly page views — last 7 days (hover for details)" accent="amber" />
-          <HourlyHeatmap grid={hourlyGrid} />
+          <HourlyHeatmap grid={hourlyGrid} isDark={isDark} />
         </SectionCard>
 
         {/* ── Returning vs New + Pages/Session ─────────────────────────────── */}
@@ -1171,12 +1241,12 @@ export default function AnalyticsPage() {
                 { label: 'New Visitor Rate',  value: `${metrics.uniqueVisitors > 0 ? Math.round((metrics.newVisitors / metrics.uniqueVisitors) * 100) : 0}%`,
                   icon: Users, color: 'text-amber-400', desc: 'First-time visitors' },
               ].map(({ label, value, icon: Icon, color, desc }) => (
-                <div key={label} className="flex items-center justify-between py-2 border-b border-[#1e2a3a] last:border-0">
+                <div key={label} className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-[#1e2a3a] last:border-0">
                   <div className="flex items-center gap-3">
-                    <div className={`p-1.5 rounded-lg bg-white/5 ${color}`}><Icon size={13} /></div>
+                    <div className={`p-1.5 rounded-lg bg-gray-100 dark:bg-white/5 ${color}`}><Icon size={13} /></div>
                     <div>
-                      <p className="text-sm font-semibold text-slate-200">{label}</p>
-                      <p className="text-xs text-slate-600">{desc}</p>
+                      <p className="text-sm font-semibold text-gray-800 dark:text-slate-200">{label}</p>
+                      <p className="text-xs text-gray-500 dark:text-slate-600">{desc}</p>
                     </div>
                   </div>
                   <span className={`text-sm font-bold ${color} tabular-nums`}>{value}</span>
@@ -1200,17 +1270,17 @@ export default function AnalyticsPage() {
                 const pct = Math.round((count / (rows.length || 1)) * 100);
                 return (
                   <div key={key} className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-slate-800/50 flex items-center justify-center flex-shrink-0">
-                      <Icon size={14} className="text-slate-300" />
+                    <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-slate-800/50 flex items-center justify-center flex-shrink-0">
+                      <Icon size={14} className="text-gray-500 dark:text-slate-300" />
                     </div>
                     <div className="flex-1">
                       <div className="flex justify-between text-sm mb-1.5">
-                        <span className="text-slate-200 font-semibold">{label}</span>
-                        <span className="text-slate-400 tabular-nums">{pct}%
-                          <span className="text-slate-600 text-xs ml-1">({count.toLocaleString()})</span>
+                        <span className="text-gray-800 dark:text-slate-200 font-semibold">{label}</span>
+                        <span className="text-gray-500 dark:text-slate-400 tabular-nums">{pct}%
+                          <span className="text-gray-400 dark:text-slate-600 text-xs ml-1">({count.toLocaleString()})</span>
                         </span>
                       </div>
-                      <div className="h-2 bg-slate-800/80 rounded-full overflow-hidden">
+                      <div className="h-2 bg-gray-200 dark:bg-slate-800/80 rounded-full overflow-hidden">
                         <div className={`h-full bg-gradient-to-r ${bar} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
@@ -1224,11 +1294,11 @@ export default function AnalyticsPage() {
             <SectionHeader icon={Globe} title="Browsers & Operating Systems" accent="amber" />
             <div className="grid grid-cols-2 gap-x-8">
               <div>
-                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">Browsers</p>
+                <p className="text-[10px] font-bold text-gray-400 dark:text-slate-600 uppercase tracking-widest mb-3">Browsers</p>
                 <BarList items={browserData} accent="blue" maxItems={5} />
               </div>
               <div>
-                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-3">OS</p>
+                <p className="text-[10px] font-bold text-gray-400 dark:text-slate-600 uppercase tracking-widest mb-3">OS</p>
                 <BarList items={osData} accent="emerald" maxItems={5} />
               </div>
             </div>
@@ -1237,34 +1307,34 @@ export default function AnalyticsPage() {
 
         {/* ── Live Visitors ──────────────────────────────────────────────────── */}
         <SectionCard>
-          <div className="px-6 py-4 border-b border-[#1e2a3a] flex items-center gap-3">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-[#1e2a3a] flex items-center gap-3">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-            <h2 className="text-sm font-bold text-white">Live Visitors</h2>
-            <span className="text-xs text-slate-500">Active in last 2 minutes · {onlineRows.length} online</span>
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white">Live Visitors</h2>
+            <span className="text-xs text-gray-500 dark:text-slate-500">Active in last 2 minutes · {onlineRows.length} online</span>
             <span className="ml-auto text-[10px] text-emerald-400 font-mono">● AUTO-REFRESH 30s</span>
           </div>
           {onlineRows.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-[#1e2a3a]">
+                  <tr className="border-b border-gray-200 dark:border-[#1e2a3a]">
                     {['Page', 'Location', 'Device', 'Last Seen'].map((h, i) => (
-                      <th key={h} className={`px-6 py-3 text-[10px] text-slate-600 font-bold uppercase tracking-wider ${i === 3 ? 'text-right' : 'text-left'}`}>{h}</th>
+                      <th key={h} className={`px-6 py-3 text-[10px] text-gray-400 dark:text-slate-600 font-bold uppercase tracking-wider ${i === 3 ? 'text-right' : 'text-left'}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1e2a3a]">
+                <tbody className="divide-y divide-gray-200 dark:divide-[#1e2a3a]">
                   {onlineRows.slice(0, 20).map((v, i) => (
-                    <tr key={i} className="hover:bg-white/[0.02] transition-colors">
+                    <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-6 py-3">
                         <div className="flex items-center gap-2">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                          <span className="text-xs font-mono text-slate-300 truncate max-w-xs">{v.page_path}</span>
+                          <span className="text-xs font-mono text-gray-700 dark:text-slate-300 truncate max-w-xs">{v.page_path}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-3 text-xs text-slate-400">{[v.city, v.country_name].filter(Boolean).join(', ') || '—'}</td>
-                      <td className="px-6 py-3 text-xs text-slate-400 capitalize">{v.device_type || '—'}</td>
-                      <td className="px-6 py-3 text-xs text-slate-500 text-right">{formatRelTime(v.last_seen)}</td>
+                      <td className="px-6 py-3 text-xs text-gray-500 dark:text-slate-400">{[v.city, v.country_name].filter(Boolean).join(', ') || '—'}</td>
+                      <td className="px-6 py-3 text-xs text-gray-500 dark:text-slate-400 capitalize">{v.device_type || '—'}</td>
+                      <td className="px-6 py-3 text-xs text-gray-400 dark:text-slate-500 text-right">{formatRelTime(v.last_seen)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1280,25 +1350,25 @@ export default function AnalyticsPage() {
 
         {/* ── Ad Performance ─────────────────────────────────────────────────── */}
         <SectionCard>
-          <div className="px-6 py-4 border-b border-[#1e2a3a] flex items-center justify-between flex-wrap gap-3">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-[#1e2a3a] flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400"><DollarSign size={15} /></div>
               <div>
-                <h2 className="text-sm font-bold text-white">Ad Performance</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Revenue by slot and platform</p>
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white">Ad Performance</h2>
+                <p className="text-xs text-gray-500 dark:text-slate-500 mt-0.5">Revenue by slot and platform</p>
               </div>
             </div>
-            <div className="flex bg-[#0d1117] border border-[#1e2a3a] rounded-xl p-1">
+            <div className="flex bg-gray-100 dark:bg-[#0d1117] border border-gray-200 dark:border-[#1e2a3a] rounded-xl p-1">
               {RANGE_BTNS.map(({ v, label }) => (
                 <button key={v} onClick={() => setAdRange(v)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${adRange === v ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${adRange === v ? 'bg-amber-600 text-white' : 'text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200'}`}>
                   {label}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-[#1e2a3a]">
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-gray-200 dark:divide-[#1e2a3a]">
             {[
               { icon: Eye,          label: 'Impressions',  value: adTotals.impressions.toLocaleString(), color: 'text-blue-400' },
               { icon: MousePointer, label: 'Clicks',       value: adTotals.clicks.toLocaleString(),      color: 'text-violet-400' },
@@ -1307,8 +1377,8 @@ export default function AnalyticsPage() {
             ].map(({ icon: Icon, label, value, color }) => (
               <div key={label} className="px-6 py-5">
                 <Icon size={14} className={`${color} mb-2`} />
-                <div className={`text-xl font-black text-white tabular-nums`}>{value}</div>
-                <div className="text-xs text-slate-600 mt-0.5">{label}</div>
+                <div className={`text-xl font-black text-gray-900 dark:text-white tabular-nums`}>{value}</div>
+                <div className="text-xs text-gray-400 dark:text-slate-600 mt-0.5">{label}</div>
               </div>
             ))}
           </div>
@@ -1317,16 +1387,16 @@ export default function AnalyticsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-y border-[#1e2a3a]">
+                  <tr className="border-y border-gray-200 dark:border-[#1e2a3a]">
                     {['Ad Slot', 'Platform', 'Impressions', 'Clicks', 'CTR', 'eCPM', 'Est. Revenue'].map((h, i) => (
-                      <th key={h} className={`px-6 py-3 text-[10px] text-slate-600 font-bold uppercase tracking-wider ${i >= 2 ? 'text-right' : 'text-left'}`}>{h}</th>
+                      <th key={h} className={`px-6 py-3 text-[10px] text-gray-400 dark:text-slate-600 font-bold uppercase tracking-wider ${i >= 2 ? 'text-right' : 'text-left'}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#1e2a3a]">
+                <tbody className="divide-y divide-gray-200 dark:divide-[#1e2a3a]">
                   {adSlotStats.map((s, i) => (
-                    <tr key={i} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-6 py-3 text-xs font-mono text-slate-300">{s.slot}</td>
+                    <tr key={i} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-3 text-xs font-mono text-gray-700 dark:text-slate-300">{s.slot}</td>
                       <td className="px-6 py-3"><span className="text-xs bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full font-medium capitalize">{s.platform}</span></td>
                       <td className="px-6 py-3 text-xs text-slate-400 text-right tabular-nums">{s.impressions.toLocaleString()}</td>
                       <td className="px-6 py-3 text-xs text-slate-400 text-right tabular-nums">{s.clicks.toLocaleString()}</td>
