@@ -999,6 +999,16 @@ export async function sendContactUserEmail(contact: ContactSubmission, siteUrl: 
   console.log(`[RESEND] Contact confirmation sent to ${contact.email}`);
 }
 
+// ─── HTML escaping for user-controlled email content ────────────────────────
+function escHtml(s: string | null | undefined): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ─── Password verification code (pre-change/reset) ───────────────────────────
 
 const PURPOSE_LABELS: Record<string, { title: string; intro: string; cta: string }> = {
@@ -1020,7 +1030,8 @@ const PURPOSE_LABELS: Record<string, { title: string; intro: string; cta: string
 };
 
 export function buildPasswordVerificationEmail(name: string, code: string, purpose: 'change' | 'set' | 'reset', siteUrl: string): string {
-  const firstName = (name || '').split(' ')[0] || 'there';
+  const firstName = escHtml((name || '').split(' ')[0] || 'there');
+  const safeCode = escHtml(code);
   const labels = PURPOSE_LABELS[purpose];
   const expiryMinutes = 15;
 
@@ -1052,7 +1063,7 @@ export function buildPasswordVerificationEmail(name: string, code: string, purpo
             <td style="background:#0f1c2e;border-radius:12px;padding:36px 24px;text-align:center;">
               <p style="font-size:10px;font-weight:700;color:#c9a000;text-transform:uppercase;letter-spacing:3px;margin:0 0 18px;">Your Verification Code</p>
               <div style="display:inline-block;background:rgba(255,255,255,0.06);border:1px solid rgba(201,160,0,0.5);border-radius:10px;padding:18px 36px;">
-                <span style="font-family:'Courier New',Courier,monospace;font-size:38px;font-weight:bold;color:#ffffff;letter-spacing:14px;">${code}</span>
+                <span style="font-family:'Courier New',Courier,monospace;font-size:38px;font-weight:bold;color:#ffffff;letter-spacing:14px;">${safeCode}</span>
               </div>
               <p style="font-size:12px;color:rgba(255,255,255,0.45);margin:18px 0 0;letter-spacing:0.3px;">Expires in ${expiryMinutes} minutes. Case-sensitive.</p>
             </td>
@@ -1092,8 +1103,10 @@ export async function sendPasswordVerificationEmail(
 // ─── Password changed confirmation (with "wasn't me" button) ─────────────────
 
 export function buildPasswordChangedEmail(name: string, revokeUrl: string, when: Date, siteUrl: string): string {
-  const firstName = (name || '').split(' ')[0] || 'there';
-  const formatted = when.toUTCString();
+  const firstName = escHtml((name || '').split(' ')[0] || 'there');
+  const safeRevokeUrl = escHtml(revokeUrl);
+  const safeSiteUrl = escHtml(siteUrl);
+  const formatted = escHtml(when.toUTCString());
 
   return htmlShell(
     'Your password was changed — Mayobe Bros',
@@ -1135,7 +1148,7 @@ export function buildPasswordChangedEmail(name: string, revokeUrl: string, when:
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 30px;">
           <tr>
             <td style="background:#dc2626;border-radius:10px;">
-              <a href="${revokeUrl}" target="_blank" style="display:inline-block;padding:14px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:0.4px;">
+              <a href="${safeRevokeUrl}" target="_blank" style="display:inline-block;padding:14px 26px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:0.4px;">
                 This wasn't me — secure my account
               </a>
             </td>
@@ -1143,7 +1156,7 @@ export function buildPasswordChangedEmail(name: string, revokeUrl: string, when:
         </table>
 
         <p style="font-size:12px;color:#9ca3af;line-height:1.7;margin:0;border-top:1px solid #f1f3f6;padding-top:18px;">
-          You can also visit <a href="${siteUrl}/dashboard/account" style="color:#0f1c2e;font-weight:600;">Account &amp; Security</a> to review recent activity.
+          You can also visit <a href="${safeSiteUrl}/dashboard/account" style="color:#0f1c2e;font-weight:600;">Account &amp; Security</a> to review recent activity.
         </p>
       </td>
     </tr>

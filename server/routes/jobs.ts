@@ -49,21 +49,25 @@ router.get('/', async (req, res) => {
     const remote = req.query.remote as string | undefined;
     const type = req.query.type as string | undefined;
 
-    let query = supabase
-      .from('jobs')
-      .select('*', { count: 'exact' })
-      .eq('status', 'published')
-      .order('featured', { ascending: false })
-      .order('published_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const buildQuery = (withFeatured: boolean) => {
+      let q2 = supabase
+        .from('jobs')
+        .select('*', { count: 'exact' })
+        .eq('status', 'published');
+      if (withFeatured) q2 = q2.order('featured', { ascending: false });
+      q2 = q2.order('published_at', { ascending: false }).range(offset, offset + limit - 1);
+      if (q) q2 = q2.or(`title.ilike.%${q}%,company.ilike.%${q}%,location.ilike.%${q}%`);
+      if (remote === 'true') q2 = q2.eq('is_remote', true);
+      if (type)              q2 = q2.eq('employment_type', type);
+      return q2;
+    };
 
-    if (q) {
-      query = query.or(`title.ilike.%${q}%,company.ilike.%${q}%,location.ilike.%${q}%`);
+    // Try with featured-first ordering; gracefully fall back if the migration
+    // adding the `featured` column hasn't been applied yet.
+    let { data, error, count } = await buildQuery(true);
+    if (error && /featured/i.test(error.message || '')) {
+      ({ data, error, count } = await buildQuery(false));
     }
-    if (remote === 'true') query = query.eq('is_remote', true);
-    if (type)              query = query.eq('employment_type', type);
-
-    const { data, error, count } = await query;
     if (error) throw error;
 
     res.json({
