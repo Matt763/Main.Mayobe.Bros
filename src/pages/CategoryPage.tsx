@@ -5,6 +5,7 @@ import { AlertCircle } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { applyMeta, buildCategoryMeta } from '../lib/seo';
 import Pagination, { getPageSize, useIsMobile } from '../components/Pagination';
+import Reveal from '../components/Reveal';
 
 interface Category {
   id: string;
@@ -89,14 +90,22 @@ export default function CategoryPage() {
   }, [categorySlug, labelSlug]);
 
   useEffect(() => {
+    let rafId: number | null = null;
     const handleScroll = () => {
-      if (!heroRef.current) return;
-      const scrollY = window.scrollY;
-      const bg = heroRef.current.querySelector('.hero-bg') as HTMLElement;
-      if (bg) bg.style.transform = `scale(1.02) translateY(${scrollY * 0.3}px)`;
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!heroRef.current) return;
+        const scrollY = window.scrollY;
+        const bg = heroRef.current.querySelector('.hero-bg') as HTMLElement;
+        if (bg) bg.style.transform = `scale(1.02) translateY(${scrollY * 0.3}px)`;
+      });
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   const loadData = async () => {
@@ -233,7 +242,7 @@ export default function CategoryPage() {
       </section>
 
       {labels.length > 0 && (
-        <section className={`sticky top-0 z-30 border-b transition-colors ${
+        <Reveal as="section" type="down" className={`sticky top-0 z-30 border-b transition-colors ${
           resolvedTheme === 'dark'
             ? 'bg-black/95 backdrop-blur-xl border-white/10'
             : 'bg-white/95 backdrop-blur-xl border-gray-200 shadow-sm'
@@ -269,10 +278,10 @@ export default function CategoryPage() {
               ))}
             </div>
           </div>
-        </section>
+        </Reveal>
       )}
 
-      <section className="container mx-auto px-4 sm:px-6 md:px-8 py-10 sm:py-14 md:py-16">
+      <Reveal as="section" type="up" className="container mx-auto px-4 sm:px-6 md:px-8 py-10 sm:py-14 md:py-16">
         {posts.length === 0 ? (
           <div className="text-center py-20">
             <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
@@ -314,13 +323,12 @@ export default function CategoryPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
+              <Reveal stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
                 {paginatedPosts.map((post, index) => (
                   <Link
                     key={post.id}
                     to={`/post/${post.category.slug}${post.labelSlug ? `/${post.labelSlug}` : ''}/${post.slug}`}
                     className="group bg-white dark:bg-gray-900 rounded-2xl shadow-md overflow-hidden hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/50 transition-all transform hover:-translate-y-1 duration-300"
-                    style={{ animationDelay: `${index * 60}ms` }}
                   >
                     <div className="relative overflow-hidden" style={{ height: '200px' }}>
                       <img
@@ -358,8 +366,9 @@ export default function CategoryPage() {
                     </div>
                   </Link>
                 ))}
-              </div>
+              </Reveal>
 
+              <Reveal type="up" delay={100}>
               <Pagination
                 totalItems={posts.length}
                 currentPage={currentPage}
@@ -368,10 +377,11 @@ export default function CategoryPage() {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
               />
+              </Reveal>
             </>
           );
         })()}
-      </section>
+      </Reveal>
     </div>
   );
 }

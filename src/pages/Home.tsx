@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { supabase } from '../lib/supabase';
 import TrendingSection from '../components/TrendingSection';
 import NewsletterSignup from '../components/NewsletterSignup';
+import Reveal from '../components/Reveal';
 import { applyMeta, buildHomeMeta } from '../lib/seo';
 
 const CATEGORY_IMAGES: Record<string, string> = {
@@ -151,8 +152,7 @@ function PostCard({ post, index, size = 'normal' }: { post: Post; index: number;
     <Link
       key={post.id}
       to={postUrl}
-      className="group bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-xl dark:hover:shadow-2xl transition-all transform hover:-translate-y-1 animate-fade-in"
-      style={{ animationDelay: `${index * 100}ms` }}
+      className="group bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-xl dark:hover:shadow-2xl transition-all transform hover:-translate-y-1"
     >
       <div className={`relative ${size === 'small' ? 'h-36' : 'h-44 sm:h-48'} overflow-hidden`}>
         <img
@@ -462,8 +462,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Recent Posts */}
-      <section className="container mx-auto px-4 sm:px-6 py-12 sm:py-16">
+      {/* Recent Posts — rises up into view */}
+      <Reveal as="section" type="up" className="container mx-auto px-4 sm:px-6 py-12 sm:py-16">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-3">
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white transition-colors">Recent Posts</h2>
           <Link to="/popular" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium flex items-center gap-1 transition-colors text-sm sm:text-base">
@@ -476,22 +476,24 @@ export default function Home() {
             <button onClick={() => { setError(false); setLoading(true); loadData(); }} className="text-blue-600 dark:text-blue-400 hover:underline font-medium">Try again</button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+          <Reveal stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {recentPosts.length === 0 ? (
               <div className="col-span-full text-center py-12 text-gray-500 dark:text-gray-400"><p className="text-lg">No posts published yet.</p></div>
             ) : recentPosts.map((post, index) => (
               <PostCard key={post.id} post={post} index={index} />
             ))}
-          </div>
+          </Reveal>
         )}
-      </section>
+      </Reveal>
 
-      {/* Trending Now */}
-      <TrendingSection posts={trendingPosts} />
+      {/* Trending Now — fades in with depth */}
+      <Reveal type="fade">
+        <TrendingSection posts={trendingPosts} />
+      </Reveal>
 
-      {/* Editor's Picks */}
+      {/* Editor's Picks — slides in from the right */}
       {editorsPicks.length > 0 && (
-        <section className="py-12 sm:py-16 bg-white dark:bg-black transition-colors">
+        <Reveal as="section" type="right" className="py-12 sm:py-16 bg-white dark:bg-black transition-colors">
           <div className="container mx-auto px-4 sm:px-6">
             <div className="flex items-center gap-2 mb-1">
               <Star size={18} className="text-blue-600 dark:text-blue-400" />
@@ -503,17 +505,17 @@ export default function Home() {
                 See All <ArrowRight size={15} />
               </Link>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <Reveal stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {editorsPicks.map((post, index) => (
                 <PostCard key={post.id} post={post} index={index} size="small" />
               ))}
-            </div>
+            </Reveal>
           </div>
-        </section>
+        </Reveal>
       )}
 
-      {/* Categories */}
-      <section className="bg-gray-50 dark:bg-gray-900 py-12 sm:py-16 transition-colors">
+      {/* Categories — zooms in from slight scale */}
+      <Reveal as="section" type="zoom" className="bg-gray-50 dark:bg-gray-900 py-12 sm:py-16 transition-colors">
         <div className="container mx-auto px-4 sm:px-6">
           <div className="text-center mb-8 sm:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-900 dark:text-white transition-colors">Explore Our Categories</h2>
@@ -548,7 +550,7 @@ export default function Home() {
             </div>
           )}
         </div>
-      </section>
+      </Reveal>
 
       {/* Label Sections */}
       {labelLoading ? (
@@ -569,7 +571,8 @@ export default function Home() {
             const { heading, subheading } = getLabelHeading(section.label.name, section.category.name, sectionIndex);
             const isAlternate = sectionIndex % 2 === 1;
             return (
-              <section key={section.label.id} className={`py-14 sm:py-20 transition-colors ${isAlternate ? 'bg-gray-50 dark:bg-gray-900' : 'bg-white dark:bg-black'}`}>
+              /* Odd sections slide from left, even from right — variety as you scroll */
+              <Reveal key={section.label.id} as="section" type={isAlternate ? 'right' : 'left'} className={`py-14 sm:py-20 transition-colors ${isAlternate ? 'bg-gray-50 dark:bg-gray-900' : 'bg-white dark:bg-black'}`}>
                 <div className="container mx-auto px-4 sm:px-6">
                   <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-8 sm:mb-10 gap-4">
                     <div>
@@ -588,21 +591,21 @@ export default function Home() {
                       See all in {section.label.name} <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
                     </Link>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+                  <Reveal stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
                     {section.posts.map((post, postIndex) => (
                       <PostCard key={post.id} post={post} index={postIndex} />
                     ))}
-                  </div>
+                  </Reveal>
                 </div>
-              </section>
+              </Reveal>
             );
           })}
         </div>
       ) : null}
 
-      {/* Popular Articles */}
+      {/* Popular Articles — slides in from left */}
       {popularPosts.length > 0 && (
-        <section className="py-12 sm:py-16 bg-white dark:bg-black transition-colors">
+        <Reveal as="section" type="left" className="py-12 sm:py-16 bg-white dark:bg-black transition-colors">
           <div className="container mx-auto px-4 sm:px-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-3">
               <div>
@@ -644,12 +647,12 @@ export default function Home() {
               ))}
             </div>
           </div>
-        </section>
+        </Reveal>
       )}
 
-      {/* Recommended For You */}
+      {/* Recommended For You — slides in from right */}
       {recommendedPosts.length > 0 && (
-        <section className="py-10 sm:py-14 bg-gray-50 dark:bg-gray-900 transition-colors">
+        <Reveal as="section" type="right" className="py-10 sm:py-14 bg-gray-50 dark:bg-gray-900 transition-colors">
           <div className="container mx-auto px-4 sm:px-6">
             <div className="flex items-center gap-2 mb-6">
               <Zap size={18} className="text-green-600 dark:text-green-400" />
@@ -668,12 +671,12 @@ export default function Home() {
               ))}
             </div>
           </div>
-        </section>
+        </Reveal>
       )}
 
-      {/* Latest Articles */}
+      {/* Latest Articles — drops down into view */}
       {recentPosts.length > 0 && (
-        <section className="py-10 sm:py-14 bg-white dark:bg-black transition-colors">
+        <Reveal as="section" type="down" className="py-10 sm:py-14 bg-white dark:bg-black transition-colors">
           <div className="container mx-auto px-4 sm:px-6">
             <div className="flex items-center gap-2 mb-6">
               <Sparkles size={18} className="text-blue-600 dark:text-blue-400" />
@@ -686,16 +689,18 @@ export default function Home() {
               </Link>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-7">The newest stories published on Mayobe Bros</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+            <Reveal stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
               {recentPosts.slice(0, 3).map((post, index) => (
                 <PostCard key={post.id} post={post} index={index} size="horizontal" />
               ))}
-            </div>
+            </Reveal>
           </div>
-        </section>
+        </Reveal>
       )}
 
-      <NewsletterSignup variant="banner" title="Never miss a story" subtitle="Join thousands of readers getting the best articles delivered to their inbox." />
+      <Reveal type="up">
+        <NewsletterSignup variant="banner" title="Never miss a story" subtitle="Join thousands of readers getting the best articles delivered to their inbox." />
+      </Reveal>
     </div>
   );
 }

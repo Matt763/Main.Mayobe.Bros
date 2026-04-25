@@ -20,6 +20,7 @@ import { AdSlotRenderer } from '../components/AdSlotRenderer';
 import { usePlyrInit } from '../hooks/usePlyrInit';
 import VideoSchemaMarkup from '../components/VideoSchemaMarkup';
 import VideoAdPlayer from '../components/VideoAdPlayer';
+import Reveal from '../components/Reveal';
 
 const TOC_ACTIVE = '#347c25';
 
@@ -106,6 +107,13 @@ export default function EnhancedPostPage() {
     return token;
   }, []);
 
+  const readTime = useMemo(() => {
+    if (!post?.content) return 1;
+    return Math.max(1, Math.round(
+      post.content.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length / 200
+    ));
+  }, [post?.content]);
+
   const tableOfContents = useMemo(() => {
     if (!post) return [];
 
@@ -152,55 +160,104 @@ export default function EnhancedPostPage() {
   }, [post, tableOfContents]);
 
   // ── TTS word-span injection ──────────────────────────────────────────────
+  // Runs during browser idle time in chunks of 60 nodes per frame so the
+  // main thread is never blocked, even on very long articles.
   useEffect(() => {
-    // Defer one frame to ensure dangerouslySetInnerHTML has settled in the DOM
-    const timer = setTimeout(() => {
     const container = contentRef.current;
     if (!container || !post?.content) return;
-    if (container.querySelector('.tts-word')) return; // already wrapped for this content
+    if (container.querySelector('.tts-word')) return;
 
-    const wordSpans: Array<{ci: number; el: HTMLSpanElement}> = [];
+    // Phase 1: collect text nodes + pre-compute charOffset (no DOM mutations).
+    const textNodes: Array<{ node: Text; offset: number }> = [];
     let charOffset = 0;
 
-    function walk(node: Node) {
+    function collect(node: Node) {
       if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent || '';
-        if (!text) return;
         const parent = node.parentNode as Element | null;
         if (!parent) return;
-        const tag = parent.tagName?.toLowerCase();
-        if (tag && ['script', 'style', 'noscript'].includes(tag)) { charOffset += text.length; return; }
-        const tokens = text.split(/(\s+)/);
-        const frag = document.createDocumentFragment();
-        let localOffset = 0;
-        for (const token of tokens) {
-          if (/\S/.test(token)) {
-            const span = document.createElement('span');
-            span.className = 'tts-word';
-            span.dataset.ci = String(charOffset + localOffset);
-            span.textContent = token;
-            frag.appendChild(span);
-            wordSpans.push({ ci: charOffset + localOffset, el: span });
-          } else if (token) {
-            frag.appendChild(document.createTextNode(token));
-          }
-          localOffset += token.length;
+        const tag = parent.tagName?.toLowerCase() || '';
+        if (['script', 'style', 'noscript'].includes(tag)) {
+          charOffset += (node.textContent || '').length;
+          return;
         }
+        const text = node.textContent || '';
+        if (text) textNodes.push({ node: node as Text, offset: charOffset });
         charOffset += text.length;
-        parent.replaceChild(frag, node);
-        return;
-      }
-      if (node.nodeType === Node.ELEMENT_NODE) {
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
         const tag = (node as Element).tagName.toLowerCase();
-        if (['script', 'style'].includes(tag)) { charOffset += (node.textContent || '').length; return; }
-        Array.from(node.childNodes).forEach(walk);
+        if (['script', 'style'].includes(tag)) {
+          charOffset += (node.textContent || '').length;
+          return;
+        }
+        Array.from(node.childNodes).forEach(collect);
       }
     }
 
-    walk(container);
-    ttsWordIndexRef.current = wordSpans;
-    }, 0);
-    return () => clearTimeout(timer);
+    // Wait for the initial paint to settle before touching the DOM.
+    const startTimer = setTimeout(() => {
+      collect(container);
+      if (textNodes.length === 0) return;
+
+      // Phase 2: replace text nodes in idle-time chunks so the browser stays
+      // responsive. Each chunk processes 60 nodes then yields.
+      const wordSpans: Array<{ ci: number; el: HTMLSpanElement }> = [];
+      let idx = 0;
+      let rafId = 0;
+      let idleHandle = 0;
+      const CHUNK = 60;
+
+      function processChunk(deadline?: IdleDeadline) {
+        const end = Math.min(idx + CHUNK, textNodes.length);
+        for (; idx < end; idx++) {
+          const { node, offset } = textNodes[idx];
+          if (!node.parentNode) continue;
+          const text = node.textContent || '';
+          const tokens = text.split(/(\s+)/);
+          const frag = document.createDocumentFragment();
+          let localOffset = 0;
+          for (const token of tokens) {
+            if (/\S/.test(token)) {
+              const span = document.createElement('span');
+              span.className = 'tts-word';
+              span.dataset.ci = String(offset + localOffset);
+              span.textContent = token;
+              frag.appendChild(span);
+              wordSpans.push({ ci: offset + localOffset, el: span });
+            } else if (token) {
+              frag.appendChild(document.createTextNode(token));
+            }
+            localOffset += token.length;
+          }
+          node.parentNode.replaceChild(frag, node);
+        }
+
+        if (idx < textNodes.length) {
+          // Still more work: continue in next idle frame.
+          if (deadline && deadline.timeRemaining() > 8) {
+            processChunk(deadline);
+          } else if ('requestIdleCallback' in window) {
+            idleHandle = requestIdleCallback(processChunk, { timeout: 3000 });
+          } else {
+            rafId = requestAnimationFrame(() => processChunk());
+          }
+        } else {
+          ttsWordIndexRef.current = wordSpans;
+        }
+      }
+
+      if ('requestIdleCallback' in window) {
+        idleHandle = requestIdleCallback(processChunk, { timeout: 5000 });
+      } else {
+        rafId = requestAnimationFrame(() => processChunk());
+      }
+
+      return () => {
+        if (idleHandle) cancelIdleCallback(idleHandle);
+        if (rafId) cancelAnimationFrame(rafId);
+      };
+    }, 400);
+
+    return () => clearTimeout(startTimer);
   }, [post?.content]);
 
   // ── TTS active-word highlight + auto-scroll ──────────────────────────────
@@ -685,7 +742,7 @@ export default function EnhancedPostPage() {
             </div>
             <div className="flex items-center gap-1.5">
               <Clock size={15} />
-              <span>{Math.max(1, Math.round(post.content.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length / 200))} min read</span>
+              <span>{readTime} min read</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Calendar size={15} />
@@ -808,7 +865,7 @@ export default function EnhancedPostPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8">
           {tableOfContents.length > 1 && (
-            <aside className="lg:col-span-1 hidden lg:block">
+            <Reveal as="aside" type="right" className="lg:col-span-1 hidden lg:block">
               <div className="sticky top-24 bg-white dark:bg-gray-800 rounded-2xl shadow-md overflow-hidden transition-colors max-h-[calc(100vh-120px)] overflow-y-auto">
                 {/* TOC header */}
                 <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-gray-100 dark:border-gray-700">
@@ -851,10 +908,10 @@ export default function EnhancedPostPage() {
                   })}
                 </nav>
               </div>
-            </aside>
+            </Reveal>
           )}
 
-          <article className={tableOfContents.length > 1 ? 'lg:col-span-3' : 'lg:col-span-4'}>
+          <Reveal as="article" type="up" className={tableOfContents.length > 1 ? 'lg:col-span-3' : 'lg:col-span-4'}>
             <VoiceNarration
               text={post.content}
               title={post.title}
@@ -944,7 +1001,7 @@ export default function EnhancedPostPage() {
             </div>
 
             {authorProfile && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-5 sm:p-6 mb-6 md:mb-8 transition-colors">
+              <Reveal type="left" className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-5 sm:p-6 mb-6 md:mb-8 transition-colors">
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4">About the Author</p>
                 <div className="flex items-start gap-4">
                   {authorProfile.avatar_url ? (
@@ -985,10 +1042,10 @@ export default function EnhancedPostPage() {
                     </Link>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             )}
 
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 transition-colors">
+            <Reveal type="up" className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 transition-colors">
               <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6 transition-colors">Comments ({comments.length})</h3>
 
               {commentSubmitted ? (
@@ -1321,7 +1378,7 @@ export default function EnhancedPostPage() {
               }
             }}
           />
-          </article>
+          </Reveal>
 
       {/* ── Floating TTS pause/resume button (visible only while audio is active) ── */}
       {(ttsIsPlaying || ttsIsPaused) && (
@@ -1358,7 +1415,7 @@ export default function EnhancedPostPage() {
       </div>
 
       {post.author && (
-        <div className="container mx-auto px-4 sm:px-6 md:px-8 max-w-7xl py-8">
+        <Reveal className="container mx-auto px-4 sm:px-6 md:px-8 max-w-7xl py-8" type="left">
           <div className="max-w-4xl mx-auto">
             <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-6 flex flex-col sm:flex-row gap-5">
               <div className="flex-shrink-0">
@@ -1389,10 +1446,10 @@ export default function EnhancedPostPage() {
               </div>
             </div>
           </div>
-        </div>
+        </Reveal>
       )}
 
-      <div className="container mx-auto px-4 sm:px-6 md:px-8 max-w-7xl pb-8">
+      <Reveal type="zoom" className="container mx-auto px-4 sm:px-6 md:px-8 max-w-7xl pb-8">
         <div className="max-w-4xl mx-auto">
           <NewsletterSignup
             variant="inline"
@@ -1400,17 +1457,17 @@ export default function EnhancedPostPage() {
             subtitle="Subscribe to get the latest stories delivered to your inbox."
           />
         </div>
-      </div>
+      </Reveal>
 
       {relatedPosts.length > 0 && (
         <>
-          <div className="bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 py-6">
+          <Reveal type="up" className="bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 py-6">
             <div className="container mx-auto px-4 sm:px-6 md:px-8 max-w-7xl">
               <div className="flex items-center gap-2 mb-4">
                 <span className="text-xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">Continue Reading</span>
                 <div className="flex-1 h-px bg-gray-100 dark:bg-gray-800" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <Reveal stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {relatedPosts.slice(0, 3).map((relatedPost) => (
                   <Link
                     key={relatedPost.id}
@@ -1434,17 +1491,17 @@ export default function EnhancedPostPage() {
                     </div>
                   </Link>
                 ))}
-              </div>
+              </Reveal>
             </div>
-          </div>
+          </Reveal>
 
-          <section className="bg-gray-50 dark:bg-gray-800 py-8 sm:py-12 md:py-16 transition-colors">
+          <Reveal as="section" type="zoom" className="bg-gray-50 dark:bg-gray-800 py-8 sm:py-12 md:py-16 transition-colors">
             <div className="container mx-auto px-4 sm:px-6 md:px-8 max-w-7xl">
               <div className="text-center mb-8 sm:mb-10">
                 <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2 transition-colors">Recommended For You</h2>
                 <p className="text-gray-600 dark:text-gray-400 text-sm sm:text-base">More articles you might enjoy based on this topic</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              <Reveal stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {relatedPosts.map((relatedPost) => (
                   <Link
                     key={relatedPost.id}
@@ -1473,9 +1530,9 @@ export default function EnhancedPostPage() {
                     </div>
                   </Link>
                 ))}
-              </div>
+              </Reveal>
             </div>
-          </section>
+          </Reveal>
         </>
       )}
     </div>

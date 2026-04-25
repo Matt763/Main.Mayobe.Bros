@@ -92,6 +92,9 @@
   font-size: 1.125rem;
   line-height: 1.75;
   max-width: 760px;
+  /* Isolate layout/style recalc to this subtree — prevents article DOM
+     mutations (TTS spans, lazy images) from triggering full-page reflow. */
+  contain: layout style;
 }
 
 .article-content h1 {
@@ -1016,11 +1019,18 @@ a.ai-internal-link:hover {
 }
 
 
+/* ── Hero parallax GPU layer ── */
+.hero-bg {
+  will-change: transform;
+}
+
 /* ── TTS word-by-word highlight (VoiceNarration) ── */
 .tts-word {
   border-radius: 3px;
   padding: 1px 2px;
   margin: 0 -2px;
+  /* Prevent each span's background change from triggering a full-article repaint. */
+  will-change: background-color;
 }
 .tts-word.tts-active {
   background-color: #2563eb;
@@ -1030,4 +1040,67 @@ a.ai-internal-link:hover {
 .dark .tts-word.tts-active {
   background-color: #3b82f6;
   color: #ffffff !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Scroll-reveal animations
+   – GPU-only: only opacity + transform (no layout reflow)
+   – Each section on the page gets its own reveal style
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Section-level reveals: whole section slides/zooms into view */
+.reveal-up,
+.reveal-down,
+.reveal-left,
+.reveal-right,
+.reveal-zoom,
+.reveal-fade {
+  transition:
+    opacity  0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal-up    { opacity: 0; transform: translateY(44px); }
+.reveal-down  { opacity: 0; transform: translateY(-30px); }
+.reveal-left  { opacity: 0; transform: translateX(-52px); }
+.reveal-right { opacity: 0; transform: translateX(52px); }
+.reveal-zoom  { opacity: 0; transform: scale(0.92) translateY(24px); }
+.reveal-fade  { opacity: 0; transform: none; }
+
+.reveal-up.is-visible,
+.reveal-down.is-visible,
+.reveal-left.is-visible,
+.reveal-right.is-visible,
+.reveal-zoom.is-visible,
+.reveal-fade.is-visible { opacity: 1; transform: none; }
+
+/* Stagger grid: children animate in sequence when the container
+   becomes visible. Uses keyframes so Tailwind's transition-all
+   on cards doesn't interfere — CSS animations beat transitions. */
+@keyframes reveal-item {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.reveal-stagger > * { opacity: 0; transform: translateY(28px); }
+.reveal-stagger.is-visible > *:nth-child(1)  { animation: reveal-item 0.52s cubic-bezier(0.22,1,0.36,1)   0ms both; }
+.reveal-stagger.is-visible > *:nth-child(2)  { animation: reveal-item 0.52s cubic-bezier(0.22,1,0.36,1)  80ms both; }
+.reveal-stagger.is-visible > *:nth-child(3)  { animation: reveal-item 0.52s cubic-bezier(0.22,1,0.36,1) 160ms both; }
+.reveal-stagger.is-visible > *:nth-child(4)  { animation: reveal-item 0.52s cubic-bezier(0.22,1,0.36,1) 240ms both; }
+.reveal-stagger.is-visible > *:nth-child(5)  { animation: reveal-item 0.52s cubic-bezier(0.22,1,0.36,1) 320ms both; }
+.reveal-stagger.is-visible > *:nth-child(6)  { animation: reveal-item 0.52s cubic-bezier(0.22,1,0.36,1) 400ms both; }
+.reveal-stagger.is-visible > *:nth-child(n+7){ animation: reveal-item 0.52s cubic-bezier(0.22,1,0.36,1) 480ms both; }
+
+/* Honour reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-up, .reveal-down, .reveal-left,
+  .reveal-right, .reveal-zoom, .reveal-fade {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .reveal-stagger > * {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
 }
