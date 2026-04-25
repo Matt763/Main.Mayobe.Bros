@@ -29,10 +29,16 @@ export default function ReviewsSection() {
   const lastSubmitRef = useRef<number>(0);
   const location = useLocation();
   const isAdmin = location.pathname.startsWith('/admin');
+  const isAuth =
+    location.pathname === '/signin' || location.pathname === '/signup';
+  const isDashboard = location.pathname.startsWith('/dashboard');
+  const isJobs = location.pathname === '/jobs' || location.pathname.startsWith('/jobs/');
+  const isUpgrade = location.pathname === '/upgrade' || location.pathname.startsWith('/upgrade/');
+  const hidden = isAdmin || isAuth || isDashboard || isJobs || isUpgrade;
 
   useEffect(() => {
-    if (!isAdmin) loadReviews();
-  }, [isAdmin]);
+    if (!hidden) loadReviews();
+  }, [hidden]);
 
   useEffect(() => {
     if (allReviews.length > 0) {
@@ -126,7 +132,7 @@ export default function ReviewsSection() {
       />
     ));
 
-  if (isAdmin) return null;
+  if (hidden) return null;
 
   return (
     <section className="bg-white dark:bg-gray-900 py-16 transition-colors">

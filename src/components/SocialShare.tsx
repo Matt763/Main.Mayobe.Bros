@@ -132,7 +132,8 @@ export default function SocialShare({ url, title, variant = 'default' }: Props) 
   const base =
     'group relative flex items-center justify-center w-9 h-9 rounded-full flex-shrink-0 transition-all duration-200 hover:scale-110 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500';
 
-  const ghostIdle = 'bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:border-transparent';
+  const ghostIdle =
+    'bg-gray-900/10 dark:bg-white/20 backdrop-blur-sm border border-gray-900/30 dark:border-white/30 text-gray-900 dark:text-white hover:border-transparent hover:text-white';
   const defaultIdle =
     'bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-200 shadow-sm hover:shadow-md hover:border-transparent hover:text-white';
 
@@ -144,7 +145,7 @@ export default function SocialShare({ url, title, variant = 'default' }: Props) 
           onClick={() => setOpen(true)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
             isGhost
-              ? 'text-white/70 hover:text-white border border-white/30 hover:border-white/60 backdrop-blur-sm'
+              ? 'text-gray-700/80 dark:text-white/70 hover:text-gray-900 dark:hover:text-white border border-gray-900/30 dark:border-white/30 hover:border-gray-900/60 dark:hover:border-white/60 backdrop-blur-sm'
               : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500 bg-white dark:bg-gray-800'
           }`}
         >
@@ -161,14 +162,14 @@ export default function SocialShare({ url, title, variant = 'default' }: Props) 
       {/* Header row: label + close */}
       <div className="flex items-center justify-between">
         <p className={`text-[11px] font-bold uppercase tracking-widest select-none ${
-          isGhost ? 'text-white/60' : 'text-gray-400 dark:text-gray-500'
+          isGhost ? 'text-gray-600 dark:text-white/60' : 'text-gray-400 dark:text-gray-500'
         }`}>
           Share this article
         </p>
         <button
           onClick={() => setOpen(false)}
           className={`p-1 rounded-full transition-colors ${
-            isGhost ? 'text-white/50 hover:text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'
+            isGhost ? 'text-gray-600 dark:text-white/50 hover:text-gray-900 dark:hover:text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'
           }`}
           aria-label="Close share panel"
         >

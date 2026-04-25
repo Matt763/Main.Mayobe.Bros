@@ -9,6 +9,9 @@ import { useUserAuth } from '../contexts/UserAuthContext';
 import ReaderAuthModal from '../components/ReaderAuthModal';
 import { useReactions } from '../hooks/useReactions';
 import SocialShare from '../components/SocialShare';
+import SaveButton from '../components/SaveButton';
+import PaywallGate from '../components/PaywallGate';
+import { useTrackReading } from '../hooks/useReadingTracking';
 import VoiceNarration from '../components/VoiceNarration';
 import NewsletterSignup from '../components/NewsletterSignup';
 import { applyMeta, buildPostMeta, buildArticleJsonLd, buildBreadcrumbJsonLd, buildItemListJsonLd, injectJsonLd, removeJsonLd, SITE_URL } from '../lib/seo';
@@ -82,6 +85,8 @@ export default function EnhancedPostPage() {
     animating,
     clearAnimating,
   } = useReactions(post?.id ?? '', publicUser?.id ?? null);
+
+  useTrackReading(post?.id);
 
   const userIdentifier = useMemo(() => {
     let id = localStorage.getItem('user_id');
@@ -689,7 +694,10 @@ export default function EnhancedPostPage() {
             </div>
           </div>
 
-          <SocialShare title={post.title} description={post.excerpt} variant="ghost" />
+          <div className="flex items-center gap-3 flex-wrap">
+            <SaveButton postId={post.id} onRequireAuth={() => setAuthModalOpen(true)} />
+            <SocialShare title={post.title} description={post.excerpt} variant="ghost" />
+          </div>
         </div>
       </section>
 
@@ -859,6 +867,7 @@ export default function EnhancedPostPage() {
             />
 
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 mb-6 md:mb-8 transition-colors">
+              <PaywallGate isPremiumContent={!!post.isPremium}>
               <div
                 ref={contentRef}
                 className="article-content max-w-none text-gray-700 dark:text-gray-300"
@@ -878,6 +887,7 @@ export default function EnhancedPostPage() {
                   }),
                 }}
               />
+              </PaywallGate>
               <AdSlotRenderer slot="in_article" className="my-6 overflow-hidden rounded-xl" />
 
 

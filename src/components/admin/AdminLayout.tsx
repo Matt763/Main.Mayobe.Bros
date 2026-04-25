@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useRole } from '../../hooks/useRole';
 import { useNotifications } from '../../contexts/NotificationContext';
-import { LayoutDashboard, FileText, File as FileEdit, MessageSquare, Folder, Tag, Image as ImageIcon, Settings, BarChart3, Menu, X, LogOut, Moon, Sun, Monitor, ChevronDown, Home, Mail, Users, Shield, Crown, KeyRound, CircleUser as UserCircle, Star, Radar, Activity, Sparkles, Compass, ClipboardCheck, Share2, Cpu, Search, Globe, CreditCard, TrendingUp, BarChart2, ShieldCheck, Bot, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, FileText, File as FileEdit, MessageSquare, Folder, Tag, Image as ImageIcon, Settings, BarChart3, Menu, X, LogOut, Moon, Sun, Monitor, ChevronDown, Home, Mail, Users, Shield, Crown, KeyRound, CircleUser as UserCircle, Star, Radar, Activity, Sparkles, Compass, ClipboardCheck, Share2, Cpu, Search, Globe, CreditCard, TrendingUp, BarChart2, ShieldCheck, Bot, GraduationCap, Briefcase } from 'lucide-react';
 import OnboardingTour from './OnboardingTour';
 
 interface AdminLayoutProps { children: ReactNode; }
@@ -191,6 +191,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       items: [
         { name: 'Posts', path: '/admin/posts', icon: FileText, badge: counts.posts > 0 ? counts.posts : undefined },
         { name: 'Results', path: '/admin/results', icon: GraduationCap },
+        { name: 'Jobs', path: '/admin/jobs', icon: Briefcase },
         ...(!isStaff ? [{ name: 'Pages', path: '/admin/pages', icon: FileEdit, badge: counts.pages > 0 ? counts.pages : undefined }] : []),
         ...(!isStaff ? [{ name: 'Comments', path: '/admin/comments', icon: MessageSquare, badge: counts.comments > 0 ? counts.comments : undefined }] : []),
         ...(!isStaff ? [{ name: 'Reviews', path: '/admin/reviews', icon: Star, badge: counts.reviews > 0 ? counts.reviews : undefined }] : []),

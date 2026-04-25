@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Search, LogOut, CircleUser as UserCircle2, ChevronDown, Home } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Menu, X, Search, LogOut, CircleUser as UserCircle2, ChevronDown, Home, LayoutDashboard, Briefcase } from 'lucide-react';
 import { api } from '../lib/api';
 import SearchModal from './SearchModal';
 import ThemeToggle from './ThemeToggle';
@@ -26,6 +26,7 @@ export default function Header() {
   const { settings } = useSiteSettings();
   const { publicUser, publicSignOut } = useUserAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const isAdmin = location.pathname.startsWith('/admin');
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -82,8 +83,41 @@ export default function Header() {
     }
   };
 
-  const openSignIn = () => { setAuthModalMode('signin'); setAuthModalOpen(true); };
-  const openSignUp = () => { setAuthModalMode('signup'); setAuthModalOpen(true); };
+  // Auth UX rule:
+  //  - On the homepage or on /signin or /signup → use full-page navigation.
+  //  - On post pages or any reading area → use the modal so we don't blow
+  //    away the user's reading context.
+  //  - If the user is already on the matching page, don't navigate again —
+  //    scroll to the form and focus the first input as feedback.
+  const onSignInPage = location.pathname === '/signin';
+  const onSignUpPage = location.pathname === '/signup';
+  const onAuthPage = onSignInPage || onSignUpPage;
+  const useFullPageAuth = location.pathname === '/' || onAuthPage;
+
+  const focusAuthForm = () => {
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const first = document.querySelector<HTMLInputElement>(
+        'main input[autocomplete="name"], main input[type="email"]'
+      );
+      first?.focus();
+    }, 0);
+  };
+
+  const openSignIn = () => {
+    setIsMenuOpen(false);
+    if (onSignInPage) { focusAuthForm(); return; }
+    if (useFullPageAuth) { navigate('/signin'); return; }
+    setAuthModalMode('signin');
+    setAuthModalOpen(true);
+  };
+  const openSignUp = () => {
+    setIsMenuOpen(false);
+    if (onSignUpPage) { focusAuthForm(); return; }
+    if (useFullPageAuth) { navigate('/signup'); return; }
+    setAuthModalMode('signup');
+    setAuthModalOpen(true);
+  };
 
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => {
@@ -161,6 +195,14 @@ export default function Header() {
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{publicUser.email}</p>
                       </div>
                       <div className="py-1">
+                        <Link
+                          to="/dashboard"
+                          onClick={() => setProfileMenuOpen(false)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        >
+                          <LayoutDashboard size={16} className="text-blue-500" />
+                          My Dashboard
+                        </Link>
                         <button
                           onClick={() => setProfileMenuOpen(false)}
                           className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -183,13 +225,23 @@ export default function Header() {
                 <div className="hidden sm:flex items-center gap-2">
                   <button
                     onClick={openSignIn}
-                    className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                    aria-current={onSignInPage ? 'page' : undefined}
+                    className={`px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
+                      onSignInPage
+                        ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800'
+                        : 'text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'
+                    }`}
                   >
                     Sign In
                   </button>
                   <button
                     onClick={openSignUp}
-                    className="px-4 py-2 text-sm font-semibold bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-all transform hover:scale-105"
+                    aria-current={onSignUpPage ? 'page' : undefined}
+                    className={`px-4 py-2 text-sm font-semibold rounded-full transition-all ${
+                      onSignUpPage
+                        ? 'bg-blue-700 text-white ring-2 ring-blue-300 dark:ring-blue-500/60 ring-offset-2 ring-offset-white dark:ring-offset-gray-900'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 transform hover:scale-105'
+                    }`}
                   >
                     Sign Up
                   </button>
@@ -326,6 +378,40 @@ export default function Header() {
             </Link>
           </div>
 
+          {/* Dashboard — signed-in readers only */}
+          {publicUser && (
+            <div className="px-3 pb-1">
+              <Link
+                to="/dashboard"
+                onClick={() => setIsMenuOpen(false)}
+                className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                  location.pathname.startsWith('/dashboard')
+                    ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+              >
+                <LayoutDashboard size={17} className="flex-shrink-0" />
+                Dashboard
+              </Link>
+            </div>
+          )}
+
+          {/* Jobs */}
+          <div className="px-3 pb-1">
+            <Link
+              to="/jobs"
+              onClick={() => setIsMenuOpen(false)}
+              className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-colors ${
+                location.pathname === '/jobs' || location.pathname.startsWith('/jobs/')
+                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+            >
+              <Briefcase size={17} className="flex-shrink-0" />
+              Jobs
+            </Link>
+          </div>
+
           {/* Categories */}
           {categories.length > 0 && (
             <div className="px-3 pb-1">
@@ -434,13 +520,23 @@ export default function Header() {
           <div className="flex-shrink-0 px-5 py-4 border-t border-gray-100 dark:border-gray-800 flex gap-3">
             <button
               onClick={() => { setIsMenuOpen(false); openSignIn(); }}
-              className="flex-1 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-full hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all"
+              aria-current={onSignInPage ? 'page' : undefined}
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-full transition-all ${
+                onSignInPage
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-2 border-blue-500 dark:border-blue-400'
+                  : 'text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400'
+              }`}
             >
               Sign In
             </button>
             <button
               onClick={() => { setIsMenuOpen(false); openSignUp(); }}
-              className="flex-1 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-full hover:bg-blue-700 active:scale-95 transition-all"
+              aria-current={onSignUpPage ? 'page' : undefined}
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-full transition-all ${
+                onSignUpPage
+                  ? 'bg-blue-700 text-white ring-2 ring-blue-300 dark:ring-blue-500/60 ring-offset-2 ring-offset-white dark:ring-offset-gray-900'
+                  : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+              }`}
             >
               Sign Up
             </button>

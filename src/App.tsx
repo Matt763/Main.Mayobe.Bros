@@ -33,6 +33,20 @@ const DynamicPage = lazy(() => import('./pages/DynamicPage'));
 const PostsDirectoryPage = lazy(() => import('./pages/PostsDirectoryPage'));
 const CategoriesIndexPage = lazy(() => import('./pages/CategoriesIndexPage'));
 const LabelsIndexPage = lazy(() => import('./pages/LabelsIndexPage'));
+const SignInPage = lazy(() => import('./pages/auth/SignInPage'));
+const SignUpPage = lazy(() => import('./pages/auth/SignUpPage'));
+const DashboardLayout = lazy(() => import('./pages/dashboard/DashboardLayout'));
+const DashboardHome = lazy(() => import('./pages/dashboard/DashboardHome'));
+const SavedPostsPage = lazy(() => import('./pages/dashboard/SavedPostsPage'));
+const ReadingPage = lazy(() => import('./pages/dashboard/ReadingPage'));
+const NotificationsPage = lazy(() => import('./pages/dashboard/NotificationsPage'));
+const DashboardSettingsPage = lazy(() => import('./pages/dashboard/SettingsPage'));
+const InterestsPage = lazy(() => import('./pages/dashboard/InterestsPage'));
+const DashboardJobsPage = lazy(() => import('./pages/dashboard/JobsPage'));
+const PublicJobsPage = lazy(() => import('./pages/JobsPage'));
+const JobDetailPage = lazy(() => import('./pages/JobDetailPage'));
+const UpgradePage = lazy(() => import('./pages/UpgradePage'));
+const UpgradeReturnPage = lazy(() => import('./pages/UpgradeReturnPage'));
 
 const LoginPage = lazy(() => import('./pages/admin/LoginPage'));
 const DashboardPage = lazy(() => import('./pages/admin/DashboardPage'));
@@ -76,6 +90,8 @@ const NectaIndexPage    = lazy(() => import('./pages/NectaIndexPage'));
 const NectaSchoolPage   = lazy(() => import('./pages/NectaSchoolPage'));
 const ResultsListPage   = lazy(() => import('./pages/admin/ResultsListPage'));
 const ResultsEditorPage = lazy(() => import('./pages/admin/ResultsEditorPage'));
+const AdminJobsListPage = lazy(() => import('./pages/admin/JobsListPage'));
+const AdminJobEditorPage = lazy(() => import('./pages/admin/JobEditorPage'));
 
 function ScrollToTop() {
   const location = useLocation();
@@ -286,6 +302,9 @@ function App() {
                         <Route path="results" element={<ResultsListPage />} />
                         <Route path="results/new" element={<ResultsEditorPage />} />
                         <Route path="results/:id" element={<ResultsEditorPage />} />
+                        <Route path="jobs" element={<AdminJobsListPage />} />
+                        <Route path="jobs/new" element={<AdminJobEditorPage />} />
+                        <Route path="jobs/edit/:id" element={<AdminJobEditorPage />} />
                       </Routes>
                     </Suspense>
                   </ProtectedRoute>
@@ -321,6 +340,21 @@ function App() {
                           <Route path="/rss" element={<RSSPage />} />
                           <Route path="/about" element={<AboutUsPage />} />
                           <Route path="/contact" element={<ContactUsPage />} />
+                          <Route path="/signin" element={<SignInPage />} />
+                          <Route path="/signup" element={<SignUpPage />} />
+                          <Route path="/jobs" element={<PublicJobsPage />} />
+                          <Route path="/jobs/:slug" element={<JobDetailPage />} />
+                          <Route path="/upgrade" element={<UpgradePage />} />
+                          <Route path="/upgrade/return" element={<UpgradeReturnPage />} />
+                          <Route path="/dashboard" element={<DashboardLayout />}>
+                            <Route index element={<DashboardHome />} />
+                            <Route path="saved" element={<SavedPostsPage />} />
+                            <Route path="reading" element={<ReadingPage />} />
+                            <Route path="interests" element={<InterestsPage />} />
+                            <Route path="jobs" element={<DashboardJobsPage />} />
+                            <Route path="notifications" element={<NotificationsPage />} />
+                            <Route path="settings" element={<DashboardSettingsPage />} />
+                          </Route>
                           <Route path="/page/:slug" element={<DynamicPage />} />
                           <Route path="/results/:year/:examType/:slug" element={<ResultsPage />} />
                           <Route path="*" element={<NotFoundPage />} />
