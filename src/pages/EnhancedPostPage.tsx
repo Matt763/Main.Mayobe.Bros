@@ -1366,7 +1366,7 @@ export default function EnhancedPostPage() {
                   );
                 })}
               </div>
-            </div>
+            </Reveal>
 
           <ReaderAuthModal
             open={authModalOpen}
@@ -1378,7 +1378,6 @@ export default function EnhancedPostPage() {
               }
             }}
           />
-          </Reveal>
 
       {/* ── Floating TTS pause/resume button (visible only while audio is active) ── */}
       {(ttsIsPlaying || ttsIsPaused) && (
@@ -1411,6 +1410,7 @@ export default function EnhancedPostPage() {
           </span>
         </div>
       )}
+          </Reveal>
         </div>
       </div>
 
