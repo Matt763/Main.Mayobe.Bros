@@ -26,11 +26,11 @@ async function fetchToken(): Promise<string> {
   const now = Date.now();
   if (tokenCache && tokenCache.expiresAt - 30_000 > now) return tokenCache.token;
 
-  const key = process.env.PESAPAL_CONSUMER_KEY;
-  const secret = process.env.PESAPAL_CONSUMER_SECRET;
+  const key = (process.env.PESAPAL_CONSUMER_KEY || '').trim();
+  const secret = (process.env.PESAPAL_CONSUMER_SECRET || '').trim();
   if (!key || !secret) {
     throw new Error(
-      'Pesapal not configured: set PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET in your env.'
+      'Pesapal not configured: PESAPAL_CONSUMER_KEY or PESAPAL_CONSUMER_SECRET is empty in this environment.'
     );
   }
 
@@ -39,9 +39,16 @@ async function fetchToken(): Promise<string> {
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ consumer_key: key, consumer_secret: secret }),
   });
-  const data: any = await res.json().catch(() => ({}));
+  const rawText = await res.text();
+  let data: any = {};
+  try { data = rawText ? JSON.parse(rawText) : {}; } catch { /* keep rawText */ }
   if (!res.ok || !data?.token) {
-    throw new Error(`Pesapal auth failed: ${data?.error?.message || data?.message || res.status}`);
+    const detail =
+      data?.error?.message ||
+      data?.error?.code ||
+      data?.message ||
+      (rawText ? rawText.slice(0, 200) : `HTTP ${res.status}`);
+    throw new Error(`Pesapal auth failed (${res.status}): ${detail}`);
   }
 
   // Tokens are typically valid for ~5 minutes. Cache conservatively.
