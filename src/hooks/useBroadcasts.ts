@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { usePlan } from './usePlan';
 
 export interface Broadcast {
@@ -29,19 +30,23 @@ export function useBroadcasts(limit = 5) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/broadcasts?limit=${limit}`)
-      .then(r => r.json())
-      .then(data => {
+    (async () => {
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const token = sess?.session?.access_token;
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(`/api/broadcasts?limit=${limit}`, { headers });
+        const data = await res.json();
         if (cancelled) return;
-        const raw = (data?.broadcasts || []) as Broadcast[];
-        const audienceMatch = (b: Broadcast) =>
-          b.audience === 'all' ||
-          (b.audience === 'premium' && isPremium) ||
-          (b.audience === 'free' && !isPremium);
-        setItems(raw.filter(audienceMatch));
-      })
-      .catch(() => { /* noop */ })
-      .finally(() => { if (!cancelled) setLoading(false); });
+        // Server already filters by audience; we just trust the result.
+        setItems((data?.broadcasts || []) as Broadcast[]);
+      } catch {
+        if (!cancelled) setItems([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
     return () => { cancelled = true; };
   }, [isPremium, limit, planLoading]);
 

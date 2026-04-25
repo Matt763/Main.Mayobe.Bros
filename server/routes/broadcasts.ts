@@ -12,13 +12,39 @@ import { getSupabaseAdmin } from '../utils/supabase.js';
 
 const router = Router();
 
+// Determine the requester's tier from an optional Supabase Bearer token.
+// Anonymous → free. Premium plan → premium. Anything else → free.
+async function audienceForRequest(req: any): Promise<'all'[] | ('all' | 'free' | 'premium')[]> {
+  const supa = getSupabaseAdmin();
+  const header = String(req.headers.authorization || '');
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token) return ['all', 'free'];
+  try {
+    const { data } = await supa.auth.getUser(token);
+    const userId = data?.user?.id;
+    if (!userId) return ['all', 'free'];
+    const { data: plan } = await supa
+      .from('user_plans')
+      .select('plan, premium_until')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const isPremium = !!(plan && plan.plan === 'premium' &&
+      (!plan.premium_until || new Date(plan.premium_until as string).getTime() >= Date.now()));
+    return isPremium ? ['all', 'premium'] : ['all', 'free'];
+  } catch {
+    return ['all', 'free'];
+  }
+}
+
 router.get('/', async (req, res) => {
   try {
     const limit = Math.min(20, Math.max(1, parseInt((req.query.limit as string) || '5', 10)));
+    const audiences = await audienceForRequest(req);
     const supa = getSupabaseAdmin();
     const { data, error } = await supa
       .from('broadcast_notifications')
       .select('id, title, body, link, audience, created_at')
+      .in('audience', audiences as string[])
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
