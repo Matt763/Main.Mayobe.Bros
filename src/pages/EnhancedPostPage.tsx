@@ -911,7 +911,7 @@ export default function EnhancedPostPage() {
             </Reveal>
           )}
 
-          <Reveal as="article" type="up" className={tableOfContents.length > 1 ? 'lg:col-span-3' : 'lg:col-span-4'}>
+          <article className={tableOfContents.length > 1 ? 'lg:col-span-3' : 'lg:col-span-4'}>
             <VoiceNarration
               text={post.content}
               title={post.title}
@@ -1410,7 +1410,7 @@ export default function EnhancedPostPage() {
           </span>
         </div>
       )}
-          </Reveal>
+          </article>
         </div>
       </div>
 

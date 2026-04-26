@@ -42,7 +42,7 @@ export default function Reveal({
         }
         observer.unobserve(el);
       },
-      { rootMargin: '0px 0px -48px 0px', threshold: 0.06 }
+      { rootMargin: '0px 0px 120px 0px', threshold: 0 }
     );
 
     observer.observe(el);
