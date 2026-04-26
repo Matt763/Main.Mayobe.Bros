@@ -61,6 +61,7 @@ export default function EnhancedPostPage() {
   const ttsControlsRef = useRef<{ pause: () => void; resume: () => void } | null>(null);
   const commentTokenRef = useRef(generateToken());
   const lastCommentRef = useRef<number>(0);
+  const loadSeqRef = useRef(0);
 
   usePlyrInit(contentRef, post?.content || '');
   const [activeSection, setActiveSection] = useState('');
@@ -331,7 +332,7 @@ export default function EnhancedPostPage() {
     breadcrumbItems.push({ name: post.title, url: `${SITE_URL}${path}` });
     injectJsonLd('ld-breadcrumb', buildBreadcrumbJsonLd(breadcrumbItems));
 
-    setTimeout(() => {
+    const patchTimer = setTimeout(() => {
       const articleEl = document.querySelector('.article-content');
       if (!articleEl) return;
       articleEl.querySelectorAll('img').forEach((img: HTMLImageElement) => {
@@ -360,6 +361,7 @@ export default function EnhancedPostPage() {
     }
 
     return () => {
+      clearTimeout(patchTimer);
       removeJsonLd('ld-article');
       removeJsonLd('ld-breadcrumb');
       removeJsonLd('ld-related');
@@ -367,6 +369,10 @@ export default function EnhancedPostPage() {
   }, [post, relatedPosts, location.pathname]);
 
   const loadPost = async () => {
+    // Increment sequence; any previous in-flight loadPost will see its seq is
+    // stale and bail before touching state — eliminates the race condition where
+    // a slow fetch for Post A overwrites fast-loaded Post B.
+    const seq = ++loadSeqRef.current;
     try {
       setLoading(true);
       setError(false);
@@ -377,6 +383,7 @@ export default function EnhancedPostPage() {
         api.posts.list({ category: categorySlug }),
       ]);
 
+      if (seq !== loadSeqRef.current) return;
       if (!postItem) { setError(true); return; }
 
       const cat = (categoriesData || []).find((c: any) => c.slug === categorySlug);
@@ -386,14 +393,26 @@ export default function EnhancedPostPage() {
         ? (labelsData || []).find((l: any) => l.slug === labelSlug && l.categoryId === cat.id)
         : null;
 
-      const postWithMeta = {
+      let postWithMeta: any = {
         ...postItem,
         featured_image: postItem.featuredImage,
         published_at: postItem.publishedAt,
         category: cat,
         label: label || null,
       };
-      setPost(postWithMeta as any);
+
+      // Content guard: if the API returned an empty/null body (transient cache
+      // miss or partially-written DB row), wait 900 ms and retry once before
+      // giving up.  This is the most common source of the "blank post" bug.
+      if (!postWithMeta.content) {
+        await new Promise(r => setTimeout(r, 900));
+        if (seq !== loadSeqRef.current) return;
+        const retryItem = await api.posts.get(postSlug!);
+        if (seq !== loadSeqRef.current) return;
+        if (retryItem?.content) postWithMeta = { ...postWithMeta, content: retryItem.content };
+      }
+
+      setPost(postWithMeta);
 
       api.posts.trackView(postItem.slug).catch(() => {});
 
@@ -426,6 +445,7 @@ export default function EnhancedPostPage() {
           category: cat,
         }));
 
+      if (seq !== loadSeqRef.current) return;
       setRelatedPosts([...sameLabelPosts, ...sameCatPosts].slice(0, 6) as any);
 
       if (postItem.author) {
@@ -435,13 +455,14 @@ export default function EnhancedPostPage() {
           .ilike('display_name', postItem.author)
           .eq('is_active', true)
           .maybeSingle()
-          .then(({ data }) => { if (data) setAuthorProfile(data); });
+          .then(({ data }) => { if (data && seq === loadSeqRef.current) setAuthorProfile(data); });
       }
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       console.error('Error loading post:', err);
       setError(true);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   };
 
@@ -925,25 +946,39 @@ export default function EnhancedPostPage() {
 
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 mb-6 md:mb-8 transition-colors">
               <PaywallGate isPremiumContent={!!post.isPremium}>
-              <div
-                ref={contentRef}
-                className="article-content max-w-none text-gray-700 dark:text-gray-300"
-                dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(post.content, {
-                    ADD_TAGS: ['figure', 'figcaption', 'sub', 'sup', 'iframe'],
-                    ADD_ATTR: [
-                      'class', 'target', 'rel', 'title',
-                      'style',                                    // preserve video embed margins
-                      'src', 'width', 'height',                   // iframe / img
-                      'frameborder', 'allowfullscreen', 'allow',  // YouTube/Vimeo embeds
-                      'controls', 'autoplay', 'loop', 'playsinline', 'poster', // <video>
-                    ],
-                    ALLOW_DATA_ATTR: true,
-                    FORCE_BODY: true,
-                    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
-                  }),
-                }}
-              />
+              {post.content ? (
+                <div
+                  ref={contentRef}
+                  className="article-content max-w-none text-gray-700 dark:text-gray-300"
+                  dangerouslySetInnerHTML={{
+                    __html: DOMPurify.sanitize(post.content, {
+                      ADD_TAGS: ['figure', 'figcaption', 'sub', 'sup', 'iframe'],
+                      ADD_ATTR: [
+                        'class', 'target', 'rel', 'title',
+                        'style',                                    // preserve video embed margins
+                        'src', 'width', 'height',                   // iframe / img
+                        'frameborder', 'allowfullscreen', 'allow',  // YouTube/Vimeo embeds
+                        'controls', 'autoplay', 'loop', 'playsinline', 'poster', // <video>
+                      ],
+                      ALLOW_DATA_ATTR: true,
+                      FORCE_BODY: true,
+                      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
+                    }),
+                  }}
+                />
+              ) : (
+                <div className="py-12 text-center">
+                  <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
+                    This article's content could not be loaded.
+                  </p>
+                  <button
+                    onClick={loadPost}
+                    className="text-sm text-blue-600 dark:text-blue-400 underline hover:no-underline transition-all"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
               </PaywallGate>
               <AdSlotRenderer slot="in_article" className="my-6 overflow-hidden rounded-xl" />
 
