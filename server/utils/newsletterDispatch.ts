@@ -37,19 +37,34 @@ export async function dispatchPostNewsletter(post: {
     return;
   }
 
-  const { data: logEntry, error: logErr } = await supabase
-    .from('newsletter_send_log')
-    .insert({
-      post_id: post.id || null,
-      post_slug: post.slug,
-      status: 'pending',
-    })
-    .select()
-    .single();
+  // Either no prior entry, or a previous attempt that failed — get/create the log row
+  let logEntry: { id: string } | null = null;
 
-  if (logErr) {
-    console.error('[NEWSLETTER] Failed to create send log:', logErr);
-    return;
+  if (existing && existing.status === 'failed') {
+    // Reset the failed entry so the unique constraint doesn't block a retry insert
+    const { data: resetEntry, error: resetErr } = await supabase
+      .from('newsletter_send_log')
+      .update({ status: 'pending', error: null, subscriber_count: null })
+      .eq('id', existing.id)
+      .select('id')
+      .single();
+    if (resetErr) {
+      console.error('[NEWSLETTER] Failed to reset send log for retry:', resetErr);
+      return;
+    }
+    logEntry = resetEntry;
+    console.log(`[NEWSLETTER] Retrying previously failed dispatch for "${post.slug}"`);
+  } else {
+    const { data: newEntry, error: insertErr } = await supabase
+      .from('newsletter_send_log')
+      .insert({ post_id: post.id || null, post_slug: post.slug, status: 'pending' })
+      .select('id')
+      .single();
+    if (insertErr) {
+      console.error('[NEWSLETTER] Failed to create send log:', insertErr);
+      return;
+    }
+    logEntry = newEntry;
   }
 
   try {
