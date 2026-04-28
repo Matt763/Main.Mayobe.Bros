@@ -56,8 +56,8 @@ function insertLinkInContent(html: string, anchorText: string, href: string): st
 
     let node: Node | null;
     while ((node = walker.nextNode())) {
-      // Skip text inside existing <a> tags
-      if ((node.parentElement as HTMLElement | null)?.closest('a')) continue;
+      // Skip text inside existing <a> tags or any heading element
+      if ((node.parentElement as HTMLElement | null)?.closest('a, h1, h2, h3, h4, h5, h6')) continue;
 
       const text = node.textContent || '';
       const idx = text.toLowerCase().indexOf(needle);
