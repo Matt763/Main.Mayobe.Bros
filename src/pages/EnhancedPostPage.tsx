@@ -161,12 +161,15 @@ export default function EnhancedPostPage() {
   }, [post, tableOfContents]);
 
   // ── TTS word-span injection ──────────────────────────────────────────────
-  // Runs during browser idle time in chunks of 60 nodes per frame so the
-  // main thread is never blocked, even on very long articles.
+  // Deferred entirely to idle time so the main thread is never blocked.
   useEffect(() => {
     const container = contentRef.current;
     if (!container || !post?.content) return;
     if (container.querySelector('.tts-word')) return;
+
+    // Shared cancellation handles — declared in effect scope so cleanup can reach them.
+    let idleHandle = 0;
+    let rafId = 0;
 
     // Phase 1: collect text nodes + pre-compute charOffset (no DOM mutations).
     const textNodes: Array<{ node: Text; offset: number }> = [];
@@ -194,71 +197,74 @@ export default function EnhancedPostPage() {
       }
     }
 
-    // Wait for the initial paint to settle before touching the DOM.
-    const startTimer = setTimeout(() => {
-      collect(container);
-      if (textNodes.length === 0) return;
+    // Phase 2: replace text nodes in idle-time chunks so the browser stays responsive.
+    const wordSpans: Array<{ ci: number; el: HTMLSpanElement }> = [];
+    let idx = 0;
+    const CHUNK = 60;
 
-      // Phase 2: replace text nodes in idle-time chunks so the browser stays
-      // responsive. Each chunk processes 60 nodes then yields.
-      const wordSpans: Array<{ ci: number; el: HTMLSpanElement }> = [];
-      let idx = 0;
-      let rafId = 0;
-      let idleHandle = 0;
-      const CHUNK = 60;
-
-      function processChunk(deadline?: IdleDeadline) {
-        const end = Math.min(idx + CHUNK, textNodes.length);
-        for (; idx < end; idx++) {
-          const { node, offset } = textNodes[idx];
-          if (!node.parentNode) continue;
-          const text = node.textContent || '';
-          const tokens = text.split(/(\s+)/);
-          const frag = document.createDocumentFragment();
-          let localOffset = 0;
-          for (const token of tokens) {
-            if (/\S/.test(token)) {
-              const span = document.createElement('span');
-              span.className = 'tts-word';
-              span.dataset.ci = String(offset + localOffset);
-              span.textContent = token;
-              frag.appendChild(span);
-              wordSpans.push({ ci: offset + localOffset, el: span });
-            } else if (token) {
-              frag.appendChild(document.createTextNode(token));
-            }
-            localOffset += token.length;
+    function processChunk(deadline?: IdleDeadline) {
+      const end = Math.min(idx + CHUNK, textNodes.length);
+      for (; idx < end; idx++) {
+        const { node, offset } = textNodes[idx];
+        if (!node.parentNode) continue;
+        const text = node.textContent || '';
+        const tokens = text.split(/(\s+)/);
+        const frag = document.createDocumentFragment();
+        let localOffset = 0;
+        for (const token of tokens) {
+          if (/\S/.test(token)) {
+            const span = document.createElement('span');
+            span.className = 'tts-word';
+            span.dataset.ci = String(offset + localOffset);
+            span.textContent = token;
+            frag.appendChild(span);
+            wordSpans.push({ ci: offset + localOffset, el: span });
+          } else if (token) {
+            frag.appendChild(document.createTextNode(token));
           }
-          node.parentNode.replaceChild(frag, node);
+          localOffset += token.length;
         }
+        node.parentNode.replaceChild(frag, node);
+      }
 
-        if (idx < textNodes.length) {
-          // Still more work: continue in next idle frame.
-          if (deadline && deadline.timeRemaining() > 8) {
-            processChunk(deadline);
-          } else if ('requestIdleCallback' in window) {
-            idleHandle = requestIdleCallback(processChunk, { timeout: 3000 });
-          } else {
+      if (idx < textNodes.length) {
+        if (deadline && deadline.timeRemaining() > 8) {
+          processChunk(deadline);
+        } else if ('requestIdleCallback' in window) {
+          idleHandle = requestIdleCallback(processChunk, { timeout: 3000 });
+        } else {
+          rafId = requestAnimationFrame(() => processChunk());
+        }
+      } else {
+        ttsWordIndexRef.current = wordSpans;
+      }
+    }
+
+    // Defer collection + injection until after the initial paint settles,
+    // then do both phases in idle time so interactions stay responsive.
+    const startTimer = setTimeout(() => {
+      if ('requestIdleCallback' in window) {
+        idleHandle = requestIdleCallback(() => {
+          collect(container);
+          if (textNodes.length > 0) {
+            idleHandle = requestIdleCallback(processChunk, { timeout: 5000 });
+          }
+        }, { timeout: 2000 });
+      } else {
+        rafId = requestAnimationFrame(() => {
+          collect(container);
+          if (textNodes.length > 0) {
             rafId = requestAnimationFrame(() => processChunk());
           }
-        } else {
-          ttsWordIndexRef.current = wordSpans;
-        }
+        });
       }
-
-      if ('requestIdleCallback' in window) {
-        idleHandle = requestIdleCallback(processChunk, { timeout: 5000 });
-      } else {
-        rafId = requestAnimationFrame(() => processChunk());
-      }
-
-      return () => {
-        if (idleHandle) cancelIdleCallback(idleHandle);
-        if (rafId) cancelAnimationFrame(rafId);
-      };
     }, 400);
 
-    return () => clearTimeout(startTimer);
+    return () => {
+      clearTimeout(startTimer);
+      if (idleHandle) cancelIdleCallback(idleHandle);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, [post?.content]);
 
   // ── TTS active-word highlight + auto-scroll ──────────────────────────────

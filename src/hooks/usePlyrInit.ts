@@ -110,20 +110,36 @@ export function usePlyrInit(
     const container = containerRef.current;
     if (!container) return;
 
-    /* Plyr is loaded via a deferred CDN script — poll until ready */
-    let attempts = 0;
-    const poll = setInterval(() => {
-      if (window.Plyr) {
-        clearInterval(poll);
-        initAll(container);
-      } else if (++attempts > 40) {
-        clearInterval(poll);
-        console.warn('[usePlyrInit] Plyr CDN script did not load in time.');
+    /* Plyr is loaded via a deferred CDN script — use its load event instead of polling */
+    let extraCleanup: (() => void) | undefined;
+
+    if (window.Plyr) {
+      /* Already available (cached load or hot-reload) */
+      initAll(container);
+    } else {
+      const plyrScript = document.querySelector<HTMLScriptElement>('script[src*="plyr"]');
+      if (plyrScript) {
+        const onLoad = () => initAll(container);
+        plyrScript.addEventListener('load', onLoad, { once: true });
+        extraCleanup = () => plyrScript.removeEventListener('load', onLoad);
+      } else {
+        /* Fallback: infrequent poll when no matching script tag is found */
+        let attempts = 0;
+        const poll = setInterval(() => {
+          if (window.Plyr) {
+            clearInterval(poll);
+            initAll(container);
+          } else if (++attempts > 20) {
+            clearInterval(poll);
+            console.warn('[usePlyrInit] Plyr CDN script did not load in time.');
+          }
+        }, 500);
+        extraCleanup = () => clearInterval(poll);
       }
-    }, 250);
+    }
 
     return () => {
-      clearInterval(poll);
+      extraCleanup?.();
       playersRef.current.forEach(p => { try { p.destroy(); } catch {} });
       observersRef.current.forEach(o => o.disconnect());
     };
