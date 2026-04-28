@@ -536,64 +536,69 @@ router.post('/internal-links', async (req: Request, res: Response) => {
     const sections = extractH2Sections(content);
     if (sections.length === 0) return res.status(400).json({ error: 'No readable content found in article' });
 
-    const systemPrompt = `You are an expert SEO specialist for an African news and lifestyle website. You analyze article sections and identify optimal anchor text opportunities for internal linking. Return ONLY valid JSON.`;
+    const systemPrompt = `You are an expert SEO specialist for an African news and lifestyle website. Find anchor text opportunities for internal linking. Return ONLY valid JSON.`;
 
+    // Keep posts list compact so each per-section prompt stays small
     const postsJson = posts.slice(0, 80).map((p: any) => ({
       id: p.id,
       title: p.title,
       slug: p.slug,
       category_slug: p.categorySlug || p.category_slug || '',
-      excerpt: p.excerpt?.substring(0, 80) || '',
-      category: p.category || '',
+      excerpt: p.excerpt?.substring(0, 60) || '',
     }));
+    const postsStr = JSON.stringify(postsJson);
 
-    const sectionsText = sections.slice(0, 10).map((s, i) =>
-      `Section ${i + 1} — H2: "${s.heading}"\nContent: ${s.text}`
-    ).join('\n\n---\n\n');
+    // One small AI call per section, all in parallel — avoids response truncation
+    const sectionResults = await Promise.all(
+      sections.slice(0, 10).map(async (section) => {
+        const prompt = `Find EXACTLY 8 anchor text phrases in the paragraph below to hyperlink to relevant posts.
 
-    const totalExpected = sections.slice(0, 10).length * 8;
+H2 HEADING: "${section.heading}"
+PARAGRAPH: ${section.text}
 
-    const prompt = `Analyze this article which is organized into H2 sections. For EACH section, identify EXACTLY 8 anchor text phrases from that section's content to hyperlink to the most relevant posts in the database.
-
-ARTICLE SECTIONS:
-${sectionsText}
-
-AVAILABLE POSTS TO LINK TO:
-${JSON.stringify(postsJson)}
+AVAILABLE POSTS:
+${postsStr}
 
 Rules:
-1. Find natural anchor text already written in each section (existing words/phrases — do not invent new text)
-2. Anchor text must be contextually relevant to the target post it links to
-3. Prefer specific noun phrases, named concepts, topic keywords — never generic phrases like "click here" or "read more"
-4. Each suggestion must link to the MOST relevant post from the available posts list
-5. Find EXACTLY 8 link opportunities per section — no more, no less
-6. Do not repeat the same anchor text more than once across the whole article
-7. Set "sectionH2" to the exact H2 heading text of the section the anchor belongs to
-8. Include the surrounding sentence as context
+1. Only use words or phrases that literally appear in the PARAGRAPH above
+2. Each anchor text must be relevant to the post it links to
+3. Prefer specific nouns, named topics, concepts — never "click here" or "read more"
+4. Link each anchor to the MOST relevant post from the list
+5. Return EXACTLY 8 suggestions
+6. Include the surrounding sentence as context
 
-Total suggestions expected: ${totalExpected} (${sections.slice(0, 10).length} sections × 8 links each)
-
-Return ONLY this JSON:
+Return ONLY this JSON (no extra text):
 {
   "suggestions": [
     {
-      "anchorText": "exact words from the section to hyperlink",
-      "postId": "post id from list",
+      "anchorText": "exact phrase from paragraph",
+      "postId": "post id",
       "postTitle": "target post title",
       "postSlug": "target post slug",
-      "relevanceScore": 95,
-      "context": "...surrounding sentence containing the anchor text...",
-      "reason": "why this link is contextually relevant",
-      "sectionH2": "exact H2 heading this link belongs to"
+      "relevanceScore": 85,
+      "context": "surrounding sentence",
+      "reason": "why relevant"
     }
-  ],
-  "totalFound": ${totalExpected},
-  "analysisNotes": "brief note on the linking strategy applied"
+  ]
 }`;
 
-    const raw = await callAI(prompt, systemPrompt, 12000);
-    const parsed = extractJson(raw);
-    return res.json(parsed);
+        try {
+          const raw = await callAI(prompt, systemPrompt, 2500);
+          const parsed = extractJson(raw);
+          // Stamp sectionH2 server-side so it is always accurate
+          return (parsed.suggestions || []).map((s: any) => ({ ...s, sectionH2: section.heading }));
+        } catch {
+          return [];
+        }
+      })
+    );
+
+    const allSuggestions = sectionResults.flat();
+    return res.json({
+      suggestions: allSuggestions,
+      totalFound: allSuggestions.length,
+      analysisNotes: `${allSuggestions.length} internal links found across ${sections.length} H2 section${sections.length !== 1 ? 's' : ''} (8 per section).`,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
