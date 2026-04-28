@@ -3422,4 +3422,28 @@ FROM categories c
 WHERE c.slug = 'educational'
 ON CONFLICT (category_id, slug) DO NOTHING;
 
+-- ─── digest_send_log ──────────────────────────────────────────────────────────
+-- Tracks 5-day digest email dispatches. No unique constraint — retries are safe.
+CREATE TABLE IF NOT EXISTS digest_send_log (
+  id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  period_start     timestamptz NOT NULL,
+  period_end       timestamptz NOT NULL,
+  post_count       integer,
+  subscriber_count integer,
+  status           text        NOT NULL DEFAULT 'pending', -- pending | sent | failed
+  error            text,
+  sent_at          timestamptz NOT NULL DEFAULT now(),
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE digest_send_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role full access to digest log"
+  ON digest_send_log FOR ALL TO authenticated
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY "Anon server can manage digest log"
+  ON digest_send_log FOR ALL TO anon
+  USING (true) WITH CHECK (true);
+
 
