@@ -6,7 +6,7 @@ import {
   Undo, Redo, Type, Palette, Eye, EyeOff, Minus, Video, Smile,
   Table, Info, AlertTriangle, CheckCircle, XCircle,
   GitBranch, BarChart2, Maximize2, Minimize2,
-  Printer, Search, Subscript, Superscript, ChevronRight, ChevronLeft, Sparkles, X,
+  Printer, Search, Subscript, Superscript, ChevronRight, ChevronLeft, ChevronDown, Sparkles, X,
 } from 'lucide-react';
 
 export interface RichTextEditorHandle {
@@ -95,8 +95,10 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   const [showCalloutMenu, setShowCalloutMenu] = useState(false);
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [tableHover,      setTableHover]      = useState({ r: 0, c: 0 });
-  const [selectedColor,   setSelectedColor]   = useState('#000000');
-  const [findText,        setFindText]        = useState('');
+  const [selectedColor,        setSelectedColor]        = useState('#000000');
+  const [fontSize,             setFontSize]             = useState('');
+  const [showFontSizeDropdown, setShowFontSizeDropdown] = useState(false);
+  const [findText,             setFindText]             = useState('');
   const [replaceText,     setReplaceText]     = useState('');
   const [replaceMsg,      setReplaceMsg]      = useState('');
   const [wc,              setWc]              = useState(0);
@@ -109,6 +111,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
     setShowColorPicker(false);
     setShowTablePicker(false);
     setShowCalloutMenu(false);
+    setShowFontSizeDropdown(false);
   };
 
   // Keep word count live
@@ -322,6 +325,23 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
     setSelectedColor(color);
     execCmd('foreColor', color);
     setShowColorPicker(false);
+  };
+
+  const applyFontSize = (size: number) => {
+    if (size < 1 || size > 1000) return;
+    editorRef.current?.focus();
+    // execCommand only supports sizes 1-7; use 7 as a unique placeholder
+    document.execCommand('fontSize', false, '7');
+    // Replace the placeholder <font size="7"> with <span style="font-size: Npx">
+    editorRef.current?.querySelectorAll('font[size="7"]').forEach(font => {
+      const span = document.createElement('span');
+      span.style.fontSize = `${size}px`;
+      span.innerHTML = (font as HTMLElement).innerHTML;
+      font.parentNode?.replaceChild(span, font);
+    });
+    setFontSize(String(size));
+    setShowFontSizeDropdown(false);
+    setTimeout(updateContent, 10);
   };
 
   // ── TABLE ──────────────────────────────────────────────────────────────
@@ -625,6 +645,53 @@ figure{text-align:center;margin:1.5em 0}figcaption{font-size:.8rem;color:#666;fo
           <option value="" disabled>Format</option>
           {HEADING_OPTIONS.map(h => <option key={h.tag} value={h.tag}>{h.label}</option>)}
         </select>
+
+        {/* Font size — MS Word style: type 1-1000 or pick preset */}
+        <div className="relative flex items-center">
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            value={fontSize}
+            onChange={e => setFontSize(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const v = parseInt(fontSize, 10);
+                if (!isNaN(v) && v >= 1 && v <= 1000) applyFontSize(v);
+              }
+            }}
+            onBlur={() => {
+              const v = parseInt(fontSize, 10);
+              if (!isNaN(v) && v >= 1 && v <= 1000) applyFontSize(v);
+            }}
+            placeholder="pt"
+            title="Font size (1–1000). Type and press Enter, or pick a preset."
+            className="w-12 text-xs px-1.5 py-1.5 rounded-l-md bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          <button
+            type="button"
+            onMouseDown={e => { e.preventDefault(); setShowFontSizeDropdown(v => !v); setShowColorPicker(false); setShowEmojiPicker(false); setShowTablePicker(false); setShowCalloutMenu(false); }}
+            className="px-1 py-1.5 rounded-r-md bg-white dark:bg-gray-700 border border-l-0 border-gray-200 dark:border-gray-600 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+            title="Font size presets"
+          >
+            <ChevronDown size={10} />
+          </button>
+          {showFontSizeDropdown && (
+            <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl z-50 py-1 w-16 max-h-56 overflow-y-auto">
+              {[8,9,10,11,12,14,16,18,20,22,24,26,28,32,36,40,48,56,60,72,96,120,144,160,200,288,360,480,600,800,1000].map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); setFontSize(String(s)); applyFontSize(s); }}
+                  className={`w-full text-left px-3 py-1 text-xs transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 ${fontSize === String(s) ? 'font-bold text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <Sep />
 
         {/* Text style */}
