@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '../middleware/auth.js';
 import { sendWelcomeEmail, sendFarewellEmail } from '../utils/resend.js';
 import { logActivity } from '../utils/activityLogger.js';
+import { dispatchFiveDayDigest } from '../utils/digestDispatch.js';
 
 const router = Router();
 
@@ -186,6 +187,22 @@ router.post('/unsubscribe', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Unsubscribe POST error:', err);
     return res.status(500).send(errorPage('Something went wrong. Please try again.'));
+  }
+});
+
+// GET /digest-cron — called by Vercel Cron daily at 08:00 UTC
+router.get('/digest-cron', async (req: Request, res: Response) => {
+  try {
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = req.headers['authorization'];
+    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const result = await dispatchFiveDayDigest();
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[DIGEST CRON] Error:', err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
