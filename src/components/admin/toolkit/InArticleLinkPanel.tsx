@@ -21,6 +21,7 @@ interface LinkSuggestion {
   relevanceScore: number;
   context: string;
   reason: string;
+  sectionH2?: string;
 }
 
 interface LinkResult {
@@ -185,10 +186,10 @@ export default function InArticleLinkPanel({ content, onInsertContent, currentPo
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Link analysis failed');
       setResult(data);
-      // Auto-select high-relevance suggestions
+      // Auto-select all suggestions (8 per H2 section)
       const autoSelect = new Set<string>();
       (data.suggestions || []).forEach((s: LinkSuggestion) => {
-        if (s.relevanceScore >= 80) autoSelect.add(s.anchorText + '|' + s.postSlug);
+        autoSelect.add(s.anchorText + '|' + s.postSlug);
       });
       setSelected(autoSelect);
     } catch (err: any) {
@@ -255,7 +256,7 @@ export default function InArticleLinkPanel({ content, onInsertContent, currentPo
           )}
         </div>
         <p className="text-blue-700 dark:text-blue-300 leading-relaxed">
-          AI scans your article and finds natural anchor text opportunities, then matches each phrase to the most relevant post in your database. Minimum 40 link suggestions.
+          AI scans every H2 section of your article and inserts 8 internal links per section, matched to the most relevant posts in your database.
         </p>
       </div>
 
@@ -409,6 +410,12 @@ export default function InArticleLinkPanel({ content, onInsertContent, currentPo
                       {isSelected && <CheckCircle2 size={10} className="text-white" />}
                     </div>
                     <div className="flex-1 min-w-0">
+                      {/* Section label */}
+                      {s.sectionH2 && (
+                        <div className="text-indigo-500 dark:text-indigo-400 font-semibold mb-0.5 truncate">
+                          H2: {s.sectionH2}
+                        </div>
+                      )}
                       {/* Anchor text + score */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-gray-800 dark:text-gray-200">"{s.anchorText}"</span>

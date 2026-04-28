@@ -505,6 +505,25 @@ Content (first 3000 chars): ${text.substring(0, 3000)}`;
 
 // ── IN-ARTICLE LINK SUGGESTIONS ───────────────────────────────────────────────
 
+/** Parse HTML into H2 sections: [{heading, text}]. Falls back to full article if no H2s found. */
+function extractH2Sections(html: string): Array<{ heading: string; text: string }> {
+  const headings: string[] = [];
+  const h2Re = /<h2[^>]*>([\s\S]*?)<\/h2>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = h2Re.exec(html)) !== null) {
+    headings.push(m[1].replace(/<[^>]+>/g, '').trim());
+  }
+  if (headings.length === 0) {
+    const fallback = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 2000);
+    return fallback ? [{ heading: 'Article', text: fallback }] : [];
+  }
+  const parts = html.split(/<h2[^>]*>[\s\S]*?<\/h2>/gi);
+  return headings.map((heading, i) => ({
+    heading,
+    text: (parts[i + 1] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 1200),
+  })).filter(s => s.text.length > 0);
+}
+
 router.post('/internal-links', async (req: Request, res: Response) => {
   try {
     const { content, posts } = req.body as {
@@ -514,11 +533,12 @@ router.post('/internal-links', async (req: Request, res: Response) => {
     if (!content) return res.status(400).json({ error: 'Content required' });
     if (!posts || posts.length === 0) return res.status(400).json({ error: 'Posts list required' });
 
-    const plainText = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const sections = extractH2Sections(content);
+    if (sections.length === 0) return res.status(400).json({ error: 'No readable content found in article' });
 
-    const systemPrompt = `You are an expert SEO specialist for an African news and lifestyle website. You analyze article content and identify optimal anchor text opportunities for internal linking. Return ONLY valid JSON.`;
+    const systemPrompt = `You are an expert SEO specialist for an African news and lifestyle website. You analyze article sections and identify optimal anchor text opportunities for internal linking. Return ONLY valid JSON.`;
 
-    const postsJson = posts.slice(0, 60).map((p: any) => ({
+    const postsJson = posts.slice(0, 80).map((p: any) => ({
       id: p.id,
       title: p.title,
       slug: p.slug,
@@ -527,42 +547,51 @@ router.post('/internal-links', async (req: Request, res: Response) => {
       category: p.category || '',
     }));
 
-    const prompt = `Analyze this article and identify the BEST opportunities to add internal links to related posts.
+    const sectionsText = sections.slice(0, 10).map((s, i) =>
+      `Section ${i + 1} — H2: "${s.heading}"\nContent: ${s.text}`
+    ).join('\n\n---\n\n');
 
-Rules for link selection:
-1. Find natural anchor text already in the article (existing words/phrases that could be linked)
-2. Anchor text must be contextually relevant to the target post
-3. Prefer specific noun phrases, named concepts, or topic keywords — not generic phrases like "click here"
-4. Each suggestion should link to the MOST relevant post from the list
-5. Identify 10-20 of the strongest linking opportunities — quality over quantity
-6. Don't repeat the same anchor text more than twice
-7. Prioritize high-relevance matches (topic overlap between anchor text and target post)
-8. Include the exact surrounding sentence for context
+    const totalExpected = sections.slice(0, 10).length * 8;
 
-ARTICLE CONTENT (plain text):
-${plainText.substring(0, 4000)}
+    const prompt = `Analyze this article which is organized into H2 sections. For EACH section, identify EXACTLY 8 anchor text phrases from that section's content to hyperlink to the most relevant posts in the database.
+
+ARTICLE SECTIONS:
+${sectionsText}
 
 AVAILABLE POSTS TO LINK TO:
 ${JSON.stringify(postsJson)}
+
+Rules:
+1. Find natural anchor text already written in each section (existing words/phrases — do not invent new text)
+2. Anchor text must be contextually relevant to the target post it links to
+3. Prefer specific noun phrases, named concepts, topic keywords — never generic phrases like "click here" or "read more"
+4. Each suggestion must link to the MOST relevant post from the available posts list
+5. Find EXACTLY 8 link opportunities per section — no more, no less
+6. Do not repeat the same anchor text more than once across the whole article
+7. Set "sectionH2" to the exact H2 heading text of the section the anchor belongs to
+8. Include the surrounding sentence as context
+
+Total suggestions expected: ${totalExpected} (${sections.slice(0, 10).length} sections × 8 links each)
 
 Return ONLY this JSON:
 {
   "suggestions": [
     {
-      "anchorText": "exact words from the article to hyperlink",
+      "anchorText": "exact words from the section to hyperlink",
       "postId": "post id from list",
       "postTitle": "target post title",
       "postSlug": "target post slug",
       "relevanceScore": 95,
-      "context": "...surrounding sentence with the anchor text...",
-      "reason": "why this link is contextually relevant"
+      "context": "...surrounding sentence containing the anchor text...",
+      "reason": "why this link is contextually relevant",
+      "sectionH2": "exact H2 heading this link belongs to"
     }
   ],
-  "totalFound": 15,
-  "analysisNotes": "brief note on linking strategy for this article"
+  "totalFound": ${totalExpected},
+  "analysisNotes": "brief note on the linking strategy applied"
 }`;
 
-    const raw = await callAI(prompt, systemPrompt, 8000);
+    const raw = await callAI(prompt, systemPrompt, 12000);
     const parsed = extractJson(raw);
     return res.json(parsed);
   } catch (err: any) {
