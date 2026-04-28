@@ -678,6 +678,154 @@ export async function sendForgotPasswordEmail(to: string, name: string, secretCo
   console.log(`[RESEND] Forgot password email sent to ${to}`);
 }
 
+// ─── 7. 5-Day "What You Missed" Digest ───────────────────────────────────────
+
+export interface DigestPost {
+  title: string;
+  excerpt: string;
+  featuredImage?: string;
+  url: string;
+  category: string;
+  author: string;
+  readingTime?: number;
+  publishedAt: string;
+}
+
+export function buildFiveDayDigestEmail(
+  unsubscribeUrl: string,
+  siteUrl: string,
+  posts: DigestPost[],
+  dateRange: { start: Date; end: Date },
+  totalPostCount: number
+): string {
+  const fmt = (d: Date) =>
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const dateRangeStr = `${fmt(dateRange.start)} – ${fmt(dateRange.end)}`;
+  const year = dateRange.end.getFullYear();
+
+  const postCards = posts.map(post => {
+    const imageBlock = post.featuredImage
+      ? `<img src="${post.featuredImage}" alt="" style="width:100%;height:200px;object-fit:cover;border-radius:10px 10px 0 0;display:block;" />`
+      : `<div style="width:100%;height:120px;background:linear-gradient(135deg,#0f1c2e 0%,#1e3a5f 100%);border-radius:10px 10px 0 0;text-align:center;line-height:120px;">
+           <span style="font-size:11px;font-weight:700;color:rgba(201,160,0,0.85);letter-spacing:1.5px;text-transform:uppercase;vertical-align:middle;">${post.category}</span>
+         </div>`;
+
+    const meta = [
+      post.readingTime ? `${post.readingTime} min read` : '',
+      new Date(post.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    ].filter(Boolean).join(' · ');
+
+    return `
+      <tr>
+        <td style="padding-bottom:24px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e9edf2;border-radius:12px;overflow:hidden;background:#ffffff;">
+            <tr><td style="padding:0;">${imageBlock}</td></tr>
+            <tr>
+              <td style="padding:22px 26px 26px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                  <tr>
+                    <td style="background:#c9a000;border-radius:4px;padding:3px 9px;">
+                      <span style="font-size:10px;font-weight:700;color:#0f1c2e;letter-spacing:1.2px;text-transform:uppercase;">${post.category}</span>
+                    </td>
+                  </tr>
+                </table>
+                <h2 style="font-family:Georgia,'Times New Roman',serif;font-size:20px;font-weight:bold;color:#0f1c2e;margin:0 0 10px;line-height:1.35;letter-spacing:-0.2px;">
+                  <a href="${post.url}" style="color:#0f1c2e;text-decoration:none;">${post.title}</a>
+                </h2>
+                <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 14px;">${post.excerpt}</p>
+                <p style="font-size:12px;color:#9ca3af;margin:0 0 18px;">
+                  <span style="font-weight:600;color:#6b7280;">${post.author}</span>
+                  ${meta ? `&nbsp;&middot;&nbsp;${meta}` : ''}
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="background:#c9a000;border-radius:6px;">
+                      <a href="${post.url}" style="display:inline-block;padding:9px 20px;color:#0f1c2e;font-size:13px;font-weight:700;text-decoration:none;letter-spacing:0.3px;">Read Article &rarr;</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>`;
+  }).join('');
+
+  const overflowCta = totalPostCount > posts.length
+    ? `<tr>
+         <td style="padding-bottom:36px;text-align:center;">
+           <a href="${siteUrl}" style="font-size:14px;color:#2563eb;font-weight:600;text-decoration:underline;">
+             See all ${totalPostCount} articles &rarr;
+           </a>
+         </td>
+       </tr>`
+    : '';
+
+  return htmlShell(
+    `What You Missed at Mayobe Bros — ${dateRangeStr}`,
+    `${posts.length} new article${posts.length !== 1 ? 's' : ''} from the last 5 days — catch up now.`,
+    `
+    ${sharedHeader(`<span style="font-size:11px;color:rgba(255,255,255,0.45);letter-spacing:0.5px;">${dateRangeStr}, ${year}</span>`)}
+
+    <tr>
+      <td style="background:#ffffff;padding:48px 44px 32px;">
+        ${GOLD_RULE}
+        <h1 style="font-family:Georgia,'Times New Roman',serif;font-size:30px;font-weight:bold;color:#0f1c2e;margin:0 0 12px;letter-spacing:-0.5px;line-height:1.25;">
+          Here's what you missed
+        </h1>
+        <p style="font-size:16px;color:#4b5563;line-height:1.8;margin:0 0 8px;">
+          ${posts.length} new article${posts.length !== 1 ? 's' : ''} published over the last 5 days &mdash; catch up below.
+        </p>
+        <div style="width:100%;height:1px;background:#e9edf2;margin:28px 0 0;"></div>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#f8fafc;padding:28px 44px 8px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${postCards}
+          ${overflowCta}
+        </table>
+      </td>
+    </tr>
+
+    ${sharedFooter(`
+      You received this because you subscribed at
+      <a href="${siteUrl}" style="color:rgba(255,255,255,0.6);text-decoration:none;">mayobebros.com</a>
+      &nbsp;&middot;&nbsp;
+      <a href="${unsubscribeUrl}" style="color:rgba(255,255,255,0.55);text-decoration:underline;">Unsubscribe</a>
+      &nbsp;&middot;&nbsp;
+      <a href="${siteUrl}/privacy-policy" style="color:rgba(255,255,255,0.55);text-decoration:none;">Privacy Policy</a>
+    `)}
+  `);
+}
+
+export async function sendFiveDayDigestEmail(
+  to: string,
+  unsubscribeUrl: string,
+  siteUrl: string,
+  posts: DigestPost[],
+  dateRange: { start: Date; end: Date },
+  totalPostCount: number
+): Promise<void> {
+  const resend = getResendClient();
+  if (!resend) {
+    console.warn(`[RESEND] RESEND_API_KEY not set — 5-day digest skipped for ${to}`);
+    return;
+  }
+  const fmt = (d: Date) =>
+    d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const subject = `What You Missed at Mayobe Bros — ${fmt(dateRange.start)} – ${fmt(dateRange.end)}`;
+  const html = buildFiveDayDigestEmail(unsubscribeUrl, siteUrl, posts, dateRange, totalPostCount);
+  const { error } = await resend.emails.send({ from: getFromAddress(), to, subject, html });
+  if (error) {
+    console.error(`[RESEND] 5-day digest error for ${to}:`, error);
+    throw new Error((error as { message?: string }).message || 'Resend error');
+  }
+  console.log(`[RESEND] 5-day digest sent to ${to}`);
+}
+
 export async function sendPostDigestEmail(
   to: string,
   unsubscribeUrl: string,
