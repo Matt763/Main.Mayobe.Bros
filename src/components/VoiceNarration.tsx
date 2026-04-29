@@ -67,6 +67,9 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
   const chunkProgressRef = useRef({ charStart: 0, charLen: 0, startMs: 0, durationMs: 1000 });
   // Exposes the chunk speaker so pauseNarration/resumeNarration can re-speak from a saved index
   const speakChunkRef   = useRef<((index: number) => void) | null>(null);
+  // Screen wake lock — keeps the display on while audio is playing
+  const wakeLockRef          = useRef<any>(null);
+  const wantWakeLockRef      = useRef(false); // true while audio is active
 
   // ── Initialise speech synthesis & load voices ────────────────────────────
   useEffect(() => {
@@ -81,6 +84,7 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
       window.speechSynthesis.removeEventListener('voiceschanged', loadVoices);
       window.speechSynthesis.cancel();
       clearTimers();
+      releaseWakeLock();
     };
   }, []);
 
@@ -95,11 +99,40 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // ── Re-acquire wake lock when tab returns to foreground ──────────────────
+  // Browsers release the lock automatically when the tab is backgrounded.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && wantWakeLockRef.current) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   // ── Helpers ──────────────────────────────────────────────────────────────
   const clearTimers = () => {
     if (keepAliveRef.current)     { clearInterval(keepAliveRef.current);     keepAliveRef.current = null; }
     if (progressTimerRef.current) { clearInterval(progressTimerRef.current); progressTimerRef.current = null; }
     if (chunkTimerRef.current)    { clearInterval(chunkTimerRef.current);    chunkTimerRef.current = null; }
+  };
+
+  const requestWakeLock = async () => {
+    wantWakeLockRef.current = true;
+    try {
+      if ('wakeLock' in navigator && !wakeLockRef.current) {
+        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+      }
+    } catch { /* battery saver or not supported — silently ignore */ }
+  };
+
+  const releaseWakeLock = () => {
+    wantWakeLockRef.current = false;
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
   };
 
   const cleanText = (html: string): string => {
@@ -155,6 +188,7 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     const speakChunk = (index: number) => {
       if (index >= chunks.length) {
         clearTimers();
+        releaseWakeLock();
         isPausedRef.current = false;
         setIsPlaying(false);
         setIsPaused(false);
@@ -208,6 +242,7 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
         if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null; }
         if (e.error === 'interrupted' || e.error === 'canceled') return;
         clearTimers();
+        releaseWakeLock();
         isPausedRef.current = false;
         setIsPlaying(false);
         setIsPaused(false);
@@ -223,6 +258,7 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     setIsPlaying(true);
     setIsPaused(false);
     setProgress(0);
+    requestWakeLock();
     speakChunk(0);
   };
 
@@ -233,6 +269,7 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     // Use cancel(): pause() is broken on Android Chrome and unreliable elsewhere.
     // Resume re-speaks the saved chunk from its start.
     window.speechSynthesis.cancel();
+    releaseWakeLock();
     setIsPaused(true);
     setIsPlaying(false);
   };
@@ -242,12 +279,14 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     isPausedRef.current = false;
     setIsPlaying(true);
     setIsPaused(false);
+    requestWakeLock();
     // Re-speak the chunk we were on; speakChunk re-initialises timer and progress refs
     speakChunkRef.current(chunkIndexRef.current);
   };
 
   const stopNarration = () => {
     clearTimers();
+    releaseWakeLock();
     window.speechSynthesis.cancel();
     chunksRef.current = [];
     chunkIndexRef.current = 0;
@@ -332,11 +371,12 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
         setTtsProgress(pct * 100);
         onProgress?.(Math.floor(pct * totalChars));
       });
-      audio.addEventListener('ended', () => { setTtsPlaying(false); setTtsProgress(100); onProgress?.(-1); });
-      audio.addEventListener('error', () => { setTtsPlaying(false); setTtsError('Playback error'); onProgress?.(-1); });
+      audio.addEventListener('ended', () => { releaseWakeLock(); setTtsPlaying(false); setTtsProgress(100); onProgress?.(-1); });
+      audio.addEventListener('error', () => { releaseWakeLock(); setTtsPlaying(false); setTtsError('Playback error'); onProgress?.(-1); });
 
       await audio.play();
       setTtsPlaying(true);
+      requestWakeLock();
     } catch (e: any) {
       setTtsError(e.message || 'Failed to generate audio');
     } finally {
@@ -348,9 +388,11 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
     if (!audioRef.current) { startServerTts(); return; }
     if (ttsPlaying) {
       audioRef.current.pause();
+      releaseWakeLock();
       setTtsPlaying(false);
     } else {
       audioRef.current.play();
+      requestWakeLock();
       setTtsPlaying(true);
     }
   };
@@ -360,6 +402,7 @@ export default function VoiceNarration({ text, title, onProgress, onPlayStateCha
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
+    releaseWakeLock();
     setTtsPlaying(false);
     setTtsProgress(0);
     onProgress?.(-1);
