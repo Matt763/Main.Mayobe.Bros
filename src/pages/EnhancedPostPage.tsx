@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
@@ -52,7 +52,6 @@ export default function EnhancedPostPage() {
   const [commentError, setCommentError] = useState('');
   const [commentHoneypot, setCommentHoneypot] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
-  const [activeCharIndex, setActiveCharIndex] = useState(-1);
   const ttsWordIndexRef  = useRef<Array<{ci: number; el: HTMLSpanElement}>>([]);
   const ttsActiveSpanRef = useRef<HTMLSpanElement | null>(null);
   const ttsLastScrollRef = useRef(0);
@@ -268,18 +267,20 @@ export default function EnhancedPostPage() {
   }, [post?.content]);
 
   // ── TTS active-word highlight + auto-scroll ──────────────────────────────
-  useEffect(() => {
+  // Directly manipulates the DOM instead of going through React state, so the
+  // 120ms progress ticks from VoiceNarration never trigger a full re-render.
+  const handleTtsProgress = useCallback((charIndex: number) => {
     if (ttsActiveSpanRef.current) {
       ttsActiveSpanRef.current.classList.remove('tts-active');
       ttsActiveSpanRef.current = null;
     }
-    if (activeCharIndex < 0 || ttsWordIndexRef.current.length === 0) return;
+    if (charIndex < 0 || ttsWordIndexRef.current.length === 0) return;
 
     const arr = ttsWordIndexRef.current;
     let lo = 0, hi = arr.length - 1, best = 0;
     while (lo <= hi) {
       const mid = (lo + hi) >> 1;
-      if (arr[mid].ci <= activeCharIndex) { best = mid; lo = mid + 1; }
+      if (arr[mid].ci <= charIndex) { best = mid; lo = mid + 1; }
       else hi = mid - 1;
     }
     const target = arr[best].el;
@@ -296,7 +297,7 @@ export default function EnhancedPostPage() {
         ttsLastScrollRef.current = now;
       }
     }
-  }, [activeCharIndex]);
+  }, []);
 
   useEffect(() => {
     loadPost();
@@ -942,7 +943,7 @@ export default function EnhancedPostPage() {
             <VoiceNarration
               text={post.content}
               title={post.title}
-              onProgress={setActiveCharIndex}
+              onProgress={handleTtsProgress}
               onPlayStateChange={(playing, paused) => {
                 setTtsIsPlaying(playing);
                 setTtsIsPaused(paused);
