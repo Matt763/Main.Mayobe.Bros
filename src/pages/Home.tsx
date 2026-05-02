@@ -9,6 +9,7 @@ import TrendingSection from '../components/TrendingSection';
 import NewsletterSignup from '../components/NewsletterSignup';
 import Reveal from '../components/Reveal';
 import { applyMeta, buildHomeMeta } from '../lib/seo';
+import { EzoicAdSlot } from '../components/EzoicAdSlot';
 
 const CATEGORY_IMAGES: Record<string, string> = {
   technology: 'https://images.pexels.com/photos/1181675/pexels-photo-1181675.jpeg?auto=compress&cs=tinysrgb&w=1200',
@@ -462,6 +463,8 @@ export default function Home() {
         </div>
       </section>
 
+      <EzoicAdSlot id={104} className="flex justify-center w-full py-2" />
+
       {/* Recent Posts — rises up into view */}
       <Reveal as="section" type="up" className="container mx-auto px-4 sm:px-6 py-12 sm:py-16">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-3">
@@ -490,6 +493,8 @@ export default function Home() {
       <Reveal type="fade">
         <TrendingSection posts={trendingPosts} />
       </Reveal>
+
+      <EzoicAdSlot id={105} className="flex justify-center w-full py-2" />
 
       {/* Editor's Picks — slides in from the right */}
       {editorsPicks.length > 0 && (

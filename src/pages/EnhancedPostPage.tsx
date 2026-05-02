@@ -17,6 +17,7 @@ import NewsletterSignup from '../components/NewsletterSignup';
 import { applyMeta, buildPostMeta, buildArticleJsonLd, buildBreadcrumbJsonLd, buildItemListJsonLd, injectJsonLd, removeJsonLd, SITE_URL } from '../lib/seo';
 import { useTheme } from '../contexts/ThemeContext';
 import { AdSlotRenderer } from '../components/AdSlotRenderer';
+import { EzoicAdSlot } from '../components/EzoicAdSlot';
 import { usePlyrInit } from '../hooks/usePlyrInit';
 import VideoSchemaMarkup from '../components/VideoSchemaMarkup';
 import VideoAdPlayer from '../components/VideoAdPlayer';
@@ -786,6 +787,8 @@ export default function EnhancedPostPage() {
         </div>
       </section>
 
+      <EzoicAdSlot id={101} className="flex justify-center w-full py-2" />
+
       <div className="container mx-auto px-4 sm:px-6 md:px-8 py-6 sm:py-8 md:py-12 max-w-7xl">
         {/* ── Mobile TOC ── must be OUTSIDE the grid; sticky inside a grid row is
             constrained to that row's own height and barely works at all.        */}
@@ -988,6 +991,7 @@ export default function EnhancedPostPage() {
               )}
               </PaywallGate>
               <AdSlotRenderer slot="in_article" className="my-6 overflow-hidden rounded-xl" />
+              <EzoicAdSlot id={102} className="my-6" />
 
 
               <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-gray-200 dark:border-gray-700">
@@ -1500,6 +1504,8 @@ export default function EnhancedPostPage() {
           />
         </div>
       </Reveal>
+
+      <EzoicAdSlot id={103} className="flex justify-center w-full py-2" />
 
       {relatedPosts.length > 0 && (
         <>

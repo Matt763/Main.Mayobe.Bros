@@ -129,6 +129,22 @@ function GlobalSeoInit() {
   return null;
 }
 
+function EzoicSpaHandler() {
+  const location = useLocation();
+  useEffect(() => {
+    const ez = window.ezstandalone;
+    if (!ez) return;
+    const raf = requestAnimationFrame(() => {
+      ez.cmd.push(() => {
+        ez.destroyAll();
+        ez.showAds();
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [location.pathname]);
+  return null;
+}
+
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white dark:bg-black">
@@ -151,6 +167,7 @@ function App() {
             <AnalyticsTracker />
             <GlobalSeoInit />
             <HeadAdInjector />
+            <EzoicSpaHandler />
             <Routes>
               {/* ── Standalone NECTA results pages (no header/footer, NECTA style) ── */}
               <Route

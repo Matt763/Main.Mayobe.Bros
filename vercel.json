@@ -1,4 +1,7 @@
 {
+  "redirects": [
+    { "source": "/ads.txt", "destination": "https://srv.adstxtmanager.com/19390/mayobebros.com", "permanent": false }
+  ],
   "functions": {
     "api/index.ts": {
       "maxDuration": 300,
