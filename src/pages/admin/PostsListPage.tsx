@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useRole } from '../../hooks/useRole';
 import AdminLayout from '../../components/admin/AdminLayout';
 import Toast from '../../components/admin/Toast';
+import PostPreviewModal from '../../components/admin/PostPreviewModal';
 import {
   Plus,
   Search,
@@ -41,6 +42,7 @@ interface Post {
   createdAt: string;
   categoryId: string;
   categoryName?: string;
+  categorySlug?: string;
 }
 
 type FilterType = 'all' | 'published' | 'draft' | 'featured' | 'pending_approval';
@@ -57,6 +59,7 @@ export default function PostsListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [previewPost, setPreviewPost] = useState<Post | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const postsPerPage = 10;
 
@@ -75,11 +78,16 @@ export default function PostsListPage() {
         api.posts.list({ status: 'all' }),
         api.categories.list(),
       ]);
-      const catMap: Record<string, string> = {};
-      categoriesData.forEach((c: any) => { catMap[c.id] = c.name; });
+      const catNameMap: Record<string, string> = {};
+      const catSlugMap: Record<string, string> = {};
+      categoriesData.forEach((c: any) => {
+        catNameMap[c.id] = c.name;
+        catSlugMap[c.id] = c.slug;
+      });
       const enriched = postsData.map((p: any) => ({
         ...p,
-        categoryName: catMap[p.categoryId] || 'Uncategorized',
+        categoryName: catNameMap[p.categoryId] || 'Uncategorized',
+        categorySlug: catSlugMap[p.categoryId] || p.categoryId,
       }));
       setPosts(enriched);
     } catch (error) {
@@ -445,6 +453,28 @@ export default function PostsListPage() {
                             </button>
                           </>
                         )}
+
+                        {/* View live (published) or Preview draft */}
+                        {post.status === 'published' ? (
+                          <a
+                            href={`https://mayobebros.com/post/${post.categorySlug || post.categoryId}/${post.slug}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
+                            title="View live post"
+                          >
+                            <Eye size={16} />
+                          </a>
+                        ) : (
+                          <button
+                            onClick={() => setPreviewPost(post)}
+                            className="p-2 text-indigo-500 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                            title="Preview draft"
+                          >
+                            <Eye size={16} />
+                          </button>
+                        )}
+
                         <Link
                           to={`/admin/posts/edit/${post.id}`}
                           className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
@@ -594,6 +624,11 @@ export default function PostsListPage() {
           </div>
         </div>
       )}
+
+      <PostPreviewModal
+        post={previewPost}
+        onClose={() => setPreviewPost(null)}
+      />
 
       {toast && (
         <Toast
