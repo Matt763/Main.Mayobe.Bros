@@ -3446,4 +3446,55 @@ CREATE POLICY "Anon server can manage digest log"
   ON digest_send_log FOR ALL TO anon
   USING (true) WITH CHECK (true);
 
+-- ─── Media Optimization Pipeline (Slice 3) ───────────────────────────────────
+-- Multi-variant images (WebP+AVIF at 4 widths) + Bunny Stream video metadata.
+-- See docs/superpowers/specs/2026-05-11-media-optimization-design.md
+
+ALTER TABLE media_library  ADD COLUMN IF NOT EXISTS variants jsonb;
+ALTER TABLE posts          ADD COLUMN IF NOT EXISTS featured_image_variants jsonb;
+
+CREATE INDEX IF NOT EXISTS media_library_variants_idx
+  ON media_library ((variants IS NOT NULL));
+
+CREATE TABLE IF NOT EXISTS videos (
+  id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  bunny_video_id    text        NOT NULL UNIQUE,
+  bunny_library_id  text        NOT NULL,
+  title             text,
+  description       text,
+  status            text        NOT NULL DEFAULT 'uploading'
+    CHECK (status IN ('uploading','encoding','ready','failed')),
+  poster_url        text,
+  hls_url           text,
+  iframe_url        text,
+  duration_seconds  int,
+  size_bytes        bigint,
+  error_message     text,
+  created_by        uuid        REFERENCES auth.users(id),
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS videos_status_recent_idx
+  ON videos (status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS post_videos (
+  post_id   uuid REFERENCES posts(id)  ON DELETE CASCADE,
+  video_id  uuid REFERENCES videos(id) ON DELETE CASCADE,
+  position  int  DEFAULT 0,
+  PRIMARY KEY (post_id, video_id)
+);
+
+ALTER TABLE videos      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_videos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated read videos"
+  ON videos FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Server full access videos"
+  ON videos FOR ALL TO anon USING (true) WITH CHECK (true);
+
+CREATE POLICY "Authenticated read post_videos"
+  ON post_videos FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Server full access post_videos"
+  ON post_videos FOR ALL TO anon USING (true) WITH CHECK (true);
+
 
