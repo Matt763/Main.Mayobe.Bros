@@ -86,6 +86,7 @@ const TrafficGrowthPage = lazy(() => import('./pages/admin/TrafficGrowthPage'));
 const ContentQualityPage = lazy(() => import('./pages/admin/ContentQualityPage'));
 const AdSenseReadinessPage = lazy(() => import('./pages/admin/AdSenseReadinessPage'));
 const AIHumanizerPage = lazy(() => import('./pages/admin/AIHumanizerPage'));
+const VideoUploadPage = lazy(() => import('./pages/admin/VideoUploadPage'));
 const ITangoLoginPage = lazy(() => import('./pages/ITangoLoginPage'));
 const ITangoEditorPage = lazy(() => import('./pages/admin/ITangoEditorPage'));
 const EditorialPolicyPage = lazy(() => import('./pages/EditorialPolicyPage'));
@@ -227,6 +228,11 @@ function App() {
                         <Route path="comments" element={<CommentsPage />} />
                         <Route path="settings" element={<SettingsPage />} />
                         <Route path="media" element={<MediaLibraryPage />} />
+                        <Route path="videos" element={
+                          <ProtectedRoute allowedRoles={['ceo', 'admin']}>
+                            <VideoUploadPage />
+                          </ProtectedRoute>
+                        } />
                         <Route path="subscribers" element={<SubscribersPage />} />
                         <Route path="analytics" element={
                           <ProtectedRoute allowedRoles={['ceo', 'admin']}>
