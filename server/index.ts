@@ -10,6 +10,8 @@ import postsRoutes from './routes/posts.js';
 import pagesRoutes from './routes/pages.js';
 import categoriesRoutes from './routes/categories.js';
 import labelsRoutes from './routes/labels.js';
+import adminVideosRouter from './routes/admin/videos.js';
+import bunnyWebhookRouter from './routes/webhooks/bunny.js';
 import imagesRoutes from './routes/images.js';
 import settingsRoutes from './routes/settings.js';
 import commentsRoutes from './routes/comments.js';
@@ -80,6 +82,11 @@ app.use((req, res, next) => {
 });
 
 app.use(securityMonitor);
+
+// Bunny webhook MUST be mounted BEFORE express.json() — the route uses
+// express.raw() internally to verify HMAC against the unparsed body.
+app.use('/api/webhooks', bunnyWebhookRouter);
+
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
@@ -154,6 +161,7 @@ app.use('/api/account', accountRoutes);
 app.use('/api/ai-reader', aiReaderRoutes);
 app.use('/api/broadcasts', broadcastsRoutes);
 app.use('/api/learning-tracks', learningTracksRoutes);
+app.use('/api/admin/videos', adminVideosRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Mayobe Bros API Server Running' });
