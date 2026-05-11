@@ -3,6 +3,7 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { ResponsiveImage } from '../components/ResponsiveImage';
 import { Calendar, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown, ChevronDown, List, Play, Pause } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserAuth } from '../contexts/UserAuthContext';
@@ -1523,11 +1524,11 @@ export default function EnhancedPostPage() {
                     className="group flex gap-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg p-2 transition-colors"
                   >
                     <div className="relative w-20 h-16 flex-shrink-0 rounded-lg overflow-hidden">
-                      <img
-                        src={relatedPost.featured_image || 'https://images.pexels.com/photos/1591062/pexels-photo-1591062.jpeg?auto=compress&cs=tinysrgb&w=400'}
+                      <ResponsiveImage
+                        variants={(relatedPost as { featured_image_variants?: unknown }).featured_image_variants as never ?? null}
+                        fallbackSrc={relatedPost.featured_image || 'https://images.pexels.com/photos/1591062/pexels-photo-1591062.jpeg?auto=compress&cs=tinysrgb&w=400'}
                         alt={relatedPost.title}
-                        loading="lazy"
-                        decoding="async"
+                        sizes="80px"
                         className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
                     </div>
@@ -1557,11 +1558,11 @@ export default function EnhancedPostPage() {
                     className="group bg-white dark:bg-gray-900 rounded-xl shadow-md overflow-hidden hover:shadow-xl dark:hover:shadow-2xl transition-all transform hover:-translate-y-1"
                   >
                     <div className="relative h-44 sm:h-48 overflow-hidden">
-                      <img
-                        src={relatedPost.featured_image || 'https://images.pexels.com/photos/1591062/pexels-photo-1591062.jpeg?auto=compress&cs=tinysrgb&w=800'}
+                      <ResponsiveImage
+                        variants={(relatedPost as { featured_image_variants?: unknown }).featured_image_variants as never ?? null}
+                        fallbackSrc={relatedPost.featured_image || 'https://images.pexels.com/photos/1591062/pexels-photo-1591062.jpeg?auto=compress&cs=tinysrgb&w=800'}
                         alt={relatedPost.title}
-                        loading="lazy"
-                        decoding="async"
+                        sizes="(min-width: 1024px) 400px, (min-width: 640px) 50vw, 100vw"
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                       />
                       <div className="absolute top-3 left-3 bg-blue-600 text-white px-2.5 py-1 rounded-full text-xs font-semibold">
