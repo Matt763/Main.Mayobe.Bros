@@ -4,6 +4,8 @@ import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { ResponsiveImage } from '../components/ResponsiveImage';
+import { PostContent, extractVideoIds } from '../components/PostContent';
+import { fetchVideosByIds, type Video } from '../hooks/useVideos';
 import { Calendar, User, ArrowLeft, Heart, Laugh, Frown, ThumbsUp, AlertCircle, Angry, Clock, CheckCircle, ChevronRight, Reply, Trash2, MessageSquare, Crown, ChevronDown, List, Play, Pause } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUserAuth } from '../contexts/UserAuthContext';
@@ -46,6 +48,7 @@ export default function EnhancedPostPage() {
   const { user: adminUser } = useAuth();
   const { publicUser } = useUserAuth();
   const [post, setPost] = useState<any | null>(null);
+  const [embeddedVideos, setEmbeddedVideos] = useState<Record<string, Video>>({});
   const [comments, setComments] = useState<any[]>([]);
   const [relatedPosts, setRelatedPosts] = useState<any[]>([]);
   const [commentForm, setCommentForm] = useState({ name: '', email: '', content: '' });
@@ -422,6 +425,20 @@ export default function EnhancedPostPage() {
       }
 
       setPost(postWithMeta);
+
+      // Slice 3: resolve any [video:<uuid>] tokens embedded in the post body
+      const videoIds = extractVideoIds(postWithMeta.content ?? '');
+      if (videoIds.length > 0) {
+        fetchVideosByIds(videoIds)
+          .then((vids) => {
+            const map: Record<string, Video> = {};
+            for (const v of vids) map[v.id] = v;
+            setEmbeddedVideos(map);
+          })
+          .catch(() => { /* token render shows 'unavailable' placeholder */ });
+      } else {
+        setEmbeddedVideos({});
+      }
 
       api.posts.trackView(postItem.slug).catch(() => {});
 
@@ -958,24 +975,11 @@ export default function EnhancedPostPage() {
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sm:p-6 md:p-8 mb-6 md:mb-8 transition-colors">
               <PaywallGate isPremiumContent={!!post.isPremium}>
               {post.content ? (
-                <div
-                  ref={contentRef}
+                <PostContent
+                  contentRef={contentRef}
                   className="article-content max-w-none text-gray-700 dark:text-gray-300"
-                  dangerouslySetInnerHTML={{
-                    __html: DOMPurify.sanitize(post.content, {
-                      ADD_TAGS: ['figure', 'figcaption', 'sub', 'sup', 'iframe'],
-                      ADD_ATTR: [
-                        'class', 'target', 'rel', 'title',
-                        'style',                                    // preserve video embed margins
-                        'src', 'width', 'height',                   // iframe / img
-                        'frameborder', 'allowfullscreen', 'allow',  // YouTube/Vimeo embeds
-                        'controls', 'autoplay', 'loop', 'playsinline', 'poster', // <video>
-                      ],
-                      ALLOW_DATA_ATTR: true,
-                      FORCE_BODY: true,
-                      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
-                    }),
-                  }}
+                  html={post.content}
+                  videos={embeddedVideos}
                 />
               ) : (
                 <div className="py-12 text-center">
