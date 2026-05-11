@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
-import sharp from 'sharp';
 import { requireAuth } from '../middleware/auth.js';
 import { getSupabaseClient, getSupabaseAdmin } from '../utils/supabase.js';
+import { processAndStoreImage } from '../lib/media/image-variants.js';
 
 const router = Router();
 
@@ -26,98 +26,23 @@ router.post('/upload', requireAuth, upload.single('image'), async (req, res) => 
     }
 
     const supabase = getSupabaseAdmin();
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = req.file.originalname.split('.').pop();
-    const filename = `${uniqueSuffix}.${ext}`;
+    const baseName = (req.file.originalname || `upload-${Date.now()}`).replace(/\.[^.]+$/, '');
 
-    const { error: uploadError } = await supabase.storage
-      .from('media')
-      .upload(filename, req.file.buffer, {
-        contentType: req.file.mimetype,
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error('Supabase storage upload error:', uploadError);
-      return res.status(500).json({ error: 'Failed to upload image to storage' });
-    }
-
-    const { data: urlData } = supabase.storage.from('media').getPublicUrl(filename);
-    const publicUrl = urlData.publicUrl;
+    // Multi-variant pipeline (WebP+AVIF at 4 widths + original archive).
+    // Returns { url: largest-WebP, variants: { webp:{...}, avif:{...}, original } }
+    const result = await processAndStoreImage(req.file.buffer, baseName);
 
     const { data: mediaRecord, error: dbError } = await supabase
       .from('media_library')
       .insert({
-        filename,
+        filename:          baseName,
         original_filename: req.file.originalname,
-        file_path: filename,
-        file_url: publicUrl,
-        file_type: req.file.mimetype,
-        file_size: req.file.size,
-        source: 'upload',
-      })
-      .select()
-      .single();
-
-    if (dbError) {
-      console.error('DB insert error:', dbError);
-    }
-
-    res.json({
-      url: publicUrl,
-      fileUrl: publicUrl,
-      filename,
-      originalFilename: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-      id: mediaRecord?.id,
-    });
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    res.status(500).json({ error: 'Failed to upload image' });
-  }
-});
-
-// Upload a base64-encoded image (e.g. from AI generation), compress to WebP via sharp
-router.post('/upload-base64', requireAuth, async (req, res) => {
-  try {
-    const { base64, mimeType = 'image/png', label = 'ai-generated' } = req.body;
-    if (!base64) return res.status(400).json({ error: 'base64 field is required' });
-
-    const inputBuffer = Buffer.from(base64, 'base64');
-    const webpBuffer = await sharp(inputBuffer)
-      .webp({ quality: 90 })
-      .toBuffer();
-
-    const supabase = getSupabaseAdmin();
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const filename = `${label}-${uniqueSuffix}.webp`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('media')
-      .upload(filename, webpBuffer, {
-        contentType: 'image/webp',
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error('Supabase storage upload error:', uploadError);
-      return res.status(500).json({ error: 'Failed to upload image to storage' });
-    }
-
-    const { data: urlData } = supabase.storage.from('media').getPublicUrl(filename);
-    const publicUrl = urlData.publicUrl;
-
-    const { data: mediaRecord, error: dbError } = await supabase
-      .from('media_library')
-      .insert({
-        filename,
-        original_filename: filename,
-        file_path: filename,
-        file_url: publicUrl,
-        file_type: 'image/webp',
-        file_size: webpBuffer.length,
-        source: 'ai-generated',
+        file_path:         result.variants.original,   // archive URL
+        file_url:          result.url,                  // legacy: largest WebP
+        file_type:         'image/webp',
+        file_size:         result.variants.size,
+        source:            'upload',
+        variants:          result.variants,
       })
       .select()
       .single();
@@ -125,14 +50,63 @@ router.post('/upload-base64', requireAuth, async (req, res) => {
     if (dbError) console.error('DB insert error:', dbError);
 
     res.json({
-      url: publicUrl,
-      fileUrl: publicUrl,
-      filename,
-      id: mediaRecord?.id,
+      ok:        true,
+      url:       result.url,
+      fileUrl:   result.url,
+      variants:  result.variants,
+      filename:  baseName,
+      originalFilename: req.file.originalname,
+      size:      result.variants.size,
+      mimetype:  'image/webp',
+      id:        mediaRecord?.id,
+    });
+  } catch (error) {
+    console.error('Error uploading image:', error);
+    res.status(500).json({ error: 'Failed to upload image', detail: (error as Error).message });
+  }
+});
+
+// Upload a base64-encoded image (e.g. from AI generation) — runs the same
+// multi-variant pipeline as the multer upload.
+router.post('/upload-base64', requireAuth, async (req, res) => {
+  try {
+    const { base64, label = 'ai-generated' } = req.body;
+    if (!base64) return res.status(400).json({ error: 'base64 field is required' });
+
+    const inputBuffer = Buffer.from(base64, 'base64');
+    const supabase = getSupabaseAdmin();
+    const baseName = `${label}-${Date.now()}`;
+
+    const result = await processAndStoreImage(inputBuffer, baseName);
+
+    const { data: mediaRecord, error: dbError } = await supabase
+      .from('media_library')
+      .insert({
+        filename:          baseName,
+        original_filename: baseName,
+        file_path:         result.variants.original,
+        file_url:          result.url,
+        file_type:         'image/webp',
+        file_size:         result.variants.size,
+        source:            'ai-generated',
+        variants:          result.variants,
+      })
+      .select()
+      .single();
+
+    if (dbError) console.error('DB insert error:', dbError);
+
+    res.json({
+      ok:       true,
+      url:      result.url,
+      fileUrl:  result.url,
+      variants: result.variants,
+      filename: baseName,
+      id:       mediaRecord?.id,
     });
   } catch (error) {
     console.error('Error uploading base64 image:', error);
-    res.status(500).json({ error: 'Failed to upload image' });
+    res.status(500).json({ error: 'Failed to upload image', detail: (error as Error).message });
   }
 });
 
@@ -156,11 +130,12 @@ router.get('/', async (req, res) => {
       fileUrl: item.file_url,
       fileType: item.file_type,
       fileSize: item.file_size,
-      width: item.width || 0,
-      height: item.height || 0,
+      width: item.width || item.variants?.width || 0,
+      height: item.height || item.variants?.height || 0,
       source: item.source || 'upload',
       createdAt: item.created_at,
       url: item.file_url,
+      variants: item.variants ?? null,
     }));
 
     res.json(images);
