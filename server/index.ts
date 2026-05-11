@@ -11,6 +11,7 @@ import pagesRoutes from './routes/pages.js';
 import categoriesRoutes from './routes/categories.js';
 import labelsRoutes from './routes/labels.js';
 import adminVideosRouter from './routes/admin/videos.js';
+import adminMediaBackfillRouter from './routes/admin/media-backfill.js';
 import bunnyWebhookRouter from './routes/webhooks/bunny.js';
 import imagesRoutes from './routes/images.js';
 import settingsRoutes from './routes/settings.js';
@@ -162,6 +163,7 @@ app.use('/api/ai-reader', aiReaderRoutes);
 app.use('/api/broadcasts', broadcastsRoutes);
 app.use('/api/learning-tracks', learningTracksRoutes);
 app.use('/api/admin/videos', adminVideosRouter);
+app.use('/api/admin/media', adminMediaBackfillRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Mayobe Bros API Server Running' });
