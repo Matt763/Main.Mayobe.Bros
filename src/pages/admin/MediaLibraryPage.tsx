@@ -55,9 +55,13 @@ function MediaPreview({ item, className }: { item: MediaItem; className?: string
       </div>
     );
   }
+  // Slice 3: use smallest WebP variant for the grid thumbnail (faster load).
+  // Falls back to fileUrl for pre-variant uploads.
+  const variants = (item as MediaItem & { variants?: { webp?: Record<string, string> } | null }).variants;
+  const thumb = variants?.webp?.['400'] ?? variants?.webp?.['800'] ?? item.fileUrl;
   return (
     <img
-      src={item.fileUrl}
+      src={thumb}
       alt={item.altText || item.originalFilename}
       className={`object-cover ${className}`}
       loading="lazy"
@@ -286,13 +290,16 @@ export default function MediaLibraryPage() {
               <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
             </button>
             {canUpload && (
-              <button
-                onClick={() => setShowAddPanel(true)}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-sm"
-              >
-                <Upload size={16} />
-                Add Media
-              </button>
+              <>
+                <BackfillVariantsButton onDone={loadMedia} />
+                <button
+                  onClick={() => setShowAddPanel(true)}
+                  className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-xl font-semibold text-sm hover:bg-blue-700 transition-colors shadow-sm"
+                >
+                  <Upload size={16} />
+                  Add Media
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -844,5 +851,48 @@ export default function MediaLibraryPage() {
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
+  );
+}
+
+/** One-time chunked variants backfill for existing images. Click repeatedly
+ *  until remaining === 0. Each click hits /api/admin/media/backfill-variants
+ *  which processes the next 25 image rows lacking variants. */
+function BackfillVariantsButton({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setStatus('Working…');
+    try {
+      const r = await fetch('/api/admin/media/backfill-variants', { method: 'POST' });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error ?? `HTTP ${r.status}`);
+      setStatus(`+${body.done} embedded · ${body.remaining} remaining`);
+      onDone();
+    } catch (e) {
+      setStatus(`Error: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+      setTimeout(() => setStatus(null), 6000);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {status && (
+        <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">{status}</span>
+      )}
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+        title="Generate WebP+AVIF variants for the next 25 existing images"
+      >
+        <RefreshCw size={14} className={busy ? 'animate-spin' : ''} />
+        Backfill variants
+      </button>
+    </div>
   );
 }
