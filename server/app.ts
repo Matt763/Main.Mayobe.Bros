@@ -148,6 +148,7 @@ app.use('/api/ai-reader', aiReaderRoutes);
 app.use('/api/broadcasts', broadcastsRoutes);
 app.use('/api/learning-tracks', learningTracksRoutes);
 app.use('/api/aclib', aclibRoutes);
+app.use('/xq7m2p.js', aclibRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Mayobe Bros API Running' });
